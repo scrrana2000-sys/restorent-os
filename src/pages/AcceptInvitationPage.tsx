@@ -161,7 +161,7 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ toke
         if (onComplete) {
           onComplete();
         } else if (typeof window !== 'undefined') {
-          window.location.href = '/';
+          window.location.href = import.meta.env.BASE_URL || '/';
         }
       }, 2000);
     } catch (err: any) {
@@ -329,7 +329,7 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ toke
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => { window.location.href = '/'; }}
+                onClick={() => { window.location.href = import.meta.env.BASE_URL || '/'; }}
               >
                 Go to Sign In Page
               </Button>
@@ -371,7 +371,7 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ toke
                 variant="primary"
                 size="sm"
                 className="w-full bg-indigo-600 text-white"
-                onClick={() => { window.location.href = '/'; }}
+                onClick={() => { window.location.href = import.meta.env.BASE_URL || '/'; }}
               >
                 Go to Sign In Page
               </Button>

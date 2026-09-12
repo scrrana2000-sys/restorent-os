@@ -37,7 +37,7 @@ const AdminApp: React.FC = () => {
   // Check if current URL is an invitation acceptance route
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const hasToken = Boolean(urlParams.get('token'));
-  const isAcceptInvitationRoute = typeof window !== 'undefined' && (window.location.pathname === '/accept-invitation' || hasToken);
+  const isAcceptInvitationRoute = typeof window !== 'undefined' && (window.location.pathname === '/accept-invitation' || window.location.pathname.endsWith('/accept-invitation') || hasToken);
 
   // Automatically correct/redirect currentView if it is unauthorized for the user's role
   useEffect(() => {
@@ -54,7 +54,7 @@ const AdminApp: React.FC = () => {
   }, [user, profile, currentView, isAcceptInvitationRoute]);
 
   if (isAcceptInvitationRoute) {
-    return <AcceptInvitationPage onComplete={() => { window.location.href = '/'; }} />;
+    return <AcceptInvitationPage onComplete={() => { window.location.href = import.meta.env.BASE_URL || '/'; }} />;
   }
 
   const userRole = profile?.role || 'owner';

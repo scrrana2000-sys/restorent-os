@@ -279,8 +279,15 @@ async function startServer() {
       appType: 'spa'
     });
     app.use(vite.middlewares);
+    app.get('/', (_req, res) => {
+      res.redirect('/restorent-os/');
+    });
+    app.get('/restorent-os', (_req, res) => {
+      res.redirect('/restorent-os/');
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    app.use('/restorent-os', express.static(distPath));
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

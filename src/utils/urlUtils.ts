@@ -30,5 +30,7 @@ export function getPublicAppOrigin(): string {
 
 export function buildPublicUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${getPublicAppOrigin()}${cleanPath}`;
+  const base = import.meta.env.BASE_URL || '/';
+  const basePrefix = base.endsWith('/') ? base.slice(0, -1) : base;
+  return `${getPublicAppOrigin()}${basePrefix}${cleanPath}`;
 }

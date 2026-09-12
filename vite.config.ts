@@ -2,11 +2,32 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    base: process.env.VITE_BASE_PATH || '/restorent-os/',
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'github-pages-spa-assets',
+        closeBundle() {
+          const distDir = path.resolve(__dirname, 'dist');
+          const indexHtml = path.join(distDir, 'index.html');
+          const notFoundHtml = path.join(distDir, '404.html');
+          const noJekyll = path.join(distDir, '.nojekyll');
+
+          if (fs.existsSync(distDir)) {
+            fs.writeFileSync(noJekyll, '');
+            if (fs.existsSync(indexHtml)) {
+              fs.copyFileSync(indexHtml, notFoundHtml);
+            }
+          }
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
