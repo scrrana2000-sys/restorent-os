@@ -339,19 +339,19 @@ export const CartPanel: React.FC<CartPanelProps> = ({
               type="button"
               disabled={isSubmitting}
               onClick={onCreateKot}
-              className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-500/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5 min-h-[44px]"
+              className="w-full h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-500/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
               <Flame className="w-4 h-4 text-red-600 fill-red-600" />
               <span>SEND TO KITCHEN</span>
             </button>
 
             {/* Secondary Actions: Hold & Settle */}
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 disabled={isSubmitting}
                 onClick={onHoldOrder}
-                className="flex items-center justify-center gap-1 py-1.5 px-2 min-h-[36px] rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs active:scale-95 disabled:opacity-50"
+                className="flex items-center justify-center gap-1.5 h-10 px-3 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs active:scale-95 disabled:opacity-50 transition-colors"
               >
                 <PauseCircle className="w-3.5 h-3.5 text-amber-600" />
                 <span>Hold</span>
@@ -361,7 +361,7 @@ export const CartPanel: React.FC<CartPanelProps> = ({
                 type="button"
                 disabled={isSubmitting}
                 onClick={onOpenPayment}
-                className="flex items-center justify-center gap-1 py-1.5 px-2 min-h-[36px] rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-2xs active:scale-95 disabled:opacity-50"
+                className="flex items-center justify-center gap-1.5 h-10 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-2xs active:scale-95 disabled:opacity-50 transition-colors"
               >
                 <CreditCard className="w-3.5 h-3.5" />
                 <span>Pay & Settle</span>

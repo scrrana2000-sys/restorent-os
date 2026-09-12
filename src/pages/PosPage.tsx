@@ -566,7 +566,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] bg-slate-100 flex flex-col font-sans">
+    <div className="min-h-[calc(100vh-4.5rem)] bg-slate-50 flex flex-col font-sans">
       {/* POS Top Header */}
       <PosHeader
         orderType={orderType}
@@ -634,7 +634,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
       {/* Main Terminal Area (Split View: Menu Left 65%, Cart Right 35%) */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0 relative">
         {/* LEFT AREA: Categories & Menu Items */}
-        <div className={`lg:col-span-7 xl:col-span-8 flex flex-col min-h-0 bg-slate-100 ${activeMobileTab === 'menu' ? 'flex' : 'hidden lg:flex'}`}>
+        <div className={`lg:col-span-7 xl:col-span-8 flex flex-col min-h-0 bg-slate-50 ${activeMobileTab === 'menu' ? 'flex' : 'hidden lg:flex'}`}>
           <CategoryBar
             categories={categories}
             selectedCategoryId={selectedCategoryId}
@@ -667,7 +667,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
             <button
               type="button"
               onClick={() => setActiveMobileTab('menu')}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-indigo-700 text-xs font-bold shadow-2xs active:scale-95 min-h-[38px]"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-white border border-indigo-200 text-indigo-700 text-xs font-bold shadow-2xs active:scale-95"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Back to Menu</span>
@@ -700,30 +700,30 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
 
         {/* Mobile Sticky Floating Cart Bar (Matching Reference Image) */}
         {activeMobileTab === 'menu' && cartItemsCount > 0 && (
-          <div className="lg:hidden fixed bottom-18 left-3 right-3 z-30 pointer-events-auto animate-in slide-in-from-bottom-3 duration-200">
-            <div className="bg-slate-950/95 backdrop-blur-md text-white rounded-2xl p-2.5 pl-3.5 pr-2.5 shadow-2xl border border-slate-800 flex items-center justify-between gap-3">
+          <div className="lg:hidden fixed bottom-[72px] left-4 right-4 max-w-lg mx-auto z-30 pointer-events-auto animate-in slide-in-from-bottom-3 duration-200">
+            <div className="bg-slate-900/95 backdrop-blur-md text-white rounded-xl px-3.5 py-2 shadow-xl border border-slate-800 flex items-center justify-between gap-3">
               {/* Left: Cart Icon with Badge, Item Count, and Total Amount (Tapping opens Cart) */}
               <div
-                className="flex items-center gap-3 min-w-0 cursor-pointer flex-1 select-none"
+                className="flex items-center gap-2.5 min-w-0 cursor-pointer flex-1 select-none"
                 onClick={() => setActiveMobileTab('cart')}
                 title="Tap to review order slip"
               >
                 <div className="relative">
-                  <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-white shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-white shrink-0">
                     <ShoppingCart className="w-4 h-4" />
                   </div>
-                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white font-black text-[10px] rounded-full flex items-center justify-center shadow-xs">
+                  <span className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 bg-rose-500 text-white font-bold text-[10px] rounded-full flex items-center justify-center shadow-xs">
                     {cartItemsCount}
                   </span>
                 </div>
 
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-white truncate">
+                <div className="min-w-0 flex items-baseline gap-2">
+                  <span className="text-xs font-bold text-slate-200 truncate">
                     {cartItemsCount} {cartItemsCount === 1 ? 'Item' : 'Items'}
-                  </div>
-                  <div className="text-sm font-black text-white tracking-tight">
+                  </span>
+                  <span className="text-sm font-black text-white tracking-tight">
                     {formatMoney(cartSubtotalMinor, symbol)}
-                  </div>
+                  </span>
                 </div>
               </div>
 
@@ -740,7 +740,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
                     handleCreateKot();
                   }
                 }}
-                className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-md shadow-amber-500/20 active:scale-95 transition-all shrink-0"
+                className="flex items-center justify-center gap-1.5 h-10 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-sm active:scale-95 transition-all shrink-0"
               >
                 {isSubmitting ? (
                   <>
