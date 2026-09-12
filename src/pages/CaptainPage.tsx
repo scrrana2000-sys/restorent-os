@@ -65,7 +65,6 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
   // Deterministic Back button handling for Captain Page modals
   useModalBackHandler(!!openSessionModalTable, () => setOpenSessionModalTable(null), 'captain-open-session');
   useModalBackHandler(!!activeSessionModalTable, () => setActiveSessionModalTable(null), 'captain-active-session');
-  useModalBackHandler(!!staffOrderModalTable, () => setStaffOrderModalTable(null), 'captain-staff-order');
   useModalBackHandler(!!selectedOrderForDetail, () => setSelectedOrderForDetail(null), 'captain-order-detail');
   useModalBackHandler(!!tableHistoryModalTable, () => setTableHistoryModalTable(null), 'captain-table-history');
   useModalBackHandler(!!paymentModalOrder, () => setPaymentModalOrder(null), 'captain-payment');

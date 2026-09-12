@@ -64,7 +64,7 @@ describe('PaymentDueCenterModal UI Component', () => {
       />
     );
 
-    expect(screen.getByText('Payment Due Center')).toBeDefined();
+    expect(screen.getByRole('heading', { name: /Payment Due Center/i })).toBeDefined();
     expect(screen.getByText(/2 Orders/i)).toBeDefined();
     expect(screen.getByText('#101')).toBeDefined();
     expect(screen.getByText('#102')).toBeDefined();

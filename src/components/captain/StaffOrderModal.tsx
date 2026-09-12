@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Table, TableSession } from '../../types/table';
 import { Order } from '../../types/order';
 import { KOT } from '../../types/kot';
@@ -6,6 +6,7 @@ import { MenuItem, Category } from '../../types/menu';
 import { CartItem } from '../../types/cart';
 import { menuService } from '../../services/menuService';
 import { orderService } from '../../services/orderService';
+import { tableSessionService } from '../../services/tableSessionService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
@@ -51,6 +52,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
   const currencySymbol = restaurant?.currencySymbol || '₹';
 
   const [step, setStep] = useState<1 | 2>(1);
+  const [activeSession, setActiveSession] = useState<TableSession | null>(session);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -61,9 +63,30 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Deterministic Back button handling for Staff Order flow
-  useModalBackHandler(isOpen && step === 2, () => setStep(1), 'staff-order-step-2');
-  useModalBackHandler(isOpen && step === 1, onClose, 'staff-order-modal');
+  // Sync activeSession from props or fetch if missing
+  useEffect(() => {
+    if (session) {
+      setActiveSession(session);
+    } else if (table && isOpen && restaurantId) {
+      tableSessionService
+        .getActiveSession(restaurantId, table.id)
+        .then((s) => {
+          if (s) setActiveSession(s);
+        })
+        .catch((e) => console.warn('Could not load active session:', e));
+    }
+  }, [session, table, isOpen, restaurantId]);
+
+  // Unified deterministic Back button handling for Staff Order flow
+  const handleModalBack = useCallback(() => {
+    if (step === 2) {
+      setStep(1);
+    } else {
+      onClose();
+    }
+  }, [step, onClose]);
+
+  useModalBackHandler(isOpen, handleModalBack, 'staff-order-modal');
 
   // Subscribe to menu items and categories
   useEffect(() => {
@@ -180,14 +203,40 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
       return;
     }
 
-    if (!table || !session) {
-      setErrorMessage('Active table session is required.');
+    if (!table) {
+      setErrorMessage('Table selection is required.');
       return;
     }
 
     setIsSubmitting(true);
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    // Resolve or initialize session
+    let currentSession = activeSession;
+    if (!currentSession) {
+      try {
+        currentSession = await tableSessionService.openSession(
+          restaurantId,
+          table.id,
+          Math.min(2, table.capacity || 1),
+          user?.uid || 'floor_captain'
+        );
+        setActiveSession(currentSession);
+      } catch (err: any) {
+        console.warn('Auto open session fallback:', err);
+        // Try fetching in case already open
+        const found = await tableSessionService.getActiveSession(restaurantId, table.id);
+        if (found) {
+          currentSession = found;
+          setActiveSession(found);
+        } else {
+          setErrorMessage(err.message || 'Active table session is required.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+    }
 
     const clientRequestId = `staff_ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
@@ -202,7 +251,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
             orderType: 'dineIn',
             source: 'captain',
             tableId: table.id,
-            tableSessionId: session.id,
+            tableSessionId: currentSession.id,
             notes: orderNotes,
             createdBy: user?.uid || 'floor_captain'
           },
@@ -221,7 +270,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
         orderType: 'dineIn',
         source: 'captain',
         tableId: table.id,
-        tableSessionId: session.id,
+        tableSessionId: currentSession.id,
         notes: orderNotes,
         createdBy: user?.uid || 'floor_captain',
         clientRequestId
@@ -243,7 +292,9 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
     }
   };
 
-  if (!isOpen || !table || !session) return null;
+  if (!isOpen || !table) return null;
+
+  const currentGuestCount = activeSession?.guestCount || session?.guestCount || Math.min(2, table.capacity || 2);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs">
@@ -262,7 +313,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                 </h2>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[11px] font-bold border border-indigo-500/30 shrink-0">
                   <Users className="w-3 h-3" />
-                  <span>{session.guestCount || 2}</span>
+                  <span>{currentGuestCount}</span>
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-400">
