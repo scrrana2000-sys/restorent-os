@@ -14,6 +14,8 @@ export interface CartItemSnapshot {
   itemId: string;
   nameSnapshot: string;
   shortNameSnapshot: string;
+  imageUrlSnapshot?: string | null;
+  foodTypeSnapshot?: string | null;
   unitPriceMinor: MoneyMinor;
   taxRate: TaxRate;
   taxInclusive: boolean;

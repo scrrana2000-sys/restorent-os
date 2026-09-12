@@ -13,7 +13,14 @@ export interface KOTItem {
   itemId: string;
   nameSnapshot: string;
   shortNameSnapshot?: string;
-  quantity: number;
+  imageUrlSnapshot?: string | null;
+  foodTypeSnapshot?: string | null;
+  quantity: number; // Active quantity to prepare/fulfill
+  originalQuantity?: number; // Preserved original ordered quantity
+  cancelledQuantity?: number; // Quantity cancelled
+  cancellationReason?: string;
+  cancelledAt?: Date | string | null;
+  cancelledBy?: string | null;
   notes?: string;
   modifiers?: OrderItemModifier[];
 }

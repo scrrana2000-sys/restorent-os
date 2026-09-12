@@ -22,6 +22,7 @@ import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { sendEmailVerification } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { extractInvitationTokenFromUrl, PRODUCTION_BASE_PATH } from '../utils/urlUtils';
 
 const ROLE_METADATA: Record<
   StaffRole,
@@ -79,9 +80,8 @@ interface AcceptInvitationPageProps {
 export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ token: propToken, onComplete }) => {
   const { user, login, register, loginGoogle, logout } = useAuth();
 
-  // Parse token from props or URL query string
-  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
-  const token = propToken || urlParams.get('token') || '';
+  // Parse token from props, search params, hash, or pathname
+  const token = (propToken || extractInvitationTokenFromUrl() || '').trim();
 
   const [invitationDetails, setInvitationDetails] = useState<InvitationDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -329,7 +329,10 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ toke
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => { window.location.href = import.meta.env.BASE_URL || '/'; }}
+                onClick={() => {
+                  const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
+                  window.location.href = base;
+                }}
               >
                 Go to Sign In Page
               </Button>
@@ -371,7 +374,10 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({ toke
                 variant="primary"
                 size="sm"
                 className="w-full bg-indigo-600 text-white"
-                onClick={() => { window.location.href = import.meta.env.BASE_URL || '/'; }}
+                onClick={() => {
+                  const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
+                  window.location.href = base;
+                }}
               >
                 Go to Sign In Page
               </Button>

@@ -455,7 +455,7 @@ export class KOTService implements IKOTService {
     try {
       const orderRef = doc(db, orderDocPath(cleanRestaurantId, cleanOrderId));
       const orderSnap = await getDoc(orderRef);
-      if (!orderSnap.exists()) return null;
+      if (!orderSnap || typeof orderSnap.exists !== 'function' || !orderSnap.exists()) return null;
 
       const orderData = orderSnap.data() as Order;
       if (orderData.status === 'completed' || orderData.status === 'cancelled') {
@@ -753,6 +753,194 @@ export class KOTService implements IKOTService {
       }
       throw handleFirestoreError(err, OperationType.UPDATE, kotDocPath(cleanRestaurantId, cleanKotId));
     }
+  }
+
+  /**
+   * Partially cancels specific quantities of items in a KOT.
+   * Preserves historical ordered quantities and synchronizes the change
+   * authoritatively to the parent Order, inventory, and billing.
+   * 
+   * Example: 10 Biryani ordered, 5 available.
+   * Staff keeps 5 to prepare and cancels 5.
+   */
+  async partiallyCancelKOTItems(
+    restaurantId: string,
+    kotId: string,
+    cancellations: { itemId: string; cancelledQuantity: number; reason: string }[],
+    cancelledBy: string,
+    idempotencyKey?: string
+  ): Promise<KOT> {
+    const cleanRestaurantId = restaurantId?.trim();
+    const cleanKotId = kotId?.trim();
+    if (!cleanRestaurantId || !cleanKotId) {
+      throw new Error('restaurantId and kotId are required to partially cancel KOT items.');
+    }
+
+    if (!cancellations || cancellations.length === 0) {
+      throw new Error('Cancellations array must not be empty.');
+    }
+
+    await enforcePermission(cleanRestaurantId, 'update_kot_status');
+
+    const cleanKey = idempotencyKey?.trim();
+    if (cleanKey) {
+      const check = await idempotencyService.checkOrAcquire<KOT>(
+        cleanRestaurantId,
+        cleanKey,
+        'partially_cancel_kot_items',
+        { kotId: cleanKotId, cancellations, cancelledBy }
+      );
+      if (check.action === 'return_cached' && check.cachedResult) {
+        return check.cachedResult;
+      }
+    }
+
+    const kot = await this.getKOTById(cleanRestaurantId, cleanKotId);
+    if (!kot) {
+      if (cleanKey) {
+        await idempotencyService.recordFailure(cleanRestaurantId, cleanKey, `KOT "${cleanKotId}" does not exist.`);
+      }
+      throw new Error(`KOT "${cleanKotId}" does not exist in restaurant "${cleanRestaurantId}".`);
+    }
+
+    if (kot.status === 'cancelled') {
+      throw new Error(`Cannot cancel items from already cancelled KOT "${cleanKotId}".`);
+    }
+    if (kot.status === 'served') {
+      throw new Error(`Cannot cancel items from already served KOT "${cleanKotId}".`);
+    }
+
+    const resolvedUserId = cancelledBy || auth.currentUser?.uid || 'system';
+    const now = new Date();
+
+    // Map cancellations by itemId
+    const cancelMap = new Map<string, { qty: number; reason: string }>();
+    for (const c of cancellations) {
+      const id = c.itemId?.trim();
+      if (id && c.cancelledQuantity > 0) {
+        const existing = cancelMap.get(id);
+        const newQty = (existing?.qty || 0) + c.cancelledQuantity;
+        cancelMap.set(id, { qty: newQty, reason: c.reason || existing?.reason || 'Cancelled by kitchen staff' });
+      }
+    }
+
+    // Process KOT items
+    const updatedKotItems: KOTItem[] = kot.items.map((item) => {
+      const cancelReq = cancelMap.get(item.itemId);
+      if (!cancelReq || cancelReq.qty <= 0) {
+        return { ...item };
+      }
+
+      const availableToCancel = item.quantity;
+      if (cancelReq.qty > availableToCancel) {
+        throw new Error(
+          `Cannot cancel ${cancelReq.qty} of "${item.nameSnapshot}". Only ${availableToCancel} active in KOT.`
+        );
+      }
+
+      const originalQuantity = item.originalQuantity !== undefined ? item.originalQuantity : item.quantity;
+      const newlyCancelled = cancelReq.qty;
+      const cancelledQuantity = (item.cancelledQuantity || 0) + newlyCancelled;
+      const remainingQuantity = item.quantity - newlyCancelled;
+
+      return {
+        ...item,
+        quantity: remainingQuantity,
+        originalQuantity,
+        cancelledQuantity,
+        cancellationReason: cancelReq.reason,
+        cancelledAt: now,
+        cancelledBy: resolvedUserId
+      };
+    });
+
+    const activeItems = updatedKotItems.filter((i) => i.quantity > 0);
+    const isAllCancelled = activeItems.length === 0;
+    const newKotStatus: KOTStatus = isAllCancelled ? 'cancelled' : kot.status;
+
+    const kotRef = doc(db, kotDocPath(cleanRestaurantId, cleanKotId));
+    const kotUpdatePayload: Record<string, any> = {
+      items: updatedKotItems,
+      status: newKotStatus,
+      updatedAt: serverTimestamp(),
+      updatedBy: resolvedUserId
+    };
+
+    if (isAllCancelled) {
+      kotUpdatePayload.cancellationReason = cancellations[0]?.reason || 'All items in KOT cancelled';
+      kotUpdatePayload.cancelledAt = serverTimestamp();
+      kotUpdatePayload.cancelledBy = resolvedUserId;
+    }
+
+    const sanitizedKotUpdate = sanitizeFirestoreData(kotUpdatePayload);
+    await updateDoc(kotRef, sanitizedKotUpdate);
+
+    const updatedKot: KOT = {
+      ...kot,
+      ...kotUpdatePayload,
+      updatedAt: now
+    };
+
+    // Audit log
+    await auditService.logEvent(cleanRestaurantId, {
+      restaurantId: cleanRestaurantId,
+      entityType: 'kot',
+      entityId: cleanKotId,
+      action: 'kot_items_partially_cancelled',
+      actorUid: resolvedUserId,
+      metadata: {
+        kotNumber: kot.kotNumber,
+        orderId: kot.orderId,
+        cancellations,
+        isAllCancelled,
+        cancelledBy: resolvedUserId
+      }
+    });
+
+    // Authoritatively synchronize parent Order items, billing, and inventory
+    try {
+      const { orderService } = await import('./orderService');
+      await orderService.partiallyCancelOrderItems(
+        cleanRestaurantId,
+        kot.orderId,
+        cancellations.map((c) => ({
+          itemId: c.itemId,
+          cancelledQuantity: c.cancelledQuantity,
+          reason: c.reason
+        })),
+        resolvedUserId,
+        cleanKey ? `${cleanKey}_order_sync` : undefined
+      );
+    } catch (orderSyncErr) {
+      console.warn('[KOTService] Parent order partial cancellation synchronization notice:', orderSyncErr);
+    }
+
+    // Synchronize parent order status
+    await this.syncParentOrderStatus(cleanRestaurantId, kot.orderId, resolvedUserId);
+
+    // Evaluate order completion and session closure if KOT became cancelled
+    try {
+      await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
+        cleanRestaurantId,
+        kot.orderId,
+        resolvedUserId
+      );
+    } catch (autoErr) {
+      console.warn('[KOTService] Finalization notice after partial KOT cancellation:', autoErr);
+    }
+
+    if (cleanKey) {
+      await idempotencyService.recordSuccess(
+        cleanRestaurantId,
+        cleanKey,
+        'partially_cancel_kot_items',
+        { kotId: cleanKotId, cancellations, cancelledBy },
+        cleanKotId,
+        updatedKot
+      );
+    }
+
+    return updatedKot;
   }
 
   /**

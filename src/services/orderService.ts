@@ -23,7 +23,7 @@ import { IOrderService } from './transactionInterfaces';
 import { ordersPath, orderDocPath, tableSessionDocPath } from '../utils/paths';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { validateOrder, validateOrderStatusTransition } from '../utils/transactionValidation';
-import { calculateOrderTotals } from './orderCalculationService';
+import { calculateOrderTotals, calculateOrderItemLine } from './orderCalculationService';
 import { idempotencyService } from './idempotencyService';
 import { enforcePermission } from '../utils/permissions';
 import { auditService } from './auditService';
@@ -154,6 +154,8 @@ export class OrderService implements IOrderService {
         itemId: cartItem.itemId,
         nameSnapshot: cartItem.nameSnapshot,
         shortNameSnapshot: cartItem.shortNameSnapshot,
+        imageUrlSnapshot: cartItem.imageUrlSnapshot || null,
+        foodTypeSnapshot: cartItem.foodTypeSnapshot || null,
         quantity: cartItem.quantity,
         unitPriceMinor: cartItem.unitPriceMinor,
         taxRate: cartItem.taxRate,
@@ -601,6 +603,8 @@ export class OrderService implements IOrderService {
         itemId: item.itemId,
         nameSnapshot: item.nameSnapshot,
         shortNameSnapshot: item.shortNameSnapshot,
+        imageUrlSnapshot: item.imageUrlSnapshot || null,
+        foodTypeSnapshot: item.foodTypeSnapshot || null,
         quantity: item.quantity,
         notes: item.notes,
         modifiers: item.modifiers ? [...item.modifiers] : undefined
@@ -800,6 +804,8 @@ export class OrderService implements IOrderService {
       itemId: item.itemId,
       nameSnapshot: item.nameSnapshot,
       shortNameSnapshot: item.shortNameSnapshot,
+      imageUrlSnapshot: item.imageUrlSnapshot || null,
+      foodTypeSnapshot: item.foodTypeSnapshot || null,
       quantity: item.quantity,
       notes: item.notes,
       modifiers: item.modifiers ? [...item.modifiers] : undefined
@@ -1392,6 +1398,251 @@ export class OrderService implements IOrderService {
       });
       throw err;
     }
+  }
+
+  /**
+   * Authoritatively cancels specific quantities of items within an Order
+   * (e.g., ordered 10 Biryanis, 5 are cancelled due to low stock or customer request).
+   * 
+   * Invariants preserved:
+   * 1. Original quantity is NEVER overwritten; originalQuantity is preserved.
+   * 2. Integer minor unit arithmetic (paisa) without float drift.
+   * 3. Line items with 0 remaining quantity remain present with 0 amount for audit trail.
+   * 4. Recalculates subtotal, taxes, discount, grand total, and due amount deterministically.
+   * 5. If all items in order have quantity === 0, order transitions to 'cancelled'.
+   * 6. Automatically triggers compensating partial stock consumption reversal.
+   * 7. Logs comprehensive audit event.
+   */
+  async partiallyCancelOrderItems(
+    restaurantId: string,
+    orderId: string,
+    itemCancellations: { itemId: string; cancelledQuantity: number; reason?: string }[],
+    cancelledBy?: string,
+    clientRequestId?: string
+  ): Promise<Order> {
+    const cleanRestaurantId = restaurantId?.trim();
+    const cleanOrderId = orderId?.trim();
+    if (!cleanRestaurantId || !cleanOrderId) {
+      throw new Error('restaurantId and orderId are required for partial order item cancellation.');
+    }
+
+    if (!itemCancellations || itemCancellations.length === 0) {
+      throw new Error('itemCancellations array must not be empty.');
+    }
+
+    await enforcePermission(cleanRestaurantId, 'create_orders');
+
+    const cleanKey = clientRequestId?.trim();
+    if (cleanKey) {
+      const check = await idempotencyService.checkOrAcquire<Order>(
+        cleanRestaurantId,
+        cleanKey,
+        'partially_cancel_order_items',
+        { orderId: cleanOrderId, itemCancellations, cancelledBy }
+      );
+      if (check.action === 'return_cached' && check.cachedResult) {
+        return check.cachedResult;
+      }
+    }
+
+    const currentOrder = await this.getOrderById(cleanRestaurantId, cleanOrderId);
+    if (!currentOrder) {
+      throw new Error(`Order "${cleanOrderId}" does not exist in restaurant "${cleanRestaurantId}".`);
+    }
+
+    if (currentOrder.status === 'cancelled') {
+      throw new Error(`Cannot cancel items from already cancelled order "${cleanOrderId}".`);
+    }
+    if (currentOrder.status === 'completed') {
+      throw new Error(`Cannot cancel items from already completed order "${cleanOrderId}".`);
+    }
+
+    const resolvedUserId = cancelledBy || auth.currentUser?.uid || 'system';
+    const now = new Date();
+
+    // Map cancellations by itemId
+    const cancelMap = new Map<string, { qty: number; reason?: string }>();
+    for (const c of itemCancellations) {
+      const id = c.itemId?.trim();
+      if (id && c.cancelledQuantity > 0) {
+        const existing = cancelMap.get(id);
+        const newQty = (existing?.qty || 0) + c.cancelledQuantity;
+        cancelMap.set(id, { qty: newQty, reason: c.reason || existing?.reason });
+      }
+    }
+
+    // Process order items
+    const updatedItems: OrderItem[] = currentOrder.items.map((item) => {
+      const cancelReq = cancelMap.get(item.itemId);
+      if (!cancelReq || cancelReq.qty <= 0) {
+        return { ...item };
+      }
+
+      const availableToCancel = item.quantity;
+      if (cancelReq.qty > availableToCancel) {
+        throw new Error(
+          `Cannot cancel ${cancelReq.qty} of "${item.nameSnapshot}". Only ${availableToCancel} active in order.`
+        );
+      }
+
+      const originalQuantity = item.originalQuantity !== undefined ? item.originalQuantity : item.quantity;
+      const newlyCancelled = cancelReq.qty;
+      const cancelledQuantity = (item.cancelledQuantity || 0) + newlyCancelled;
+      const remainingQuantity = item.quantity - newlyCancelled;
+
+      if (remainingQuantity > 0) {
+        const lineRes = calculateOrderItemLine({
+          quantity: remainingQuantity,
+          unitPriceMinor: item.unitPriceMinor,
+          taxRate: item.taxRate,
+          taxInclusive: item.taxInclusive,
+          discount: item.discountMinor > 0 ? { type: 'fixed', fixedAmountMinor: Math.round((item.discountMinor * remainingQuantity) / item.quantity) } : undefined
+        });
+
+        return {
+          ...item,
+          quantity: remainingQuantity,
+          originalQuantity,
+          cancelledQuantity,
+          cancellationReason: cancelReq.reason || item.cancellationReason || 'Item partially cancelled',
+          cancelledAt: now,
+          cancelledBy: resolvedUserId,
+          discountMinor: lineRes.discountMinor,
+          lineSubtotalMinor: lineRes.subtotalMinor,
+          lineTaxMinor: lineRes.totalTaxMinor,
+          lineTotalMinor: lineRes.lineTotalMinor
+        };
+      } else {
+        return {
+          ...item,
+          quantity: 0,
+          originalQuantity,
+          cancelledQuantity,
+          cancellationReason: cancelReq.reason || item.cancellationReason || 'Item cancelled in full',
+          cancelledAt: now,
+          cancelledBy: resolvedUserId,
+          discountMinor: 0,
+          lineSubtotalMinor: 0,
+          lineTaxMinor: 0,
+          lineTotalMinor: 0
+        };
+      }
+    });
+
+    // Recalculate order financial totals from active items
+    const activeItems = updatedItems.filter((i) => i.quantity > 0);
+    let subtotalMinor = 0;
+    let discountMinor = 0;
+    let taxableAmountMinor = 0;
+    let cgstMinor = 0;
+    let sgstMinor = 0;
+    let igstMinor = 0;
+    let totalTaxMinor = 0;
+    let grandTotalMinor = 0;
+
+    if (activeItems.length > 0) {
+      const calcResult = calculateOrderTotals({
+        items: activeItems.map((item) => ({
+          quantity: item.quantity,
+          unitPriceMinor: item.unitPriceMinor,
+          taxRate: item.taxRate,
+          taxInclusive: item.taxInclusive,
+          discount: item.discountMinor > 0 ? { type: 'fixed', fixedAmountMinor: item.discountMinor } : undefined
+        })),
+        taxJurisdiction: 'intraState'
+      });
+
+      subtotalMinor = calcResult.subtotalMinor;
+      discountMinor = calcResult.discountMinor;
+      taxableAmountMinor = calcResult.taxableAmountMinor;
+      cgstMinor = calcResult.cgstMinor;
+      sgstMinor = calcResult.sgstMinor;
+      igstMinor = calcResult.igstMinor;
+      totalTaxMinor = calcResult.totalTaxMinor;
+      grandTotalMinor = calcResult.grandTotalMinor;
+    }
+
+    const paidAmountMinor = currentOrder.paidAmountMinor || 0;
+    const dueAmountMinor = Math.max(0, grandTotalMinor - paidAmountMinor);
+
+    const isAllCancelled = activeItems.length === 0;
+    const newStatus: OrderStatus = isAllCancelled ? 'cancelled' : currentOrder.status;
+
+    const orderRef = doc(db, orderDocPath(cleanRestaurantId, cleanOrderId));
+    const updatePayload: Record<string, any> = {
+      items: updatedItems,
+      subtotalMinor,
+      discountMinor,
+      taxableAmountMinor,
+      cgstMinor,
+      sgstMinor,
+      igstMinor,
+      totalTaxMinor,
+      grandTotalMinor,
+      dueAmountMinor,
+      status: newStatus,
+      updatedAt: serverTimestamp(),
+      updatedBy: resolvedUserId
+    };
+
+    if (isAllCancelled) {
+      updatePayload.cancellationReason = itemCancellations[0]?.reason || 'All order items cancelled';
+      updatePayload.cancelledAt = serverTimestamp();
+      updatePayload.cancelledBy = resolvedUserId;
+    }
+
+    const sanitizedPayload = sanitizeFirestoreData(updatePayload);
+    await updateDoc(orderRef, sanitizedPayload);
+
+    const updatedOrder: Order = {
+      ...currentOrder,
+      ...updatePayload,
+      updatedAt: now
+    };
+
+    // Audit log
+    await auditService.logEvent(cleanRestaurantId, {
+      restaurantId: cleanRestaurantId,
+      entityType: 'order',
+      entityId: cleanOrderId,
+      action: 'order_items_partially_cancelled',
+      actorUid: resolvedUserId,
+      metadata: {
+        orderNumber: currentOrder.orderNumber,
+        itemCancellations,
+        oldGrandTotalMinor: currentOrder.grandTotalMinor,
+        newGrandTotalMinor: grandTotalMinor,
+        isAllCancelled,
+        dueAmountMinor
+      }
+    });
+
+    // Compensating stock reversal
+    try {
+      await stockConsumptionService.reversePartialStockConsumption(
+        cleanRestaurantId,
+        cleanOrderId,
+        itemCancellations.map((c) => ({ itemId: c.itemId, cancelledQuantity: c.cancelledQuantity })),
+        itemCancellations[0]?.reason || 'Partial item cancellation',
+        resolvedUserId,
+        cleanKey ? `${cleanKey}_stock_rev` : undefined
+      );
+    } catch (stockErr) {
+      console.warn('[RestaurantOS] Notice: partial stock consumption reversal encountered error:', stockErr);
+    }
+
+    if (cleanKey) {
+      await idempotencyService.recordSuccess(
+        cleanRestaurantId,
+        cleanKey,
+        'partially_cancel_order_items',
+        { orderId: cleanOrderId, itemCancellations, cancelledBy },
+        cleanOrderId,
+        updatedOrder
+      );
+    }
+
+    return updatedOrder;
   }
 
   /**

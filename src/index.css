@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 @layer base {
+  :root {
+    --app-btn-primary-h: 48px;
+    --app-btn-compact-h: 44px;
+    --app-btn-micro-h: 36px;
+    --app-radius-modal: 24px;
+    --app-radius-card: 16px;
+    --app-radius-inner: 12px;
+  }
+
   html {
     -webkit-text-size-adjust: 100%;
     touch-action: manipulation;
@@ -12,9 +21,16 @@
     background-color: #f8fafc;
     -webkit-font-smoothing: antialiased;
     overscroll-behavior-y: none;
+    line-height: 1.5;
   }
 
-  /* Prevent automatic iOS Safari zoom-in on focus while preserving accessibility */
+  /* Explicit line-heights and text normalization */
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+  }
+
+  /* Prevent automatic mobile browser zoom-in on focus while preserving accessibility */
   @media (max-width: 640px) {
     input, select, textarea {
       font-size: 16px !important;
@@ -38,6 +54,40 @@
 
 .bottom-safe {
   bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 100dvh dynamic viewport height fallback */
+.h-dvh-screen {
+  height: 100vh;
+  height: 100dvh;
+}
+.max-h-dvh-screen {
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* Mobile Button & Touch Target Normalization Helpers */
+.btn-mobile-primary {
+  min-height: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.btn-mobile-compact {
+  min-height: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
 }
 
 /* Custom subtle scrollbar */

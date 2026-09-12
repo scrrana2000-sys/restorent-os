@@ -8,6 +8,8 @@ export type IdempotencyOperation =
   | 'update_guest_count'
   | 'update_kot_status'
   | 'cancel_kot'
+  | 'partially_cancel_kot_items'
+  | 'partially_cancel_order_items'
   | 'update_order_status'
   | 'create_inventory_item'
   | 'record_stock_movement'

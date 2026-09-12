@@ -395,6 +395,26 @@ export class OfflineSyncService {
               );
               break;
             }
+            case 'partially_cancel_kot_items': {
+              result = await kotService.partiallyCancelKOTItems(
+                item.restaurantId,
+                item.payload.kotId,
+                item.payload.cancellations,
+                item.payload.cancelledBy,
+                item.idempotencyKey
+              );
+              break;
+            }
+            case 'partially_cancel_order_items': {
+              result = await orderService.partiallyCancelOrderItems(
+                item.restaurantId,
+                item.payload.orderId,
+                item.payload.itemCancellations,
+                item.payload.cancelledBy,
+                item.idempotencyKey
+              );
+              break;
+            }
             case 'update_order_status': {
               result = await orderService.updateOrderStatus(
                 item.restaurantId,

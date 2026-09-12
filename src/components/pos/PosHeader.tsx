@@ -165,8 +165,13 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
           {/* Mobile Cart Direct Button */}
           {onOpenCart && (
             <button
+              id="pos-mobile-cart-btn"
               type="button"
-              onClick={onOpenCart}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenCart();
+              }}
               className={`lg:hidden flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-bold active:scale-95 transition-all ${
                 cartItemsCount > 0
                   ? 'bg-indigo-600 text-white shadow-xs'

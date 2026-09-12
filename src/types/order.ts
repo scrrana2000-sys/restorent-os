@@ -25,7 +25,14 @@ export interface OrderItem {
   itemId: string;
   nameSnapshot: string;
   shortNameSnapshot: string;
-  quantity: number;
+  imageUrlSnapshot?: string | null;
+  foodTypeSnapshot?: string | null;
+  quantity: number; // Active billable quantity
+  originalQuantity?: number; // Preserved original ordered quantity
+  cancelledQuantity?: number; // Quantity cancelled
+  cancellationReason?: string;
+  cancelledAt?: Date | string | null;
+  cancelledBy?: string | null;
   unitPriceMinor: MoneyMinor;
   taxRate: TaxRate;
   taxInclusive: boolean;

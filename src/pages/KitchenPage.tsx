@@ -4,15 +4,17 @@ import { useAuth } from '../context/AuthContext';
 import { kotService } from '../services/kotService';
 import { tableService } from '../services/tableService';
 import { orderService } from '../services/orderService';
+import { subscribeToMenuItems } from '../services/menuService';
 import { offlineSyncService } from '../services/offlineSyncService';
 import { KOT, KOTStatus } from '../types/kot';
 import { Table } from '../types/table';
 import { Order } from '../types/order';
+import { MenuItem } from '../types/menu';
 import { OfflineQueueItem } from '../types/offlineQueue';
 
 import { KitchenHeader, KitchenFilterOption, KitchenViewMode } from '../components/kitchen/KitchenHeader';
 import { KotCard } from '../components/kitchen/KotCard';
-import { CancelKotModal } from '../components/kitchen/CancelKotModal';
+import { AdjustKotItemsModal } from '../components/kitchen/AdjustKotItemsModal';
 
 import {
   CookingPot,
@@ -38,6 +40,7 @@ export const KitchenPage: React.FC = () => {
   const [kots, setKots] = useState<KOT[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [syncQueue, setSyncQueue] = useState<OfflineQueueItem[]>([]);
 
   // Operational UI states
@@ -62,7 +65,7 @@ export const KitchenPage: React.FC = () => {
     return () => unsub();
   }, [restaurantId]);
 
-  // Subscribe to Kitchen KOTs, Tables, and Orders
+  // Subscribe to Kitchen KOTs, Tables, Orders, and Menu Items
   useEffect(() => {
     if (!restaurantId) return;
 
@@ -72,6 +75,7 @@ export const KitchenPage: React.FC = () => {
     let unsubKots = () => {};
     let unsubTables = () => {};
     let unsubOrders = () => {};
+    let unsubMenuItems = () => {};
 
     try {
       // Subscribe to active kitchen KOTs
@@ -106,6 +110,13 @@ export const KitchenPage: React.FC = () => {
         (ords) => setOrders(ords),
         (err) => console.warn('Orders sub error in kitchen:', err)
       );
+
+      // Subscribe to menu items for visual image & dietary type lookup
+      unsubMenuItems = subscribeToMenuItems(
+        restaurantId,
+        (items) => setMenuItems(items),
+        (err) => console.warn('Menu items sub error in kitchen:', err)
+      );
     } catch (err: any) {
       setError(err.message || 'Error subscribing to kitchen realtime data');
       setLoading(false);
@@ -115,6 +126,7 @@ export const KitchenPage: React.FC = () => {
       unsubKots();
       unsubTables();
       unsubOrders();
+      unsubMenuItems();
     };
   }, [restaurantId]);
 
@@ -134,6 +146,14 @@ export const KitchenPage: React.FC = () => {
     }
     return map;
   }, [orders]);
+
+  const menuItemMap = useMemo(() => {
+    const map = new Map<string, MenuItem>();
+    for (const item of menuItems) {
+      map.set(item.itemId, item);
+    }
+    return map;
+  }, [menuItems]);
 
   // Map of queued offline operations for KOT cards
   const kotQueueMap = useMemo(() => {
@@ -253,7 +273,87 @@ export const KitchenPage: React.FC = () => {
     }
   };
 
-  // Handle Confirm Cancel KOT
+  // Handle Confirm Partial Cancellation of KOT Items
+  const handleConfirmPartialCancel = async (
+    cancellations: { itemId: string; cancelledQuantity: number; reason: string }[]
+  ) => {
+    if (!cancelModalKot) return;
+    const kotId = cancelModalKot.id;
+
+    setUpdatingKotId(kotId);
+    setStatusMessage(null);
+
+    const actorUid = user?.uid || 'kitchen_staff';
+    const idempotencyKey = `idemp_part_cancel_kot_${kotId}_${Date.now()}`;
+
+    try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        offlineSyncService.enqueue(
+          restaurantId,
+          'partially_cancel_kot_items',
+          { kotId, cancellations, cancelledBy: actorUid },
+          idempotencyKey
+        );
+        setStatusMessage({
+          type: 'info',
+          text: `Offline mode: Partial cancellation for KOT ${cancelModalKot.kotNumber} queued locally.`
+        });
+        setCancelModalKot(null);
+        return;
+      }
+
+      await kotService.partiallyCancelKOTItems(
+        restaurantId,
+        kotId,
+        cancellations,
+        actorUid,
+        idempotencyKey
+      );
+      setStatusMessage({
+        type: 'success',
+        text: `Items adjusted and partially cancelled in KOT ${cancelModalKot.kotNumber}. Inventory and billing updated.`
+      });
+      setCancelModalKot(null);
+    } catch (err: any) {
+      console.error('Partial cancel KOT error:', err);
+      const isNetworkError =
+        err.message?.includes('network') ||
+        err.message?.includes('offline') ||
+        err.code === 'unavailable';
+
+      if (isNetworkError) {
+        try {
+          offlineSyncService.enqueue(
+            restaurantId,
+            'partially_cancel_kot_items',
+            { kotId, cancellations, cancelledBy: actorUid },
+            idempotencyKey
+          );
+          setStatusMessage({
+            type: 'info',
+            text: `Network issue detected: Partial cancellation for KOT ${cancelModalKot.kotNumber} queued for sync.`
+          });
+          setCancelModalKot(null);
+          return;
+        } catch (queueErr: any) {
+          setStatusMessage({
+            type: 'error',
+            text: queueErr.message || 'Failed to queue offline cancellation.'
+          });
+          return;
+        }
+      }
+
+      setStatusMessage({
+        type: 'error',
+        text: err.message || 'Failed to partially cancel items in KOT.'
+      });
+    } finally {
+      setUpdatingKotId(null);
+    }
+  };
+
+  // Handle Confirm Cancel Full KOT
   const handleConfirmCancel = async (reason: string) => {
     if (!cancelModalKot) return;
     const kotId = cancelModalKot.id;
@@ -375,6 +475,7 @@ export const KitchenPage: React.FC = () => {
         tableName={tableName}
         orderType={orderObj?.orderType || (kot.tableId ? 'dineIn' : 'takeaway')}
         orderNumber={orderObj?.orderNumber}
+        menuItemMap={menuItemMap}
         onStatusChange={handleStatusChange}
         onCancel={() => setCancelModalKot(kot)}
         isUpdating={updatingKotId === kot.id}
@@ -577,12 +678,15 @@ export const KitchenPage: React.FC = () => {
         )}
       </main>
 
-      {/* Cancel KOT Modal */}
-      <CancelKotModal
+      {/* Adjust / Cancel KOT Items Modal */}
+      <AdjustKotItemsModal
         isOpen={!!cancelModalKot}
-        kotNumber={cancelModalKot?.kotNumber || ''}
+        kot={cancelModalKot}
+        tableName={cancelModalKot?.tableId ? tableMap.get(cancelModalKot.tableId)?.name : undefined}
+        orderNumber={cancelModalKot?.orderId ? orderMap.get(cancelModalKot.orderId)?.orderNumber : undefined}
         onClose={() => setCancelModalKot(null)}
-        onConfirm={handleConfirmCancel}
+        onConfirmPartialCancel={handleConfirmPartialCancel}
+        onConfirmFullCancel={handleConfirmCancel}
         isSubmitting={!!updatingKotId}
       />
     </div>

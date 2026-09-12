@@ -24,6 +24,7 @@ import { BillReceiptModal } from '../components/pos/BillReceiptModal';
 import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersModal';
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
 import { AdminView } from '../components/layout/Sidebar';
+import { useModalBackHandler } from '../hooks/useModalBackHandler';
 
 import { CheckCircle2, AlertCircle, RefreshCw, X, ShoppingBag, ShoppingCart, ArrowRight, ChevronLeft } from 'lucide-react';
 
@@ -82,6 +83,15 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     type: 'success' | 'error' | 'info';
     text: string;
   } | null>(null);
+
+  // Deterministic back-button history management for mobile drawer/cart & modals
+  useModalBackHandler(activeMobileTab === 'cart', () => setActiveMobileTab('menu'), 'pos-mobile-cart');
+  useModalBackHandler(isTableModalOpen, () => setIsTableModalOpen(false), 'pos-table-modal');
+  useModalBackHandler(isPaymentDueModalOpen, () => setIsPaymentDueModalOpen(false), 'pos-payment-due-modal');
+  useModalBackHandler(isHeldOrdersModalOpen, () => setIsHeldOrdersModalOpen(false), 'pos-held-orders-modal');
+  useModalBackHandler(isPaymentModalOpen, () => setIsPaymentModalOpen(false), 'pos-payment-modal');
+  useModalBackHandler(isBillModalOpen, () => setIsBillModalOpen(false), 'pos-bill-modal');
+  useModalBackHandler(!!sentOrderInfo, () => setSentOrderInfo(null), 'pos-order-sent-modal');
 
   const symbol = restaurant?.currencySymbol || '₹';
   const cartItemsCount = useMemo(
@@ -285,6 +295,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
               itemId: menuItem.itemId,
               nameSnapshot: menuItem.name,
               shortNameSnapshot: menuItem.shortName || menuItem.name.slice(0, 16),
+              imageUrlSnapshot: menuItem.imageUrl || null,
+              foodTypeSnapshot: menuItem.foodType || null,
               unitPriceMinor: toMoneyMinor(menuItem.price),
               taxRate: menuItem.taxRate || restaurant?.defaultTaxRate || 5,
               taxInclusive: !!menuItem.taxInclusive,
@@ -321,6 +333,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
           itemId: item.itemId,
           nameSnapshot: item.name,
           shortNameSnapshot: item.shortName || item.name.slice(0, 16),
+          imageUrlSnapshot: item.imageUrl || null,
+          foodTypeSnapshot: item.foodType || null,
           unitPriceMinor: toMoneyMinor(item.price),
           taxRate: item.taxRate || restaurant?.defaultTaxRate || 5,
           taxInclusive: !!item.taxInclusive,
@@ -590,7 +604,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         totalPaymentDueMinor={totalPaymentDueMinor}
         onOpenPaymentDue={() => setIsPaymentDueModalOpen(true)}
         cartItemsCount={cartItemsCount}
-        onOpenCart={() => setActiveMobileTab('cart')}
+        onOpenCart={() => setActiveMobileTab((prev) => (prev === 'cart' ? 'menu' : 'cart'))}
         onOpenMobileMenu={onOpenMobileMenu}
         onOpenRecentOrders={() => {
           if (activeOrderForBill) {
@@ -703,9 +717,15 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
           <div className="lg:hidden fixed bottom-[72px] left-4 right-4 max-w-lg mx-auto z-30 pointer-events-auto animate-in slide-in-from-bottom-3 duration-200">
             <div className="bg-slate-900/95 backdrop-blur-md text-white rounded-xl px-3.5 py-2 shadow-xl border border-slate-800 flex items-center justify-between gap-3">
               {/* Left: Cart Icon with Badge, Item Count, and Total Amount (Tapping opens Cart) */}
-              <div
-                className="flex items-center gap-2.5 min-w-0 cursor-pointer flex-1 select-none"
-                onClick={() => setActiveMobileTab('cart')}
+              <button
+                type="button"
+                id="floating-cart-review-btn"
+                className="flex items-center gap-2.5 min-w-0 cursor-pointer flex-1 select-none text-left bg-transparent border-0 p-0 active:opacity-80"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setActiveMobileTab('cart');
+                }}
                 title="Tap to review order slip"
               >
                 <div className="relative">
@@ -725,14 +745,16 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
                     {formatMoney(cartSubtotalMinor, symbol)}
                   </span>
                 </div>
-              </div>
+              </button>
 
               {/* Right: SEND TO KITCHEN Action Button (Direct 1-tap KOT dispatch) */}
               <button
                 type="button"
                 id="floating-send-to-kitchen-btn"
                 disabled={isSubmitting}
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   if (orderType === 'dineIn' && !selectedTable) {
                     setIsTableModalOpen(true);
                     setStatusMessage({ type: 'info', text: 'Please select a table to send order to kitchen.' });

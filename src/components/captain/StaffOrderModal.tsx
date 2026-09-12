@@ -11,11 +11,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatMoney } from '../../utils/money';
 import { getCategoryVisual, getItemFallbackVisual } from '../../utils/visualCategory';
+import { QuantityStepper } from '../common/QuantityStepper';
+import { useModalBackHandler } from '../../hooks/useModalBackHandler';
 import {
   X,
   Search,
   Plus,
-  Minus,
   Trash2,
   CookingPot,
   ArrowLeft,
@@ -59,6 +60,10 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Deterministic Back button handling for Staff Order flow
+  useModalBackHandler(isOpen && step === 2, () => setStep(1), 'staff-order-step-2');
+  useModalBackHandler(isOpen && step === 1, onClose, 'staff-order-modal');
 
   // Subscribe to menu items and categories
   useEffect(() => {
@@ -476,33 +481,28 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                             {/* Quick Add / Stepper Button */}
                             <div className="pt-1">
                               {cartItem ? (
-                                <div className="flex items-center justify-between bg-slate-900 border border-indigo-500/40 rounded-xl p-0.5 h-9 shadow-xs">
-                                  <button
-                                    type="button"
-                                    aria-label={`Decrease ${item.name} quantity`}
-                                    onClick={() => handleUpdateQuantity(item.itemId, -1)}
-                                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold active:scale-90 transition-transform"
-                                  >
-                                    <Minus className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span className="w-7 text-center font-black text-xs sm:text-sm text-white">
-                                    {cartItem.quantity}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    aria-label={`Increase ${item.name} quantity`}
-                                    onClick={() => handleUpdateQuantity(item.itemId, 1)}
-                                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white font-bold active:scale-90 transition-transform shadow-xs"
-                                  >
-                                    <Plus className="w-3.5 h-3.5" />
-                                  </button>
+                                <div className="flex items-center justify-center">
+                                  <QuantityStepper
+                                    value={cartItem.quantity}
+                                    min={0}
+                                    onChange={(newQty) => {
+                                      const delta = newQty - cartItem.quantity;
+                                      handleUpdateQuantity(item.itemId, delta);
+                                    }}
+                                    onIncrement={() => handleUpdateQuantity(item.itemId, 1)}
+                                    onDecrement={() => handleUpdateQuantity(item.itemId, -1)}
+                                    itemLabel={item.name}
+                                    size="md"
+                                    theme="dark"
+                                    className="w-full justify-between"
+                                  />
                                 </div>
                               ) : (
                                 <button
                                   type="button"
                                   onClick={() => handleAddItem(item)}
                                   data-testid={`btn-add-${item.itemId}`}
-                                  className="w-full h-9 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                                  className="w-full h-10 min-h-[40px] px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
                                 >
                                   <Plus className="w-3.5 h-3.5" />
                                   <span>Add</span>
@@ -524,18 +524,18 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                     {/* Items & Total Summary */}
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="relative">
-                        <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-xs">
                           <ShoppingCart className="w-4 h-4" />
                         </div>
-                        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white font-black text-[10px] rounded-full flex items-center justify-center shadow-xs">
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-rose-500 text-white font-black text-[10px] rounded-full flex items-center justify-center shadow-xs">
                           {totalItemsCount}
                         </span>
                       </div>
                       <div className="min-w-0">
-                        <div className="text-xs sm:text-sm font-black text-white truncate">
+                        <div className="text-xs sm:text-sm font-black text-white truncate leading-tight">
                           🛒 {totalItemsCount} {totalItemsCount === 1 ? 'Item' : 'Items'} • {formatMoney(subtotalMinor, currencySymbol)}
                         </div>
-                        <div className="text-[11px] text-slate-400 truncate">
+                        <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
                           Table {table.tableNumber}
                         </div>
                       </div>
@@ -547,7 +547,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                       id="btn-next-review-order"
                       data-testid="btn-next-review-order"
                       onClick={() => setStep(2)}
-                      className="flex items-center justify-center gap-2 h-11 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-md shadow-amber-500/25 active:scale-95 transition-all shrink-0"
+                      className="flex items-center justify-center gap-2 h-12 min-h-[48px] px-5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-md shadow-amber-500/25 active:scale-95 transition-all shrink-0 whitespace-nowrap"
                     >
                       <span>Next → Review Order</span>
                     </button>
@@ -562,13 +562,15 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
             <div className="flex-1 min-h-0 flex flex-col animate-in fade-in slide-in-from-right-4 duration-150 bg-slate-900">
               {/* Step 2 Top Bar: Table Number, Guest count & Navigation */}
               <div className="p-3 sm:p-4 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🪑</span>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-base">
+                    🪑
+                  </div>
                   <div>
-                    <h3 className="text-sm sm:text-base font-black text-white">
+                    <h3 className="text-sm sm:text-base font-black text-white leading-tight">
                       Table {table.tableNumber} Order Slip
                     </h3>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[11px] text-slate-400 leading-tight mt-0.5">
                       {session.guestCount || 2} Guests • {totalItemsCount} Total Items
                     </p>
                   </div>
@@ -579,7 +581,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                   id="btn-back-to-menu"
                   data-testid="btn-back-to-menu"
                   onClick={() => setStep(1)}
-                  className="flex items-center gap-1.5 h-9 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all active:scale-95"
+                  className="flex items-center gap-1.5 h-10 min-h-[40px] px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all active:scale-95"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>← Back to Menu</span>
@@ -615,7 +617,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                       return (
                         <div
                           key={ci.itemId}
-                          className="p-2.5 sm:p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-2 shadow-xs"
+                          className="p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-2.5 shadow-xs"
                         >
                           <div className="flex items-center justify-between gap-2.5">
                             {/* Left: Thumbnail & Item details */}
@@ -657,10 +659,10 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                               </div>
 
                               <div className="min-w-0">
-                                <span className="font-bold text-white text-xs sm:text-sm block truncate">
+                                <span className="font-bold text-white text-xs sm:text-sm block truncate leading-tight">
                                   {ci.nameSnapshot}
                                 </span>
-                                <span className="text-xs font-semibold text-slate-400">
+                                <span className="text-xs font-semibold text-slate-400 block leading-tight mt-1">
                                   {formatMoney(ci.unitPriceMinor, currencySymbol)} × {ci.quantity} = {formatMoney(ci.unitPriceMinor * ci.quantity, currencySymbol)}
                                 </span>
                               </div>
@@ -668,48 +670,36 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
 
                             {/* Right: Quantity Stepper & Remove */}
                             <div className="flex items-center gap-1.5 shrink-0">
-                              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-xl p-0.5 h-8">
-                                <button
-                                  type="button"
-                                  aria-label={`Decrease ${ci.nameSnapshot} quantity`}
-                                  onClick={() => handleUpdateQuantity(ci.itemId, -1)}
-                                  className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90"
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </button>
-                                <span className="w-6 text-center font-bold text-white text-xs">
-                                  {ci.quantity}
-                                </span>
-                                <button
-                                  type="button"
-                                  aria-label={`Increase ${ci.nameSnapshot} quantity`}
-                                  onClick={() => handleUpdateQuantity(ci.itemId, 1)}
-                                  className="w-7 h-7 flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold active:scale-90"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </button>
-                              </div>
+                              <QuantityStepper
+                                value={ci.quantity}
+                                min={1}
+                                onIncrement={() => handleUpdateQuantity(ci.itemId, 1)}
+                                onDecrement={() => handleUpdateQuantity(ci.itemId, -1)}
+                                itemLabel={ci.nameSnapshot}
+                                size="sm"
+                                theme="dark"
+                              />
 
                               <button
                                 type="button"
                                 aria-label={`Remove ${ci.nameSnapshot}`}
                                 onClick={() => handleRemoveItem(ci.itemId)}
-                                className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:text-rose-400 hover:bg-slate-900"
+                                className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-colors"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
 
                           {/* Item-specific kitchen note input */}
-                          <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-800/60">
-                            <MessageSquare className="w-3 h-3 text-slate-500 shrink-0" />
+                          <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                            <MessageSquare className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                             <input
                               type="text"
                               placeholder="Item note (e.g. less spicy, extra cheese)..."
                               value={ci.notes || ''}
                               onChange={(e) => handleItemNoteChange(ci.itemId, e.target.value)}
-                              className="w-full bg-slate-900/90 border border-slate-800/80 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-hidden focus:border-indigo-500"
+                              className="w-full bg-slate-900/90 border border-slate-800/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-hidden focus:border-indigo-500"
                             />
                           </div>
                         </div>
@@ -748,7 +738,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setStep(1)}
-                    className="sm:col-span-1 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                    className="sm:col-span-1 h-12 min-h-[48px] rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                   >
                     <ArrowLeft className="w-4 h-4" />
                     <span>Back to Menu</span>
@@ -760,7 +750,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                     data-testid="btn-confirm-send-kitchen"
                     onClick={handleConfirmAndSendToKitchen}
                     disabled={isSubmitting || cart.length === 0}
-                    className="sm:col-span-2 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/30 active:scale-[0.99]"
+                    className="sm:col-span-2 h-12 min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/30 active:scale-[0.99]"
                   >
                     <CookingPot className="w-5 h-5 text-white" />
                     <span>

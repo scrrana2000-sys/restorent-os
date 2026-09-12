@@ -540,6 +540,239 @@ export class StockConsumptionService {
   }
 
   /**
+   * Authoritatively reverses stock consumption for specific cancelled items or quantities
+   * belonging to an order (e.g., customer ordered 10 Biryanis, 5 are cancelled).
+   * Generates compensating 'stock_in' StockMovements, updates inventory levels, and updates
+   * or marks the relevant StockConsumption documents accordingly.
+   */
+  async reversePartialStockConsumption(
+    restaurantId: string,
+    orderId: string,
+    cancelledItems: { itemId: string; cancelledQuantity: number }[],
+    reason?: string,
+    actorUid?: string,
+    clientRequestId?: string
+  ): Promise<{
+    reversedMovements: StockMovement[];
+    affectedConsumptions: StockConsumption[];
+  }> {
+    const cleanRestId = restaurantId?.trim();
+    const cleanOrderId = orderId?.trim();
+    if (!cleanRestId || !cleanOrderId) {
+      throw new Error('restaurantId and orderId are required for partial stock consumption reversal');
+    }
+
+    if (!cancelledItems || cancelledItems.length === 0) {
+      return { reversedMovements: [], affectedConsumptions: [] };
+    }
+
+    const resolvedActorUid = actorUid || auth.currentUser?.uid || 'system';
+
+    // 1. Fetch active consumptions for this order
+    const consumptionsSnap = await getDocs(
+      query(
+        collection(db, stockConsumptionsPath(cleanRestId)),
+        where('orderId', '==', cleanOrderId)
+      )
+    );
+
+    if (!consumptionsSnap || consumptionsSnap.empty) {
+      return { reversedMovements: [], affectedConsumptions: [] };
+    }
+
+    const activeConsumptions: StockConsumption[] = [];
+    consumptionsSnap.forEach((d) => {
+      const data = { id: d.id, ...d.data() } as StockConsumption;
+      if (data.status === 'consumed' && data.quantity > 0) {
+        activeConsumptions.push(data);
+      }
+    });
+
+    if (activeConsumptions.length === 0) {
+      return { reversedMovements: [], affectedConsumptions: [] };
+    }
+
+    // Map cancelled items by menuItemId
+    const cancelledMap = new Map<string, number>();
+    for (const item of cancelledItems) {
+      const cleanItemId = item.itemId?.trim();
+      if (cleanItemId && item.cancelledQuantity > 0) {
+        const current = cancelledMap.get(cleanItemId) || 0;
+        cancelledMap.set(cleanItemId, current + item.cancelledQuantity);
+      }
+    }
+
+    if (cancelledMap.size === 0) {
+      return { reversedMovements: [], affectedConsumptions: [] };
+    }
+
+    // 2. Execute atomic reversal inside Firestore transaction
+    const result = await runTransaction(db, async (tx) => {
+      // For each active consumption matching cancelled items, calculate the return quantity
+      const consumptionAdjustments: {
+        consumption: StockConsumption;
+        returnBaseQty: number;
+        newRemainingQty: number;
+        isFullyReversed: boolean;
+      }[] = [];
+
+      const totalReturnQtyByInvItem = new Map<string, number>();
+
+      for (const c of activeConsumptions) {
+        const cancelQty = cancelledMap.get(c.menuItemId);
+        if (!cancelQty || cancelQty <= 0) continue;
+
+        const baseOrderItemQty = c.orderItemQuantity || cancelQty;
+        const proRataRatio = Math.min(1, cancelQty / baseOrderItemQty);
+        const returnBaseQty = roundQuantity(c.quantity * proRataRatio);
+
+        if (returnBaseQty <= 0) continue;
+
+        const newRemainingQty = roundQuantity(Math.max(0, c.quantity - returnBaseQty));
+        const isFullyReversed = newRemainingQty === 0 || proRataRatio >= 1;
+
+        consumptionAdjustments.push({
+          consumption: c,
+          returnBaseQty,
+          newRemainingQty,
+          isFullyReversed
+        });
+
+        const currTotal = totalReturnQtyByInvItem.get(c.inventoryItemId) || 0;
+        totalReturnQtyByInvItem.set(c.inventoryItemId, roundQuantity(currTotal + returnBaseQty));
+      }
+
+      if (consumptionAdjustments.length === 0) {
+        return { reversedMovements: [], affectedConsumptions: [] };
+      }
+
+      // Read inventory items in transaction
+      const invItemsMap = new Map<string, InventoryItem>();
+      for (const invId of totalReturnQtyByInvItem.keys()) {
+        const invRef = doc(db, inventoryItemDocPath(cleanRestId, invId));
+        const invSnap = await tx.get(invRef);
+        if (invSnap.exists()) {
+          invItemsMap.set(invId, invSnap.data() as InventoryItem);
+        }
+      }
+
+      const compensatingMovements: StockMovement[] = [];
+      const movementByInvItem = new Map<string, string>();
+      const now = new Date();
+
+      // Create compensating StockMovement (stock_in) for each inventory item
+      for (const [invId, returnQty] of totalReturnQtyByInvItem.entries()) {
+        const invItem = invItemsMap.get(invId);
+        if (!invItem || returnQty <= 0) continue;
+
+        const invRef = doc(db, inventoryItemDocPath(cleanRestId, invId));
+        const newQty = roundQuantity(invItem.currentQuantity + returnQty);
+
+        tx.update(invRef, {
+          currentQuantity: newQty,
+          updatedAt: serverTimestamp(),
+          updatedBy: resolvedActorUid
+        });
+
+        const movementCol = collection(db, stockMovementsPath(cleanRestId));
+        const movementId = doc(movementCol).id;
+        const movementRef = doc(db, `${stockMovementsPath(cleanRestId)}/${movementId}`);
+
+        const movement: StockMovement = {
+          id: movementId,
+          movementId,
+          restaurantId: cleanRestId,
+          inventoryItemId: invId,
+          type: 'stock_in',
+          quantity: returnQty,
+          unit: invItem.unit,
+          delta: returnQty,
+          previousQuantity: invItem.currentQuantity,
+          resultingQuantity: newQty,
+          reason: reason || `Compensating reversal for partially cancelled items in order #${cleanOrderId}`,
+          actorUid: resolvedActorUid,
+          clientRequestId: clientRequestId?.trim() || null,
+          referenceType: 'partial_consumption_reversal',
+          referenceId: cleanOrderId,
+          createdAt: now
+        };
+
+        tx.set(movementRef, {
+          ...movement,
+          createdAt: serverTimestamp()
+        });
+
+        compensatingMovements.push(movement);
+        movementByInvItem.set(invId, movementId);
+      }
+
+      // Update consumption documents
+      const updatedConsumptions: StockConsumption[] = [];
+      for (const adj of consumptionAdjustments) {
+        const cRef = doc(db, stockConsumptionDocPath(cleanRestId, adj.consumption.id));
+        const compMovementId = movementByInvItem.get(adj.consumption.inventoryItemId) || '';
+
+        if (adj.isFullyReversed) {
+          tx.update(cRef, {
+            status: 'reversed',
+            reversedAt: serverTimestamp(),
+            reversedBy: resolvedActorUid,
+            reversalMovementId: compMovementId,
+            reversalReason: reason || 'Item cancelled',
+            updatedAt: serverTimestamp()
+          });
+
+          updatedConsumptions.push({
+            ...adj.consumption,
+            status: 'reversed',
+            reversedAt: now,
+            reversedBy: resolvedActorUid,
+            reversalMovementId: compMovementId,
+            reversalReason: reason || 'Item cancelled',
+            updatedAt: now
+          });
+        } else {
+          tx.update(cRef, {
+            quantity: adj.newRemainingQty,
+            reversedQuantity: adj.returnBaseQty,
+            reversalMovementId: compMovementId,
+            reversalReason: reason || 'Quantity partially cancelled',
+            updatedAt: serverTimestamp()
+          });
+
+          updatedConsumptions.push({
+            ...adj.consumption,
+            quantity: adj.newRemainingQty,
+            reversalMovementId: compMovementId,
+            reversalReason: reason || 'Quantity partially cancelled',
+            updatedAt: now
+          });
+        }
+      }
+
+      return { reversedMovements: compensatingMovements, affectedConsumptions: updatedConsumptions };
+    });
+
+    // 3. Log audit event
+    await auditService.logEvent(cleanRestId, {
+      restaurantId: cleanRestId,
+      entityType: 'inventory',
+      entityId: cleanOrderId,
+      action: 'partial_stock_consumption_reversed',
+      actorUid: resolvedActorUid,
+      metadata: {
+        orderId: cleanOrderId,
+        reversedMovementsCount: result.reversedMovements.length,
+        affectedConsumptionsCount: result.affectedConsumptions.length,
+        cancelledItems,
+        reason: reason || 'Partial item cancellation'
+      }
+    });
+
+    return result;
+  }
+
+  /**
    * Lists stock consumptions for an entire restaurant or filtered by order, menu item, or status.
    */
   async listStockConsumptions(

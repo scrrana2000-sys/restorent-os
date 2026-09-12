@@ -32,7 +32,7 @@ import {
 import { useRestaurant } from '../context/RestaurantContext';
 import { useAuth } from '../context/AuthContext';
 import { staffService } from '../services/staffService';
-import { getPublicAppOrigin } from '../utils/urlUtils';
+import { getPublicAppOrigin, buildInvitationUrl, buildPublicUrl } from '../utils/urlUtils';
 import { RestaurantMember, StaffRole } from '../types/auth';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
@@ -193,7 +193,7 @@ export const StaffPage: React.FC = () => {
       setSuccessMessage(result.message);
       setIsAddModalOpen(false);
 
-      const invUrl = result.member.invitationUrl || `${getPublicAppOrigin()}/accept-invitation?token=${result.member.invitationToken}`;
+      const invUrl = result.member.invitationUrl || buildInvitationUrl(result.member.invitationToken || '');
 
       setCreatedCredentialsModal({
         name: newName,
@@ -1104,7 +1104,7 @@ export const StaffPage: React.FC = () => {
             <div className="mt-4 flex flex-col gap-2">
               <button
                 onClick={() => {
-                  const url = `${getPublicAppOrigin()}/login?email=${encodeURIComponent(viewQrModalMember.member.email || '')}`;
+                  const url = buildPublicUrl(`login?email=${encodeURIComponent(viewQrModalMember.member.email || '')}`);
                   if (navigator.clipboard) {
                     navigator.clipboard.writeText(url);
                     setSuccessMessage(`Login URL copied for ${viewQrModalMember.member.displayName || viewQrModalMember.member.email}`);

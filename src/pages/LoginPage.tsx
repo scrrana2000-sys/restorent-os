@@ -278,7 +278,7 @@ export const LoginPage: React.FC = () => {
                   </button>
                 </div>
                 <div className="p-1.5 bg-slate-50 rounded border border-slate-200 break-all text-indigo-700 select-all font-semibold">
-                  {runtimeHostname || 'ais-dev-4rf3jgxyfvttprip76s56n-1055228822160.asia-southeast1.run.app'}
+                  {runtimeHostname || 'scrrana2000-sys.github.io'}
                 </div>
                 <div className="pt-1 text-slate-600 space-y-1 text-[11px]">
                   <p>1. Open <strong>Firebase Console</strong> → <strong>Authentication</strong> → <strong>Settings</strong></p>

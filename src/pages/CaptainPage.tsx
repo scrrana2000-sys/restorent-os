@@ -24,6 +24,7 @@ import { ReceivePaymentModal } from '../components/pos/ReceivePaymentModal';
 
 import { Layers, AlertCircle, RefreshCw, CheckCircle2, Plus, Users, Inbox, Search, Filter, CookingPot, Utensils, ShoppingBag, Truck, SlidersHorizontal } from 'lucide-react';
 import { AdminView } from '../components/layout/Sidebar';
+import { useModalBackHandler } from '../hooks/useModalBackHandler';
 
 interface CaptainPageProps {
   onNavigate?: (view: AdminView) => void;
@@ -60,6 +61,14 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<Order | null>(null);
   const [tableHistoryModalTable, setTableHistoryModalTable] = useState<Table | null>(null);
   const [paymentModalOrder, setPaymentModalOrder] = useState<Order | null>(null);
+
+  // Deterministic Back button handling for Captain Page modals
+  useModalBackHandler(!!openSessionModalTable, () => setOpenSessionModalTable(null), 'captain-open-session');
+  useModalBackHandler(!!activeSessionModalTable, () => setActiveSessionModalTable(null), 'captain-active-session');
+  useModalBackHandler(!!staffOrderModalTable, () => setStaffOrderModalTable(null), 'captain-staff-order');
+  useModalBackHandler(!!selectedOrderForDetail, () => setSelectedOrderForDetail(null), 'captain-order-detail');
+  useModalBackHandler(!!tableHistoryModalTable, () => setTableHistoryModalTable(null), 'captain-table-history');
+  useModalBackHandler(!!paymentModalOrder, () => setPaymentModalOrder(null), 'captain-payment');
 
   // Mutation & Status states
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);

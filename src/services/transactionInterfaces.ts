@@ -31,6 +31,13 @@ export interface IOrderService {
   getOrdersForSession(restaurantId: string, sessionId: string): Promise<Order[]>;
   createOrder(restaurantId: string, order: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>): Promise<Order>;
   updateOrderStatus(restaurantId: string, orderId: string, newStatus: OrderStatus, updatedBy: string): Promise<void>;
+  partiallyCancelOrderItems?(
+    restaurantId: string,
+    orderId: string,
+    itemCancellations: { itemId: string; cancelledQuantity: number; reason?: string }[],
+    cancelledBy?: string,
+    clientRequestId?: string
+  ): Promise<Order>;
   completeOrder?(restaurantId: string, orderId: string, completedBy: string): Promise<Order>;
   subscribeToOrders(restaurantId: string, onUpdate: (orders: Order[]) => void, onError?: (err: Error) => void): () => void;
   subscribeToPaymentDueOrders?(restaurantId: string, onUpdate: (orders: Order[]) => void, onError?: (err: Error) => void): () => void;
@@ -57,6 +64,13 @@ export interface IKOTService {
   createKOT(restaurantId: string, kot: Omit<KOT, 'id' | 'createdAt' | 'updatedAt'>, idempotencyKey?: string): Promise<KOT>;
   updateKOTStatus(restaurantId: string, kotId: string, newStatus: KOTStatus, updatedBy: string, idempotencyKey?: string): Promise<void>;
   cancelKOT(restaurantId: string, kotId: string, reason: string, cancelledBy: string, idempotencyKey?: string): Promise<void>;
+  partiallyCancelKOTItems?(
+    restaurantId: string,
+    kotId: string,
+    cancellations: { itemId: string; cancelledQuantity: number; reason: string }[],
+    cancelledBy: string,
+    idempotencyKey?: string
+  ): Promise<KOT>;
   subscribeToKitchenKOTs(restaurantId: string, onUpdate: (kots: KOT[]) => void, onError?: (err: Error) => void): () => void;
   subscribeToKOTs(restaurantId: string, onUpdate: (kots: KOT[]) => void, onError?: (err: Error) => void): () => void;
 }

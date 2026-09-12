@@ -16,7 +16,7 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import QRCode from 'qrcode';
 import { db, auth, firebaseConfig } from '../config/firebase';
 import { RestaurantMember, StaffRole, UserProfile } from '../types/auth';
-import { getPublicAppOrigin } from '../utils/urlUtils';
+import { getPublicAppOrigin, buildInvitationUrl, buildPublicUrl } from '../utils/urlUtils';
 import { enforcePermission } from '../utils/permissions';
 import { auditService } from './auditService';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
@@ -175,8 +175,7 @@ export class StaffService {
    * Generates a QR Code Data URL for instant staff login scanning.
    */
   async generateStaffQRCode(email: string): Promise<string> {
-    const origin = getPublicAppOrigin();
-    const loginUrl = `${origin}/login?email=${encodeURIComponent(email)}`;
+    const loginUrl = buildPublicUrl(`login?email=${encodeURIComponent(email)}`);
     try {
       return await QRCode.toDataURL(loginUrl, {
         width: 320,
@@ -237,8 +236,7 @@ export class StaffService {
     const cleanToken = generateInvitationToken();
     const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
     const invitationId = `inv_${cleanToken.substring(8, 24)}`;
-    const origin = getPublicAppOrigin();
-    const invitationUrl = `${origin}/accept-invitation?token=${cleanToken}`;
+    const invitationUrl = buildInvitationUrl(cleanToken);
 
     let qrCodeDataUrl = '';
     try {
@@ -406,8 +404,7 @@ export class StaffService {
     }
 
     const newInvitationToken = generateInvitationToken();
-    const origin = getPublicAppOrigin();
-    const newInvitationUrl = `${origin}/accept-invitation?token=${newInvitationToken}`;
+    const newInvitationUrl = buildInvitationUrl(newInvitationToken);
     const newExpiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days from now
 
     // Step 1: Update member document with refreshed single-use token and expiration

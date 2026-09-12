@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { PosPage } from './pages/PosPage';
 import { UtensilsCrossed, ShieldAlert, Loader2 } from 'lucide-react';
 import { isViewAllowed } from './utils/permissions';
+import { isInvitationRoute, extractInvitationTokenFromUrl, PRODUCTION_BASE_PATH } from './utils/urlUtils';
 
 // Code-split non-POS views for optimal bundle size and initial app load performance
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -35,13 +36,12 @@ const AdminApp: React.FC = () => {
   const [currentView, setCurrentView] = useState<AdminView>('pos');
 
   // Check if current URL is an invitation acceptance route
-  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
-  const hasToken = Boolean(urlParams.get('token'));
-  const isAcceptInvitationRoute = typeof window !== 'undefined' && (window.location.pathname === '/accept-invitation' || window.location.pathname.endsWith('/accept-invitation') || hasToken);
+  const isAcceptInvitation = isInvitationRoute();
+  const invitationToken = extractInvitationTokenFromUrl();
 
   // Automatically correct/redirect currentView if it is unauthorized for the user's role
   useEffect(() => {
-    if (user && profile && !isAcceptInvitationRoute) {
+    if (user && profile && !isAcceptInvitation) {
       const role = profile.role || 'owner';
       if (!isViewAllowed(role, currentView)) {
         const views: AdminView[] = ['pos', 'captain', 'kitchen', 'orders', 'payments', 'inventory', 'dashboard', 'staff', 'restaurant', 'categories', 'items', 'reports', 'audit'];
@@ -51,10 +51,18 @@ const AdminApp: React.FC = () => {
         }
       }
     }
-  }, [user, profile, currentView, isAcceptInvitationRoute]);
+  }, [user, profile, currentView, isAcceptInvitation]);
 
-  if (isAcceptInvitationRoute) {
-    return <AcceptInvitationPage onComplete={() => { window.location.href = import.meta.env.BASE_URL || '/'; }} />;
+  if (isAcceptInvitation) {
+    return (
+      <AcceptInvitationPage
+        token={invitationToken}
+        onComplete={() => {
+          const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
+          window.location.href = base;
+        }}
+      />
+    );
   }
 
   const userRole = profile?.role || 'owner';

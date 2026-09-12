@@ -6,6 +6,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { ShieldAlert, RefreshCw, ExternalLink } from 'lucide-react';
 import { SecurityRulesNotice } from '../common/SecurityRulesNotice';
 import { firebaseConfig } from '../../config/firebase';
+import { useModalBackHandler } from '../../hooks/useModalBackHandler';
 
 interface AdminLayoutProps {
   currentView: AdminView;
@@ -20,6 +21,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { restaurant, error, retry, loading: restaurantLoading, isSwitching } = useRestaurant();
+
+  // Deterministic Back button handling for mobile sidebar menu
+  useModalBackHandler(isMobileMenuOpen, () => setIsMobileMenuOpen(false), 'admin-mobile-sidebar');
 
   const isPermissionError =
     error &&

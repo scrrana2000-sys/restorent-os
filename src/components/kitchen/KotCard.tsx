@@ -11,10 +11,12 @@ import {
   CloudOff,
   RefreshCw,
   ChevronRight,
-  Printer
+  Printer,
+  Soup
 } from 'lucide-react';
 import { KOT, KOTStatus } from '../../types/kot';
 import { OrderType } from '../../types/order';
+import { MenuItem } from '../../types/menu';
 import { OfflineQueueItem } from '../../types/offlineQueue';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { printerService } from '../../services/printer/PrinterService';
@@ -24,11 +26,12 @@ import {
   getNextValidKOTAction
 } from '../../utils/kotQueueHelpers';
 
-interface KotCardProps {
+export interface KotCardProps {
   kot: KOT;
   tableName?: string | null;
   orderType?: OrderType | null;
   orderNumber?: string | null;
+  menuItemMap?: Map<string, MenuItem>;
   onStatusChange: (kotId: string, nextStatus: KOTStatus) => void;
   onCancel: (kotId: string) => void;
   isUpdating?: boolean;
@@ -36,11 +39,82 @@ interface KotCardProps {
   onRetrySync?: (queueItemId: string) => void;
 }
 
+const FoodTypeBadge: React.FC<{ type?: string | null }> = ({ type }) => {
+  if (type === 'veg') {
+    return (
+      <span
+        title="Vegetarian"
+        className="w-3.5 h-3.5 rounded-xs border border-emerald-500 bg-emerald-950/90 flex items-center justify-center shrink-0 shadow-xs"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+      </span>
+    );
+  }
+  if (type === 'nonVeg') {
+    return (
+      <span
+        title="Non-Vegetarian"
+        className="w-3.5 h-3.5 rounded-xs border border-rose-500 bg-rose-950/90 flex items-center justify-center shrink-0 shadow-xs"
+      >
+        <span className="w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-b-[5px] border-b-rose-500" />
+      </span>
+    );
+  }
+  if (type === 'egg') {
+    return (
+      <span
+        title="Egg"
+        className="w-3.5 h-3.5 rounded-xs border border-amber-500 bg-amber-950/90 flex items-center justify-center shrink-0 shadow-xs"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+      </span>
+    );
+  }
+  return null;
+};
+
+const KotFoodThumbnail: React.FC<{
+  imageUrl?: string | null;
+  name: string;
+  foodType?: string | null;
+}> = ({ imageUrl, name, foodType }) => {
+  const [imgError, setImgError] = useState(false);
+  const hasValidImage = Boolean(imageUrl && !imgError);
+
+  return (
+    <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden shrink-0 bg-slate-800 border border-slate-700/80 shadow-inner flex items-center justify-center group">
+      {hasValidImage ? (
+        <img
+          src={imageUrl!}
+          alt={name}
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onError={() => setImgError(true)}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900 text-slate-400 p-1">
+          <Utensils className="w-5 h-5 text-slate-500 mb-0.5" />
+          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate max-w-full px-0.5 text-center">
+            {name.slice(0, 4)}
+          </span>
+        </div>
+      )}
+      {foodType && (
+        <div className="absolute top-1 left-1 drop-shadow-md">
+          <FoodTypeBadge type={foodType} />
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const KotCard: React.FC<KotCardProps> = ({
   kot,
   tableName,
   orderType,
   orderNumber,
+  menuItemMap,
   onStatusChange,
   onCancel,
   isUpdating = false,
@@ -256,57 +330,105 @@ export const KotCard: React.FC<KotCardProps> = ({
       {kot.notes && (
         <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-200 text-xs font-medium flex items-start gap-2">
           <FileText className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <span className="leading-tight">{kot.notes}</span>
+          <span className="leading-tight font-medium">{kot.notes}</span>
         </div>
       )}
 
-      {/* Item List optimized for production readability */}
-      <div className="p-4 flex-1 space-y-3.5 overflow-y-auto max-h-[340px]">
-        {kot.items.map((item, index) => (
-          <div
-            key={`${item.itemId}_${index}`}
-            className="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80 last:border-0 last:pb-0"
-          >
-            <div className="flex items-start gap-3">
-              <span className="inline-flex items-center justify-center min-w-[32px] h-8 px-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-black text-sm shrink-0 shadow-xs">
-                {item.quantity}x
-              </span>
-              <div>
-                <p className="text-base font-extrabold text-white leading-snug tracking-wide">
-                  {item.shortNameSnapshot || item.nameSnapshot}
-                </p>
+      {/* Visual-First Food Item List */}
+      <div className="p-3.5 flex-1 space-y-2.5 overflow-y-auto max-h-[360px]">
+        {kot.items.map((item, index) => {
+          const isItemCancelled = item.quantity === 0;
+          const hasPartialCancel = item.cancelledQuantity && item.cancelledQuantity > 0;
+          const resolvedImageUrl = item.imageUrlSnapshot || menuItemMap?.get(item.itemId)?.imageUrl;
+          const resolvedFoodType = item.foodTypeSnapshot || menuItemMap?.get(item.itemId)?.foodType;
+
+          return (
+            <div
+              key={`${item.itemId}_${index}`}
+              className={`flex items-start gap-3 p-2.5 rounded-xl transition-colors border ${
+                isItemCancelled
+                  ? 'opacity-50 bg-slate-950/40 border-slate-800/60'
+                  : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800/70'
+              }`}
+            >
+              {/* Visual Food Thumbnail */}
+              <KotFoodThumbnail
+                imageUrl={resolvedImageUrl}
+                name={item.shortNameSnapshot || item.nameSnapshot}
+                foodType={resolvedFoodType}
+              />
+
+              {/* Item Details */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span
+                      className={`inline-flex items-center justify-center min-w-[32px] px-2 py-0.5 rounded-lg font-mono font-black text-sm shrink-0 shadow-xs ${
+                        isItemCancelled
+                          ? 'bg-slate-800 text-slate-500 border border-slate-700 line-through'
+                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      }`}
+                    >
+                      {item.quantity}x
+                    </span>
+                    <h4
+                      className={`text-sm sm:text-base font-extrabold leading-snug tracking-tight truncate ${
+                        isItemCancelled ? 'text-slate-400 line-through' : 'text-white'
+                      }`}
+                      title={item.nameSnapshot}
+                    >
+                      {item.shortNameSnapshot || item.nameSnapshot}
+                    </h4>
+                  </div>
+
+                  {/* Cancelled badge if applicable */}
+                  {hasPartialCancel && !isItemCancelled && (
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 shrink-0">
+                      -{item.cancelledQuantity} cancelled
+                    </span>
+                  )}
+                  {isItemCancelled && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-rose-400 border border-slate-700 shrink-0">
+                      Cancelled
+                    </span>
+                  )}
+                </div>
+
                 {/* Modifiers */}
                 {item.modifiers && item.modifiers.length > 0 && (
-                  <p className="text-xs font-medium text-slate-300 mt-0.5 leading-tight">
-                    + {item.modifiers.map((m) => m.name).join(', ')}
+                  <p className="text-xs font-medium text-slate-300 mt-1 leading-tight flex items-center gap-1">
+                    <span className="text-slate-500">+</span>
+                    <span>{item.modifiers.map((m) => m.name).join(', ')}</span>
                   </p>
                 )}
-                {/* Item Notes */}
+
+                {/* Preparation / Special Instructions Notes */}
                 {item.notes && (
-                  <p className="text-xs font-semibold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-lg border border-amber-500/30 mt-1 inline-block">
-                    📝 {item.notes}
-                  </p>
+                  <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs font-semibold">
+                    <span className="text-amber-400">📝</span>
+                    <span className="leading-tight">{item.notes}</span>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Footer Actions — Touch Friendly & Valid Next Actions Only */}
       <div className="p-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between gap-2">
-        {/* Cancel Button */}
+        {/* Adjust & Cancel Button */}
         {kot.status !== 'served' && kot.status !== 'cancelled' && (
           <button
             type="button"
             data-testid={`cancel-kot-${kot.id}`}
             onClick={() => onCancel(kot.id)}
             disabled={isDisabled}
-            className="px-3 py-2.5 rounded-xl bg-slate-800/80 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-700/80 transition-colors text-xs font-bold flex items-center gap-1.5 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Cancel KOT"
+            className="px-3 py-2.5 rounded-xl bg-slate-800/80 text-slate-300 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-700/80 transition-colors text-xs font-bold flex items-center gap-1.5 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            title="Adjust / Cancel Items"
           >
-            <XCircle className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Cancel</span>
+            <XCircle className="w-4 h-4 shrink-0 text-slate-400 group-hover:text-rose-400" />
+            <span>Cancel / Adjust</span>
           </button>
         )}
 
@@ -336,3 +458,4 @@ export const KotCard: React.FC<KotCardProps> = ({
     </div>
   );
 };
+

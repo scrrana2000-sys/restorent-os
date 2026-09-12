@@ -193,25 +193,25 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs">
-      <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl w-full max-w-xl p-5 sm:p-6 text-white shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92vh] pb-safe">
+      <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl w-full max-w-xl p-4 sm:p-6 text-white shadow-2xl animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92vh] max-h-dvh-screen pb-safe">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800 shrink-0">
+        <div className="flex items-center justify-between pb-3.5 border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
               <Users className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white tracking-tight">
+                <h2 className="text-base font-bold text-white tracking-tight leading-tight">
                   Table {table.tableNumber} — Active Session
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30 whitespace-nowrap">
                   Occupied
                 </span>
               </div>
-              <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2">
+              <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 leading-tight">
                 <div className="flex items-center gap-1.5 bg-slate-950/60 border border-slate-800 rounded-lg px-2 py-0.5">
-                  <span className="font-semibold text-slate-300">{session.guestCount} Guests</span>
+                  <span className="font-semibold text-slate-300 whitespace-nowrap">{session.guestCount} Guests</span>
                   {onUpdateGuestCount && (
                     <div className="flex items-center gap-1 ml-1 border-l border-slate-800 pl-1">
                       <button
@@ -226,7 +226,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                             setActionError(err?.message || 'Failed to update guest count');
                           }
                         }}
-                        className="w-4 h-4 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs disabled:opacity-30"
+                        className="w-5 h-5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs disabled:opacity-30 active:scale-90"
                         title="Reduce guests"
                       >
                         -
@@ -243,7 +243,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                             setActionError(err?.message || 'Failed to update guest count');
                           }
                         }}
-                        className="w-4 h-4 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs disabled:opacity-30"
+                        className="w-5 h-5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 flex items-center justify-center font-bold text-xs disabled:opacity-30 active:scale-90"
                         title="Increase guests"
                       >
                         +
@@ -252,14 +252,14 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                   )}
                 </div>
                 <span>•</span>
-                <span>Opened {elapsedMinutes}m ago</span>
+                <span className="whitespace-nowrap">Opened {elapsedMinutes}m ago</span>
               </div>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="w-9 h-9 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -305,7 +305,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowCloseConfirm(false)}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
+                className="h-9 px-3 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
               >
                 Cancel
               </button>
@@ -314,7 +314,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                 data-testid="btn-confirm-complete-and-close"
                 disabled={isSubmitting}
                 onClick={handleCompleteAndCloseSession}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm"
+                className="h-9 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Complete Order & Close Table</span>
@@ -338,7 +338,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
                   placeholder="Enter cancellation reason (e.g. Customer left, Entered in error)..."
-                  className="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-rose-500"
+                  className="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-hidden focus:ring-1 focus:ring-rose-500"
                 />
               </div>
             </div>
@@ -346,7 +346,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowCancelPrompt(false)}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
+                className="h-9 px-3 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
               >
                 Keep Order
               </button>
@@ -355,7 +355,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                 data-testid="btn-confirm-cancel-order"
                 disabled={isSubmitting}
                 onClick={handleConfirmCancelOrder}
-                className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm"
+                className="h-9 px-3.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm"
               >
                 <Ban className="w-3.5 h-3.5" />
                 <span>Confirm Cancel Order</span>
@@ -365,9 +365,9 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
         )}
 
         {/* Scrollable Content */}
-        <div className="my-4 space-y-4 overflow-y-auto flex-1 pr-1">
+        <div className="my-3 space-y-3 overflow-y-auto flex-1 pr-0.5">
           {/* Active Order Section */}
-          <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
+          <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Utensils className="w-4 h-4 text-indigo-400" />
@@ -376,9 +376,9 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                 </h3>
               </div>
               {order && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span
-                    className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${
+                    className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border whitespace-nowrap ${
                       order.status === 'completed'
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                         : order.status === 'cancelled'
@@ -389,7 +389,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                     {order.status}
                   </span>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${
                       dueAmountMinor === 0
                         ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                         : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
@@ -404,18 +404,18 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
             {order ? (
               <div className="space-y-3">
                 {/* Financial Summary Strip */}
-                <div className="grid grid-cols-3 gap-2 p-2 rounded-lg bg-slate-900 border border-slate-800 text-center text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Total</span>
-                    <span className="font-bold text-white">₹{((order.grandTotalMinor || 0) / 100).toFixed(2)}</span>
+                <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800/90 text-center">
+                  <div className="flex flex-col justify-center min-h-[44px]">
+                    <span className="text-[10px] font-semibold text-slate-400 block leading-tight">Total</span>
+                    <span className="font-bold text-white text-xs sm:text-sm mt-0.5 leading-tight">₹{((order.grandTotalMinor || 0) / 100).toFixed(2)}</span>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Paid</span>
-                    <span className="font-bold text-emerald-400">₹{((order.paidAmountMinor || 0) / 100).toFixed(2)}</span>
+                  <div className="flex flex-col justify-center min-h-[44px] border-x border-slate-800">
+                    <span className="text-[10px] font-semibold text-slate-400 block leading-tight">Paid</span>
+                    <span className="font-bold text-emerald-400 text-xs sm:text-sm mt-0.5 leading-tight">₹{((order.paidAmountMinor || 0) / 100).toFixed(2)}</span>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Due Balance</span>
-                    <span className={`font-bold ${dueAmountMinor > 0 ? 'text-rose-400' : 'text-slate-300'}`}>
+                  <div className="flex flex-col justify-center min-h-[44px]">
+                    <span className="text-[10px] font-semibold text-slate-400 block leading-tight">Due Balance</span>
+                    <span className={`font-bold text-xs sm:text-sm mt-0.5 leading-tight ${dueAmountMinor > 0 ? 'text-rose-400' : 'text-slate-300'}`}>
                       ₹{(dueAmountMinor / 100).toFixed(2)}
                     </span>
                   </div>
@@ -423,25 +423,25 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
 
                 {/* Direct Order Resolution Action Banner */}
                 {isOrderActive && (
-                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                     {canCompleteOrder ? (
                       <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
                         <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        <span>Bill settled & served</span>
+                        <span className="whitespace-nowrap">Bill settled & served</span>
                       </div>
                     ) : dueAmountMinor > 0 ? (
                       <div className="flex items-center gap-1.5 text-xs text-amber-400 font-semibold">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span>Unpaid balance ₹{(dueAmountMinor / 100).toFixed(2)}</span>
+                        <span className="whitespace-nowrap">Unpaid ₹{(dueAmountMinor / 100).toFixed(2)}</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-semibold">
                         <CookingPot className="w-4 h-4 shrink-0" />
-                        <span>Kitchen in progress</span>
+                        <span className="whitespace-nowrap">Kitchen preparing</span>
                       </div>
                     )}
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {/* Complete Order Button */}
                       {canCompleteOrder && onCompleteOrder && (
                         <button
@@ -449,11 +449,11 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                           data-testid="btn-captain-complete-order"
                           disabled={isSubmitting}
                           onClick={handleCompleteOrderAction}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 transition-colors"
+                          className="h-8 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 transition-colors whitespace-nowrap"
                           title="Complete this order"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Complete Order</span>
+                          <span>Complete</span>
                         </button>
                       )}
 
@@ -470,7 +470,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                               onGoToPosSettlement(table.id);
                             }
                           }}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 transition-colors"
+                          className="h-8 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 transition-colors whitespace-nowrap"
                           title="Settle unpaid bill"
                         >
                           <CreditCard className="w-3.5 h-3.5" />
@@ -484,7 +484,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                           type="button"
                           data-testid="btn-trigger-cancel-order"
                           onClick={() => setShowCancelPrompt(true)}
-                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-500/30 font-bold text-xs transition-colors"
+                          className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-500/30 flex items-center justify-center font-bold text-xs transition-colors shrink-0"
                           title="Cancel order"
                         >
                           <Ban className="w-3.5 h-3.5" />
@@ -501,21 +501,21 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                     {order.items?.map((item, idx) => (
                       <div
                         key={item.itemId + idx}
-                        className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 text-xs"
+                        className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-md bg-slate-800 text-amber-400 font-bold flex items-center justify-center text-[11px]">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 rounded-md bg-slate-800 text-amber-400 font-bold flex items-center justify-center text-[11px] shrink-0">
                             {item.quantity}x
                           </span>
-                          <span className="font-semibold text-slate-200">{item.nameSnapshot}</span>
+                          <span className="font-semibold text-slate-200 truncate">{item.nameSnapshot}</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           {item.notes && (
                             <span className="text-[10px] italic text-slate-400 truncate max-w-[120px]">
                               "{item.notes}"
                             </span>
                           )}
-                          <span className="text-slate-400 text-xs font-mono">
+                          <span className="text-slate-300 text-xs font-mono font-bold">
                             ₹{(((item.priceMinor || 0) * (item.quantity || 1)) / 100).toFixed(2)}
                           </span>
                         </div>
@@ -532,7 +532,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
           </div>
 
           {/* Kitchen KOT Progress Section */}
-          <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+          <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2.5">
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <CookingPot className="w-4 h-4 text-amber-400" />
@@ -548,7 +548,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                 {tableKots.map((kot) => (
                   <div
                     key={kot.id}
-                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs"
+                    className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs"
                   >
                     <div>
                       <span className="font-bold text-slate-200">{kot.kotNumber}</span>
@@ -559,7 +559,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
 
                     <div className="flex items-center gap-2">
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border whitespace-nowrap ${
                           kot.status === 'sentToKitchen'
                             ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
                             : kot.status === 'preparing'
@@ -583,7 +583,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                               setActionError(err?.message || 'Failed to serve KOT');
                             }
                           }}
-                          className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] transition-colors"
+                          className="h-6 px-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] transition-colors whitespace-nowrap"
                         >
                           Serve
                         </button>
@@ -597,14 +597,14 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
         </div>
 
         {/* Footer Operational Controls */}
-        <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
           {/* Close Session */}
           <button
             type="button"
             data-testid="btn-close-session"
             onClick={handleCloseSessionAction}
             disabled={isSubmitting}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold inline-flex items-center gap-1.5 transition-colors border border-slate-700 min-h-[40px]"
+            className="h-11 min-h-[44px] px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors border border-slate-700 active:scale-95 whitespace-nowrap"
           >
             <LogOut className="w-3.5 h-3.5 text-slate-400" />
             <span>Close Session</span>
@@ -623,7 +623,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                   onGoToPosOrder(table.id);
                 }
               }}
-              className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors min-h-[40px]"
+              className="h-11 min-h-[44px] px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors shadow-sm active:scale-95 whitespace-nowrap"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span>{order ? 'Add Items' : 'Take Order'}</span>
@@ -636,7 +636,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                 data-testid="btn-captain-send-kot"
                 onClick={handleSendKot}
                 disabled={isSubmitting}
-                className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 min-h-[40px]"
+                className="h-11 min-h-[44px] px-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 active:scale-95 whitespace-nowrap"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Send KOT</span>
@@ -655,7 +655,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                   onGoToPosSettlement(table.id);
                 }
               }}
-              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors min-h-[40px]"
+              className="h-11 min-h-[44px] px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors active:scale-95 whitespace-nowrap"
               title="Navigate to POS Terminal for Billing & Settlement"
             >
               <CreditCard className="w-3.5 h-3.5" />
