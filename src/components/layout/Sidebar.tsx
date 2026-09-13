@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Store,
@@ -42,6 +42,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { user, profile } = useAuth();
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
 
+  // Lock body scroll when mobile drawer is open to prevent accidental background scrolling
+  useEffect(() => {
+    if (isOpenMobile) {
+      const originalOverflow = document.body.style.overflow;
+      const originalTouchAction = document.body.style.touchAction;
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.body.style.touchAction = originalTouchAction;
+      };
+    }
+  }, [isOpenMobile]);
+
   const mainNavigation: { id: AdminView; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'pos', label: 'POS Terminal', icon: MonitorCheck },
     { id: 'captain', label: 'Captain / Staff', icon: Layers },
@@ -65,21 +79,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Mobile backdrop */}
+      {/* Mobile backdrop (Layer 3: z-40, sits strictly above bottom nav z-30) */}
       {isOpenMobile && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs lg:hidden"
+          id="mobile-sidebar-backdrop"
+          aria-hidden="true"
+          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-xs lg:hidden transition-opacity duration-200 animate-in fade-in"
           onClick={onCloseMobile}
         />
       )}
 
+      {/* Mobile Drawer / Desktop Sidebar (Layer 4: z-50 on mobile, covers 100dvh, above backdrop & bottom nav) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white flex flex-col transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+        id="app-sidebar-drawer"
+        aria-label="Sidebar Navigation"
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 sm:w-80 max-w-[86vw] lg:w-64 bg-slate-900 text-white flex flex-col h-full h-[100dvh] max-h-[100dvh] shadow-2xl transition-transform duration-200 ease-out lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Brand Header */}
-        <div className="h-18 px-5 border-b border-slate-800 flex items-center justify-between">
+        <div className="h-16 sm:h-18 px-4 sm:px-5 border-b border-slate-800 flex items-center justify-between shrink-0 pt-safe">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-indigo-900/50">
               <UtensilsCrossed className="w-5 h-5" />
@@ -94,15 +113,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
           <button
+            id="close-mobile-sidebar-btn"
+            type="button"
             onClick={onCloseMobile}
-            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+            aria-label="Close navigation drawer"
+            className="lg:hidden p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 active:scale-95 transition-all"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Current Restaurant Badge with Interactive Switcher */}
-        <div className="px-4 pt-4 pb-2">
+        <div className="px-4 pt-4 pb-2 shrink-0">
           <div className="rounded-xl bg-slate-800/80 border border-slate-700/60 p-3 transition-all duration-150">
             <div 
               onClick={() => {
@@ -180,8 +202,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Navigation Sections */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-6">
+        {/* Navigation Sections (Scrollable independently, smooth scrolling) */}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3 space-y-5 no-scrollbar sm:scroll-auto">
           {/* Active Navigation */}
           <div>
             <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -194,18 +216,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 return (
                   <button
                     key={item.id}
+                    id={`sidebar-nav-${item.id}-btn`}
                     onClick={() => {
                       onNavigate(item.id);
                       onCloseMobile();
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 ${
+                    className={`w-full min-h-[44px] flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 ${
                       isActive
                         ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/30'
                         : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                    <span>{item.label}</span>
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                    <span className="truncate">{item.label}</span>
                   </button>
                 );
               })}
@@ -213,38 +236,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Planned / Future Modules */}
-          <div>
-            <div className="px-3 pb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              <span>Next Milestones</span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">
-                Roadmap
-              </span>
-            </div>
-            <div className="space-y-1">
-              {futureModules.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div
-                    key={item.label}
-                    className="flex items-center justify-between px-3 py-2 rounded-xl text-slate-500 text-sm cursor-not-allowed group hover:bg-slate-800/30"
-                    title={`Scheduled for future ${item.milestone} release`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className="w-4 h-4 text-slate-600 group-hover:text-slate-500" />
-                      <span className="text-slate-400 text-xs font-medium">{item.label}</span>
+          {futureModules.length > 0 && (
+            <div>
+              <div className="px-3 pb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <span>Next Milestones</span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">
+                  Roadmap
+                </span>
+              </div>
+              <div className="space-y-1">
+                {futureModules.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between px-3 py-2 rounded-xl text-slate-500 text-sm cursor-not-allowed group hover:bg-slate-800/30 min-h-[44px]"
+                      title={`Scheduled for future ${item.milestone} release`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon className="w-4 h-4 text-slate-600 group-hover:text-slate-500 shrink-0" />
+                        <span className="text-slate-400 text-xs font-medium">{item.label}</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/50">
+                        {item.milestone}
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/50">
-                      {item.milestone}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Footer info */}
-        <div className="p-3 border-t border-slate-800 text-center">
+        {/* Footer info (Bottom safe area aware) */}
+        <div className="p-3 pb-safe border-t border-slate-800 text-center bg-slate-900 shrink-0">
           <div className="px-3 py-2 rounded-xl bg-slate-800/50 text-[11px] text-slate-400 flex items-center justify-between">
             <span className="font-mono">v0.1.0</span>
             <span className="inline-flex items-center gap-1 text-indigo-400 font-semibold">

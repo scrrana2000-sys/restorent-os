@@ -131,7 +131,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
         <SecurityRulesNotice />
 
-        <main className={`flex-1 p-2 sm:p-4 lg:p-6 pb-20 lg:pb-6 ${['pos', 'kitchen', 'captain'].includes(currentView) ? 'max-w-none w-full !p-0 sm:!p-2 lg:!p-4 pb-20 lg:pb-4' : 'max-w-7xl w-full mx-auto'}`}>
+        <main className={`flex-1 p-2 sm:p-4 lg:p-6 pb-16 sm:pb-18 lg:pb-6 ${['pos', 'kitchen', 'captain'].includes(currentView) ? 'max-w-none w-full !p-0 sm:!p-2 lg:!p-4 pb-16 sm:pb-18 lg:pb-4' : 'max-w-7xl w-full mx-auto'}`}>
           {restaurantLoading && !restaurant ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
@@ -158,6 +158,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 {restaurantLoading ? 'Connecting...' : 'Retry Connection'}
               </button>
             </div>
+          ) : React.isValidElement(children) ? (
+            React.cloneElement(children as React.ReactElement<{ onOpenMobileMenu?: () => void }>, {
+              onOpenMobileMenu: () => setIsMobileMenuOpen(true)
+            })
           ) : (
             children
           )}

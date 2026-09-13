@@ -23,6 +23,7 @@ import { PaymentModal } from '../components/pos/PaymentModal';
 import { BillReceiptModal } from '../components/pos/BillReceiptModal';
 import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersModal';
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
+import { VoiceOrderModal } from '../components/voice/VoiceOrderModal';
 import { AdminView } from '../components/layout/Sidebar';
 import { useModalBackHandler } from '../hooks/useModalBackHandler';
 
@@ -71,6 +72,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isBillModalOpen, setIsBillModalOpen] = useState(false);
   const [isHeldOrdersModalOpen, setIsHeldOrdersModalOpen] = useState(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
 
   const [activeOrderForPayment, setActiveOrderForPayment] = useState<Order | null>(null);
   const [activeOrderForBill, setActiveOrderForBill] = useState<Order | null>(null);
@@ -91,6 +93,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   useModalBackHandler(isHeldOrdersModalOpen, () => setIsHeldOrdersModalOpen(false), 'pos-held-orders-modal');
   useModalBackHandler(isPaymentModalOpen, () => setIsPaymentModalOpen(false), 'pos-payment-modal');
   useModalBackHandler(isBillModalOpen, () => setIsBillModalOpen(false), 'pos-bill-modal');
+  useModalBackHandler(isVoiceModalOpen, () => setIsVoiceModalOpen(false), 'pos-voice-modal');
   useModalBackHandler(!!sentOrderInfo, () => setSentOrderInfo(null), 'pos-order-sent-modal');
 
   const symbol = restaurant?.currencySymbol || '₹';
@@ -375,6 +378,46 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     setOrderNotes('');
   }, []);
 
+  // Voice Add Batch To Cart
+  const handleVoiceAddToCart = React.useCallback(
+    (itemsToAdd: { item: MenuItem; quantity: number }[]) => {
+      setCartItems((prev) => {
+        let updated = [...prev];
+        for (const { item, quantity } of itemsToAdd) {
+          if (!item.isAvailable) continue;
+          const priceMinor = toMoneyMinor(item.price);
+          const existingIdx = updated.findIndex((ci) => ci.itemId === item.itemId);
+          if (existingIdx >= 0) {
+            updated[existingIdx] = {
+              ...updated[existingIdx],
+              quantity: updated[existingIdx].quantity + quantity
+            };
+          } else {
+            updated.push({
+              cartItemId: `cart_${item.itemId}_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+              itemId: item.itemId,
+              nameSnapshot: item.name,
+              shortNameSnapshot: item.shortName || item.name.slice(0, 16),
+              imageUrlSnapshot: item.imageUrl || null,
+              foodTypeSnapshot: item.foodType || null,
+              unitPriceMinor: priceMinor,
+              taxRate: item.taxRate || restaurant?.defaultTaxRate || 5,
+              taxInclusive: !!item.taxInclusive,
+              quantity: quantity
+            });
+          }
+        }
+        return updated;
+      });
+
+      setStatusMessage({
+        type: 'success',
+        text: `Voice items added to cart!`
+      });
+    },
+    [restaurant?.defaultTaxRate]
+  );
+
   // Hold Order
   const handleHoldOrder = () => {
     if (cartItems.length === 0) return;
@@ -606,6 +649,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         cartItemsCount={cartItemsCount}
         onOpenCart={() => setActiveMobileTab((prev) => (prev === 'cart' ? 'menu' : 'cart'))}
         onOpenMobileMenu={onOpenMobileMenu}
+        onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
         onOpenRecentOrders={() => {
           if (activeOrderForBill) {
             setIsBillModalOpen(true);
@@ -714,7 +758,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
 
         {/* Mobile Sticky Floating Cart Bar (Matching Reference Image) */}
         {activeMobileTab === 'menu' && cartItemsCount > 0 && (
-          <div className="lg:hidden fixed bottom-[72px] left-4 right-4 max-w-lg mx-auto z-30 pointer-events-auto animate-in slide-in-from-bottom-3 duration-200">
+          <div className="lg:hidden fixed bottom-[calc(56px+env(safe-area-inset-bottom,0px)+8px)] left-3 right-3 max-w-lg mx-auto z-20 pointer-events-auto animate-in slide-in-from-bottom-3 duration-200">
             <div className="bg-slate-900/95 backdrop-blur-md text-white rounded-xl px-3.5 py-2 shadow-xl border border-slate-800 flex items-center justify-between gap-3">
               {/* Left: Cart Icon with Badge, Item Count, and Total Amount (Tapping opens Cart) */}
               <button
@@ -844,6 +888,19 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         }}
         symbol={restaurant?.currencySymbol || '₹'}
         restaurantId={restaurantId}
+      />
+
+      <VoiceOrderModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        menuItems={menuItems}
+        currencySymbol={symbol}
+        restaurantId={restaurantId}
+        userRole={user?.email ? 'staff' : 'cashier'}
+        userId={user?.uid || 'cashier'}
+        userName={user?.displayName || user?.email || 'Cashier'}
+        onAddToCart={handleVoiceAddToCart}
+        onClearCart={handleClearCart}
       />
     </div>
   );

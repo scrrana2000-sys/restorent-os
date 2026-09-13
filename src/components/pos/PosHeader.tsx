@@ -19,6 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import { OfflineSyncIndicator } from '../OfflineSyncIndicator';
 import { OrderType } from '../../types/order';
 import { Table, TableSession } from '../../types/table';
+import { VoiceOrderButton } from '../voice/VoiceOrderButton';
 
 interface PosHeaderProps {
   orderType: OrderType;
@@ -36,6 +37,8 @@ interface PosHeaderProps {
   cartItemsCount?: number;
   onOpenCart?: () => void;
   onOpenMobileMenu?: () => void;
+  onOpenVoiceModal?: () => void;
+  isVoiceListening?: boolean;
 }
 
 export const PosHeader: React.FC<PosHeaderProps> = ({
@@ -53,7 +56,9 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   onOpenPaymentDue,
   cartItemsCount = 0,
   onOpenCart,
-  onOpenMobileMenu
+  onOpenMobileMenu,
+  onOpenVoiceModal,
+  isVoiceListening = false
 }) => {
   const { restaurant } = useRestaurant();
   const { profile, user } = useAuth();
@@ -142,6 +147,15 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
                 {heldOrdersCount}
               </span>
             </button>
+          )}
+
+          {/* Voice Ordering Trigger Button */}
+          {onOpenVoiceModal && (
+            <VoiceOrderButton
+              onClick={onOpenVoiceModal}
+              isListening={isVoiceListening}
+              variant="header"
+            />
           )}
 
           {/* Recent Orders Receipt button */}

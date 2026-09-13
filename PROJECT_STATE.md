@@ -1,13 +1,18 @@
 # RestaurantOS — Master Project State & Status
 
 ## Current Milestone & Phase Status
-- **Current Active Milestone**: Milestone 8 — Printer & Hardware Integration
-- **Active Operational Phase**: Phase 4.6 Performance & Verification COMPLETE | Phase 4.5 Payment Due Center COMPLETE | Table Label Fix COMPLETE | POS Active Order Merge & 2-Min KOT Grace Rule COMPLETE
-- **M8 Status**: COMPLETE / CONDITIONAL
-  - Phase 8A (Printer Abstraction Layer, Receipt Templates & Virtual Adapters): COMPLETE / VERIFIED
-  - Phase 8B (Hardware Transport Drivers — LAN, Bluetooth, USB, Android Native): COMPLETE / CONDITIONAL
-  - **Honest Hardware Verification Status**: Software transport drivers, Bluetooth GATT serial bridge, LAN socket dispatch, WebUSB bridge, and thermal print formatting (58mm / 80mm) are fully implemented and unit-tested via mock adapters. Physical thermal printer hardware is **NOT AVAILABLE / NOT PHYSICALLY VERIFIED**.
-- **M9 Status**: NOT STARTED (Customer App & Online Ordering remains strictly locked until future activation).
+- **Current Active Milestone**: Milestone 11 — Voice-Assisted POS Ordering Engine
+- **Active Operational Phase**: Phase 11C Voice Microphone Permission UX Hardening COMPLETE & VERIFIED
+- **Voice Ordering Engine Status**: COMPLETE & VERIFIED
+  - Local speech parser (No Gemini API, 0 latency, zero quota usage)
+  - Phonetic, Hinglish & Devanagari dictionary mapping (e.g. "chawal", "roti", "paani", "chai", "murg", "dahi", "meetha", "दो वेज बिरयानी", "एक कोक")
+  - Multi-candidate ambiguity resolver (surface options for vague queries like "biryani")
+  - Voice Order trigger button & bottom-sheet modal with real-time transcript
+  - Strict confirmation before cart modification
+  - Hardware back-button history registration & Audit log integration
+  - Microphone Permission UX: `SUPPORTED + GRANTED`, `SUPPORTED + PROMPT`, `SUPPORTED + DENIED`, `UNSUPPORTED`
+  - Explicit `[ Allow Microphone ]`, `[ Try Again ]`, and `[ Use Menu Instead ]` actions
+  - Real Android/Vivo Microphone Verification: NOT AVAILABLE (Headless Cloud Container environment)
 
 ---
 
