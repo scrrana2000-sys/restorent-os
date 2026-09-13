@@ -8,7 +8,35 @@ import { useAuth } from '../../context/AuthContext';
 import { orderService } from '../../services/orderService';
 import { tableService } from '../../services/tableService';
 import { printerService } from '../../services/printer/PrinterService';
-import { Printer, X, Receipt, CheckCircle2, RotateCw } from 'lucide-react';
+import {
+  formatWhatsAppBillText,
+  formatWhatsAppPhoneNumber,
+  generateWhatsAppBillUrl,
+  openWhatsAppSafely
+} from '../../utils/whatsappBillFormatter';
+import {
+  downloadBillPdf,
+  shareOrSendBillPdf
+} from '../../utils/pdfBillGenerator';
+import {
+  Printer,
+  X,
+  Receipt,
+  CheckCircle2,
+  RotateCw,
+  MessageSquare,
+  Send,
+  Copy,
+  Check,
+  Phone,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  FileText,
+  Download,
+  Share2
+} from 'lucide-react';
 
 interface BillReceiptModalProps {
   isOpen: boolean;
@@ -28,6 +56,10 @@ export const BillReceiptModal: React.FC<BillReceiptModalProps> = ({
   const { restaurant } = useRestaurant();
   const { user } = useAuth();
   const [printFeedback, setPrintFeedback] = React.useState<{ status: string; message: string } | null>(null);
+  const [showWhatsAppSection, setShowWhatsAppSection] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const symbol = restaurant?.currencySymbol || '₹';
   const restaurantId = restaurant?.restaurantId || (restaurant as any)?.id;
 
@@ -60,10 +92,96 @@ export const BillReceiptModal: React.FC<BillReceiptModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setPrintFeedback(null);
+      setShowWhatsAppSection(false);
+      setPhoneError(null);
+      setCopied(false);
+    } else if (order) {
+      setWhatsappPhone(order.customerSnapshot?.phone || '');
     }
-  }, [isOpen]);
+  }, [isOpen, order]);
 
   if (!isOpen || !order) return null;
+
+  const tableLabel = getFormattedTableLabel(order, activeTableMap);
+  const billWhatsAppText = formatWhatsAppBillText(order, restaurant, { tableLabel, isReprint });
+
+  const handleCopyWhatsAppText = async () => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(billWhatsAppText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = billWhatsAppText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (err) {
+      console.error('Failed to copy bill text:', err);
+    }
+  };
+
+  const syncCustomerPhoneInBackground = (trimmedPhone: string) => {
+    if (
+      restaurantId &&
+      order.id &&
+      trimmedPhone &&
+      trimmedPhone !== (order.customerSnapshot?.phone || '')
+    ) {
+      orderService
+        .updateCustomerSnapshot(
+          restaurantId,
+          order.id,
+          {
+            name: order.customerSnapshot?.name || 'Customer',
+            phone: trimmedPhone,
+            email: order.customerSnapshot?.email
+          },
+          user?.uid || 'staff'
+        )
+        .catch((e) => console.warn('Could not update customer phone in order snapshot:', e));
+    }
+  };
+
+  const handleSendWhatsApp = () => {
+    const trimmed = whatsappPhone.trim();
+    if (!trimmed) {
+      setPhoneError('Please enter a 10-digit mobile number');
+      setShowWhatsAppSection(true);
+      return;
+    }
+
+    const validation = formatWhatsAppPhoneNumber(trimmed, '91');
+    if (!validation.valid) {
+      setPhoneError(validation.error || 'Please enter a valid 10-digit mobile number');
+      setShowWhatsAppSection(true);
+      return;
+    }
+
+    // Run background update without blocking the user click event
+    syncCustomerPhoneInBackground(trimmed);
+
+    const url = generateWhatsAppBillUrl(trimmed, billWhatsAppText, '91');
+    openWhatsAppSafely(url);
+  };
+
+  const handleDownloadPdf = () => {
+    downloadBillPdf(order, restaurant, { tableLabel, isReprint });
+  };
+
+  const handleSendPdf = async () => {
+    const trimmed = whatsappPhone.trim();
+    syncCustomerPhoneInBackground(trimmed);
+
+    await shareOrSendBillPdf(order, restaurant, {
+      tableLabel,
+      isReprint,
+      phoneNumber: trimmed
+    });
+  };
 
   const handlePrint = async (reprint: boolean = false) => {
     setPrintFeedback(null);
@@ -305,37 +423,173 @@ export const BillReceiptModal: React.FC<BillReceiptModalProps> = ({
           </p>
         </div>
 
+        {/* WhatsApp Sharing Card (Inline Expandable) */}
+        {showWhatsAppSection && (
+          <div className="p-4 bg-emerald-50/70 border-t border-b border-emerald-200 no-print space-y-3 animate-in slide-in-from-bottom duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-[#25D366] text-white flex items-center justify-center shadow-2xs">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-emerald-950">Send Bill to WhatsApp</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowWhatsAppSection(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+                aria-label="Close WhatsApp section"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="relative flex items-center">
+                <span className="absolute left-3 text-xs font-bold text-slate-500 font-mono select-none">
+                  +91
+                </span>
+                <input
+                  type="tel"
+                  data-testid="input-bill-whatsapp-phone"
+                  value={whatsappPhone}
+                  onChange={(e) => {
+                    setWhatsappPhone(e.target.value);
+                    if (phoneError) setPhoneError(null);
+                  }}
+                  placeholder="Enter 10-digit mobile"
+                  maxLength={14}
+                  className={`w-full pl-11 pr-3 py-2 bg-white border rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 font-mono ${
+                    phoneError
+                      ? 'border-rose-400 focus:ring-rose-200'
+                      : 'border-emerald-300 focus:ring-emerald-500/20 focus:border-emerald-500'
+                  }`}
+                  autoFocus
+                />
+              </div>
+              {phoneError && (
+                <p className="text-[10px] text-rose-600 font-semibold flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  <span>{phoneError}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                data-testid="btn-copy-bill-whatsapp-text"
+                onClick={handleCopyWhatsAppText}
+                className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all flex items-center gap-1 active:scale-95 shadow-2xs"
+                title="Copy formatted WhatsApp text to clipboard"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700 font-bold">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Copy Text</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  data-testid="btn-send-whatsapp-bill"
+                  onClick={handleSendWhatsApp}
+                  className="px-3 py-1.5 text-xs font-bold bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-sans rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1 active:scale-95"
+                  title="Send text message on WhatsApp"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Text</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="btn-send-pdf-bill"
+                  onClick={handleSendPdf}
+                  className="px-3.5 py-1.5 text-xs font-bold bg-[#25D366] hover:bg-[#20bd5a] text-slate-950 font-sans rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                  title="Share or send PDF bill via WhatsApp"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Send PDF</span>
+                  <Share2 className="w-3 h-3 opacity-60" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Footer Actions */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2.5 no-print pb-safe">
+        <div className="p-3.5 sm:p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2 no-print pb-safe">
           <button
             type="button"
             data-testid="btn-close-receipt"
             onClick={onClose}
-            className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors min-h-[44px] active:scale-95"
+            className="px-3.5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors min-h-[44px] active:scale-95"
           >
             Close
           </button>
-          {showReprintNotice ? (
+
+          <div className="flex items-center gap-2">
+            {/* Download PDF button */}
             <button
               type="button"
-              data-testid="btn-reprint-bill"
-              onClick={() => handlePrint(true)}
-              className="flex-1 sm:flex-initial px-5 py-2.5 text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 min-h-[44px] active:scale-95"
+              data-testid="btn-download-bill-pdf"
+              onClick={handleDownloadPdf}
+              className="px-3 sm:px-3.5 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl transition-all flex items-center justify-center gap-1.5 min-h-[44px] active:scale-95"
+              title="Download Tax Invoice as PDF"
             >
-              <RotateCw className="w-4 h-4" />
-              <span>Reprint Bill</span>
+              <Download className="w-4 h-4 text-red-600" />
+              <span>PDF</span>
             </button>
-          ) : (
+
+            {/* WhatsApp button */}
             <button
               type="button"
-              data-testid="btn-print-bill"
-              onClick={() => handlePrint(false)}
-              className="flex-1 sm:flex-initial px-5 py-2.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 min-h-[44px] active:scale-95"
+              data-testid="btn-open-whatsapp-bill"
+              onClick={() => {
+                if (!showWhatsAppSection && (!whatsappPhone || whatsappPhone.trim().length === 0)) {
+                  setShowWhatsAppSection(true);
+                } else if (showWhatsAppSection && whatsappPhone.trim().length >= 10) {
+                  handleSendPdf();
+                } else {
+                  setShowWhatsAppSection(!showWhatsAppSection);
+                }
+              }}
+              className="px-3.5 sm:px-4 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 min-h-[44px] active:scale-95"
+              title="Send bill to customer WhatsApp"
             >
-              <Printer className="w-4 h-4" />
-              <span>Print Bill</span>
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden xs:inline">WhatsApp</span>
+              <span className="xs:hidden">WA</span>
             </button>
-          )}
+
+            {showReprintNotice ? (
+              <button
+                type="button"
+                data-testid="btn-reprint-bill"
+                onClick={() => handlePrint(true)}
+                className="px-4 sm:px-5 py-2.5 text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 min-h-[44px] active:scale-95"
+              >
+                <RotateCw className="w-4 h-4" />
+                <span>Reprint</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-testid="btn-print-bill"
+                onClick={() => handlePrint(false)}
+                className="px-4 sm:px-5 py-2.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 min-h-[44px] active:scale-95"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Bill</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

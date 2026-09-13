@@ -7,7 +7,12 @@ import { LoginPage } from './pages/LoginPage';
 import { PosPage } from './pages/PosPage';
 import { UtensilsCrossed, ShieldAlert, Loader2 } from 'lucide-react';
 import { isViewAllowed } from './utils/permissions';
-import { isInvitationRoute, extractInvitationTokenFromUrl, PRODUCTION_BASE_PATH } from './utils/urlUtils';
+import {
+  isInvitationRoute,
+  extractInvitationTokenFromUrl,
+  isPublicBillRoute,
+  PRODUCTION_BASE_PATH
+} from './utils/urlUtils';
 
 // Code-split non-POS views for optimal bundle size and initial app load performance
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -23,6 +28,7 @@ const StaffPage = lazy(() => import('./pages/StaffPage').then(m => ({ default: m
 const InventoryPage = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })));
 const PaymentsPage = lazy(() => import('./pages/PaymentsPage').then(m => ({ default: m.PaymentsPage })));
 const AcceptInvitationPage = lazy(() => import('./pages/AcceptInvitationPage').then(m => ({ default: m.AcceptInvitationPage })));
+const PublicBillPage = lazy(() => import('./pages/PublicBillPage').then(m => ({ default: m.PublicBillPage })));
 
 const ViewFallback = () => (
   <div className="flex flex-col items-center justify-center p-12 min-h-[400px]">
@@ -38,10 +44,11 @@ const AdminApp: React.FC = () => {
   // Check if current URL is an invitation acceptance route
   const isAcceptInvitation = isInvitationRoute();
   const invitationToken = extractInvitationTokenFromUrl();
+  const isPublicBill = isPublicBillRoute();
 
   // Automatically correct/redirect currentView if it is unauthorized for the user's role
   useEffect(() => {
-    if (user && profile && !isAcceptInvitation) {
+    if (user && profile && !isAcceptInvitation && !isPublicBill) {
       const role = profile.role || 'owner';
       if (!isViewAllowed(role, currentView)) {
         const views: AdminView[] = ['pos', 'captain', 'kitchen', 'orders', 'payments', 'inventory', 'dashboard', 'staff', 'restaurant', 'categories', 'items', 'reports', 'audit'];
@@ -51,7 +58,15 @@ const AdminApp: React.FC = () => {
         }
       }
     }
-  }, [user, profile, currentView, isAcceptInvitation]);
+  }, [user, profile, currentView, isAcceptInvitation, isPublicBill]);
+
+  if (isPublicBill) {
+    return (
+      <Suspense fallback={<ViewFallback />}>
+        <PublicBillPage />
+      </Suspense>
+    );
+  }
 
   if (isAcceptInvitation) {
     return (

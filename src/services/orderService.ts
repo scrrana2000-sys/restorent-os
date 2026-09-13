@@ -2270,6 +2270,27 @@ export class OrderService implements IOrderService {
       console.warn('[RestaurantOS] Failed to log bill_reprinted audit event:', err);
     }
   }
+
+  /**
+   * Updates the customer snapshot (e.g. phone number or name) for an existing order.
+   */
+  async updateCustomerSnapshot(
+    restaurantId: string,
+    orderId: string,
+    customerSnapshot: CustomerSnapshot | null,
+    actorUid: string
+  ): Promise<void> {
+    const cleanRestaurantId = restaurantId?.trim();
+    const cleanOrderId = orderId?.trim();
+    if (!cleanRestaurantId || !cleanOrderId) return;
+
+    const orderRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
+    await updateDoc(orderRef, {
+      customerSnapshot: customerSnapshot || null,
+      updatedAt: serverTimestamp(),
+      updatedBy: actorUid || 'system'
+    });
+  }
 }
 
 export const orderService = new OrderService();

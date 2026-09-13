@@ -11,6 +11,7 @@ import { getFormattedTableLabel } from '../utils/tableLabel';
 import { hasPermission } from '../utils/permissions';
 import { BillReceiptModal } from '../components/pos/BillReceiptModal';
 import { ReceivePaymentModal } from '../components/pos/ReceivePaymentModal';
+import { WhatsAppBillModal } from '../components/pos/WhatsAppBillModal';
 import {
   History,
   Search,
@@ -34,7 +35,8 @@ import {
   DollarSign,
   ChevronDown,
   Trash2,
-  Ban
+  Ban,
+  MessageSquare
 } from 'lucide-react';
 
 export const OrdersPage: React.FC = () => {
@@ -64,6 +66,7 @@ export const OrdersPage: React.FC = () => {
   // Selected Order for Bill / Details
   const [selectedBillOrder, setSelectedBillOrder] = useState<Order | null>(null);
   const [isReprintMode, setIsReprintMode] = useState<boolean>(false);
+  const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [receivePaymentOrder, setReceivePaymentOrder] = useState<Order | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -721,6 +724,18 @@ export const OrdersPage: React.FC = () => {
                         <span>Bill</span>
                       </button>
 
+                      {/* WhatsApp Bill */}
+                      <button
+                        type="button"
+                        data-testid={`btn-order-whatsapp-mobile-${ord.id}`}
+                        onClick={() => setWhatsAppOrder(ord)}
+                        className="min-h-[38px] px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition-all flex items-center justify-center gap-1 border border-emerald-200 active:scale-95 shrink-0"
+                        title="Send Bill via WhatsApp"
+                      >
+                        <MessageSquare className="w-4 h-4 text-[#25D366]" />
+                        <span>WhatsApp</span>
+                      </button>
+
                       {/* Order Details */}
                       <button
                         type="button"
@@ -940,6 +955,17 @@ export const OrdersPage: React.FC = () => {
                               <Receipt className="w-4 h-4" />
                             </button>
 
+                            {/* WhatsApp Bill */}
+                            <button
+                              type="button"
+                              data-testid={`btn-order-whatsapp-${ord.id}`}
+                              onClick={() => setWhatsAppOrder(ord)}
+                              className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#25D366] transition-colors"
+                              title="Send Bill to Customer on WhatsApp"
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                            </button>
+
                             {/* Reprint Bill */}
                             <button
                               type="button"
@@ -1142,6 +1168,17 @@ export const OrdersPage: React.FC = () => {
           order={selectedBillOrder}
           isReprint={isReprintMode}
           tableMap={tableMap}
+        />
+      )}
+
+      {/* WhatsApp Bill Modal */}
+      {whatsAppOrder && (
+        <WhatsAppBillModal
+          isOpen={!!whatsAppOrder}
+          onClose={() => setWhatsAppOrder(null)}
+          order={whatsAppOrder}
+          tableMap={tableMap}
+          isReprint={whatsAppOrder.status === 'completed'}
         />
       )}
 

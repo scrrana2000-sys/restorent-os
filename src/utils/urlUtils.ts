@@ -157,3 +157,73 @@ export function isInvitationRoute(): boolean {
   );
 }
 
+/**
+ * Builds the canonical public digital invoice / PDF bill URL for a customer.
+ */
+export function buildPublicBillUrl(orderId: string, restaurantId?: string): string {
+  const cleanOrderId = (orderId || '').trim();
+  const cleanRestId = (restaurantId || '').trim();
+  const baseUrl = getPublicAppBaseUrl();
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+  const queryParams = new URLSearchParams();
+  queryParams.set('bill', cleanOrderId);
+  if (cleanRestId) {
+    queryParams.set('rest', cleanRestId);
+  }
+
+  return `${normalizedBase}?${queryParams.toString()}`;
+}
+
+export interface PublicBillParams {
+  orderId: string;
+  restaurantId: string;
+  autoDownload: boolean;
+}
+
+/**
+ * Extracts public bill query parameters (bill, rest, download) from window.location.
+ */
+export function extractBillParamsFromUrl(): PublicBillParams | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    let bill = searchParams.get('bill') || searchParams.get('orderId') || searchParams.get('order');
+    let rest = searchParams.get('rest') || searchParams.get('restaurantId') || searchParams.get('restaurant');
+    const autoDownload = searchParams.get('download') === 'pdf' || searchParams.get('autoDownload') === 'true';
+
+    // Also inspect hash if using hash routing
+    if (!bill && window.location.hash) {
+      const hash = window.location.hash;
+      const questionIndex = hash.indexOf('?');
+      if (questionIndex !== -1) {
+        const hashParams = new URLSearchParams(hash.substring(questionIndex));
+        bill = hashParams.get('bill') || hashParams.get('orderId') || hashParams.get('order');
+        if (!rest) {
+          rest = hashParams.get('rest') || hashParams.get('restaurantId') || hashParams.get('restaurant');
+        }
+      }
+    }
+
+    if (bill && bill.trim()) {
+      return {
+        orderId: bill.trim(),
+        restaurantId: (rest || '').trim(),
+        autoDownload
+      };
+    }
+  } catch (err) {
+    console.warn('[RestaurantOS] Error extracting bill params from URL:', err);
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether the current window location is a public bill viewing request.
+ */
+export function isPublicBillRoute(): boolean {
+  return extractBillParamsFromUrl() !== null;
+}
+
