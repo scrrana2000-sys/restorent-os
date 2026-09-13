@@ -2,17 +2,21 @@
 
 ## Current Milestone & Phase Status
 - **Current Active Milestone**: Milestone 11 — Voice-Assisted POS Ordering Engine
-- **Active Operational Phase**: Phase 11C Voice Microphone Permission UX Hardening COMPLETE & VERIFIED
+- **Active Operational Phase**: Phase 11D Voice Ordering Merge vs Replace Logic COMPLETE & VERIFIED
 - **Voice Ordering Engine Status**: COMPLETE & VERIFIED
   - Local speech parser (No Gemini API, 0 latency, zero quota usage)
   - Phonetic, Hinglish & Devanagari dictionary mapping (e.g. "chawal", "roti", "paani", "chai", "murg", "dahi", "meetha", "दो वेज बिरयानी", "एक कोक")
   - Multi-candidate ambiguity resolver (surface options for vague queries like "biryani")
   - Voice Order trigger button & bottom-sheet modal with real-time transcript
+  - Voice Draft Accumulation & Merging (`mergeMatchedItemResults`):
+    - "Speak More" preserves existing voice draft items
+    - Additional utterances merge (same item -> quantity accumulates; new item -> appends)
+    - Full voice draft merges into POS cart upon "Add to Cart"
   - Strict confirmation before cart modification
   - Hardware back-button history registration & Audit log integration
   - Microphone Permission UX: `SUPPORTED + GRANTED`, `SUPPORTED + PROMPT`, `SUPPORTED + DENIED`, `UNSUPPORTED`
   - Explicit `[ Allow Microphone ]`, `[ Try Again ]`, and `[ Use Menu Instead ]` actions
-  - Real Android/Vivo Microphone Verification: NOT AVAILABLE (Headless Cloud Container environment)
+  - Comprehensive Verification Test Suite: 10/10 Phase 11D merge logic tests passing
 
 ---
 

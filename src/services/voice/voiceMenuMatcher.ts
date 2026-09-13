@@ -359,3 +359,51 @@ export function matchVoiceTranscriptToMenu(
     isDestructive
   };
 }
+
+/**
+ * Merges newly matched items into an existing voice-order draft session.
+ * - Same item (by itemId) -> accumulates/updates quantity (or removes if quantity <= 0 or REMOVE_ITEM action)
+ * - Different item -> appends to the voice-order draft list
+ */
+export function mergeMatchedItemResults(
+  existingList: MatchedItemResult[],
+  newList: MatchedItemResult[]
+): MatchedItemResult[] {
+  let updated = [...existingList];
+
+  for (const newItem of newList) {
+    const existingIndex = updated.findIndex(
+      (m) => m.menuItem.itemId === newItem.menuItem.itemId
+    );
+
+    if (existingIndex >= 0) {
+      const existing = updated[existingIndex];
+      let finalQty = existing.quantity;
+
+      if (newItem.action === 'ADD_ITEM' || newItem.action === 'INCREASE_QUANTITY') {
+        finalQty = existing.quantity + newItem.quantity;
+      } else if (newItem.action === 'DECREASE_QUANTITY') {
+        finalQty = Math.max(0, existing.quantity - newItem.quantity);
+      } else if (newItem.action === 'REMOVE_ITEM') {
+        finalQty = 0;
+      }
+
+      if (finalQty <= 0) {
+        updated = updated.filter((_, idx) => idx !== existingIndex);
+      } else {
+        updated[existingIndex] = {
+          ...existing,
+          quantity: finalQty,
+          confidence: Math.max(existing.confidence, newItem.confidence),
+          matchType: newItem.matchType
+        };
+      }
+    } else {
+      if (newItem.action !== 'REMOVE_ITEM' && newItem.action !== 'DECREASE_QUANTITY') {
+        updated.push({ ...newItem });
+      }
+    }
+  }
+
+  return updated;
+}

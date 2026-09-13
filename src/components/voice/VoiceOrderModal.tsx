@@ -11,7 +11,10 @@ import {
   VoiceRecognitionError
 } from '../../services/voice/voiceTypes';
 import { VoiceRecognitionService } from '../../services/voice/voiceRecognitionService';
-import { matchVoiceTranscriptToMenu } from '../../services/voice/voiceMenuMatcher';
+import {
+  matchVoiceTranscriptToMenu,
+  mergeMatchedItemResults
+} from '../../services/voice/voiceMenuMatcher';
 import {
   isVoiceRecognitionSupported,
   checkMicrophonePermission,
@@ -191,13 +194,20 @@ export const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({
       );
 
       setParseResult(result);
-      setMatchedItems(result.matchedItems);
       setAmbiguousItems(result.ambiguousItems);
       setUnmatchedItems(result.unmatchedItems);
 
+      if (isFinal) {
+        if (result.action === 'CLEAR_CART') {
+          setMatchedItems([]);
+        } else if (result.matchedItems.length > 0) {
+          setMatchedItems((prev) => mergeMatchedItemResults(prev, result.matchedItems));
+        }
+      }
+
       if (result.needsClarification) {
         setVoiceState('NEEDS_CLARIFICATION');
-      } else if (result.requiresConfirmation) {
+      } else if (result.requiresConfirmation || isFinal) {
         setVoiceState('CONFIRMATION');
       } else if (result.matchedItems.length > 0) {
         setVoiceState('MATCHED');
@@ -256,7 +266,7 @@ export const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({
     setInterimTranscript('');
     setFinalTranscript('');
     setParseResult(null);
-    setMatchedItems([]);
+    // Note: Do NOT reset matchedItems here; preserve existing voice-order draft!
     setAmbiguousItems([]);
     setUnmatchedItems([]);
     await voiceService.startListening(language);
@@ -293,7 +303,7 @@ export const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({
     const amb = ambiguousItems[ambiguityIndex];
     if (!amb) return;
 
-    // Add resolved candidate to matched items
+    // Add resolved candidate to matched items draft
     const newMatched: MatchedItemResult = {
       menuItem: selectedItem,
       quantity: amb.quantity,
@@ -302,7 +312,7 @@ export const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({
       matchType: 'EXACT'
     };
 
-    setMatchedItems((prev) => [...prev, newMatched]);
+    setMatchedItems((prev) => mergeMatchedItemResults(prev, [newMatched]));
     setAmbiguousItems((prev) => prev.filter((_, i) => i !== ambiguityIndex));
 
     if (ambiguousItems.length <= 1) {

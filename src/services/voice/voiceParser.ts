@@ -118,8 +118,25 @@ const SPLIT_CONJUNCTIONS = [
   ' साथ में ',
   ',',
   ';',
-  '\\+'
+  '+'
 ];
+
+// Action modifier keywords to prevent false quantity boundary splits
+const ACTION_WORDS = new Set([
+  'remove', 'delete', 'cancel', 'hatao', 'hata', 'हटाओ', 'डिलीट',
+  'decrease', 'minus', 'ghatao', 'kam', 'कम',
+  'increase', 'plus', 'badhao', 'बढ़ाओ'
+]);
+
+/**
+ * Checks if a string token corresponds to a quantity indicator (number word or digit)
+ */
+function isTokenQuantity(token: string): boolean {
+  const lower = token.toLowerCase().trim();
+  if (NUMBER_WORD_MAP[lower] !== undefined) return true;
+  if (/^-?\d+(\.\d+)?$/.test(lower)) return true;
+  return false;
+}
 
 /**
  * Normalizes and parses raw user transcript into structured item intents.
@@ -185,10 +202,40 @@ function splitIntoItemSegments(transcript: string): string[] {
     normalized = normalized.split(conj).join(' __SPLIT__ ');
   }
 
-  return normalized
-    .split('__SPLIT__')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  const tokens = normalized.split(/\s+/).filter((t) => t.length > 0);
+  const segments: string[] = [];
+  let currentSegmentTokens: string[] = [];
+  let hasSeenNonQuantityToken = false;
+
+  for (const token of tokens) {
+    if (token === '__SPLIT__') {
+      if (currentSegmentTokens.length > 0) {
+        segments.push(currentSegmentTokens.join(' '));
+        currentSegmentTokens = [];
+        hasSeenNonQuantityToken = false;
+      }
+      continue;
+    }
+
+    const isQuantity = isTokenQuantity(token);
+
+    if (isQuantity && hasSeenNonQuantityToken && currentSegmentTokens.length > 0) {
+      segments.push(currentSegmentTokens.join(' '));
+      currentSegmentTokens = [token];
+      hasSeenNonQuantityToken = false;
+    } else {
+      currentSegmentTokens.push(token);
+      if (!isQuantity && !NOISE_WORDS.has(token) && !ACTION_WORDS.has(token)) {
+        hasSeenNonQuantityToken = true;
+      }
+    }
+  }
+
+  if (currentSegmentTokens.length > 0) {
+    segments.push(currentSegmentTokens.join(' '));
+  }
+
+  return segments.map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
 /**
