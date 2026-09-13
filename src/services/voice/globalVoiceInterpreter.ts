@@ -57,22 +57,34 @@ export async function interpretGlobalVoiceCommand(
     };
   }
 
-  // 2. Specific Unauthorized Operation Rejections
-  if (userRole === 'kitchen' && (clean.includes('payment') || clean.includes('collect') || clean.includes('bill'))) {
-    return {
-      intent: 'RBAC_REJECTED',
-      responseText: 'Aapke role mein payment operation available nahi hai.'
-    };
-  }
+  // 2. Specific Unauthorized Operation Rejections & Write Safeguards
+  const isStaffPermissionAction = clean.includes('staff permission') || clean.includes('manage staff') || clean.includes('add staff') || clean.includes('role change') || clean.includes('permission change');
+  const isPaymentAction = clean.includes('payment') || clean.includes('collect') || clean.includes('refund') || clean.includes('bill print') || clean.includes('settle');
+  const isInventoryConfigAction = clean.includes('inventory setting') || clean.includes('recipe setting') || clean.includes('configuration change') || clean.includes('inventory config');
+  const isRefundAction = clean.includes('refund') || clean.includes('paisa wapas') || clean.includes('money back');
 
-  if (userRole === 'captain' && (clean.includes('staff permission') || clean.includes('manage staff') || clean.includes('add staff'))) {
+  if (isStaffPermissionAction && (userRole === 'kitchen' || userRole === 'captain' || userRole === 'cashier' || userRole === 'accountant')) {
     return {
       intent: 'RBAC_REJECTED',
       responseText: 'Aapke role mein staff permissions change karna allowed nahi hai.'
     };
   }
 
-  if ((userRole === 'cashier' || userRole === 'captain') && (clean.includes('inventory setting') || clean.includes('recipe setting'))) {
+  if (isPaymentAction && (userRole === 'kitchen' || userRole === 'captain')) {
+    return {
+      intent: 'RBAC_REJECTED',
+      responseText: 'Aapke role mein payment/refund operations process karna allowed nahi hai.'
+    };
+  }
+
+  if (isRefundAction && (userRole === 'cashier' || userRole === 'captain' || userRole === 'kitchen')) {
+    return {
+      intent: 'RBAC_REJECTED',
+      responseText: 'Refund operations requires Manager or Owner role.'
+    };
+  }
+
+  if (isInventoryConfigAction && (userRole === 'cashier' || userRole === 'captain' || userRole === 'kitchen')) {
     return {
       intent: 'RBAC_REJECTED',
       responseText: 'Aapke role mein inventory settings change karna allowed nahi hai.'
@@ -95,7 +107,7 @@ export async function interpretGlobalVoiceCommand(
   for (const nav of navigationMappings) {
     const isNavPhrase = nav.keywords.some((kw) => clean.includes(kw));
     const isQueryPhrase = clean.includes('kitna') || clean.includes('how much') || clean.includes('aaj ki') || clean.includes('check');
-    if (isNavPhrase && !isQueryPhrase && (clean.includes('open') || clean.includes('go to') || clean.includes('dekho') || clean.includes('chalo') || clean.includes('view') || clean.length < 20)) {
+    if (isNavPhrase && !isQueryPhrase && (clean.includes('open') || clean.includes('go to') || clean.includes('dekho') || clean.includes('chalo') || clean.includes('kholo') || clean.includes('view') || clean.length < 20)) {
       if (isViewAllowed(userRole, nav.view)) {
         return {
           intent: 'NAVIGATE',

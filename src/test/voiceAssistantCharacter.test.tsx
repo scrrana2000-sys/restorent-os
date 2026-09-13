@@ -8,6 +8,7 @@ import { VoiceAssistantWidget } from '../components/voice/VoiceAssistantWidget';
 import { defaultVoiceTtsService } from '../services/voice/voiceTtsService';
 import { getVoiceAssistantSettings, saveVoiceAssistantSettings } from '../services/voice/voiceSettings';
 import { matchVoiceTranscriptToMenu } from '../services/voice/voiceMenuMatcher';
+import { interpretGlobalVoiceCommand } from '../services/voice/globalVoiceInterpreter';
 
 const mockMenuItems: MenuItem[] = [
   {
@@ -306,11 +307,107 @@ describe('Phase 11D - Animated Voice Assistant & Character Verification', () => 
     expect(res.matchedItems).toHaveLength(0);
   });
 
-  it('32. RBAC check ensures cashier/staff permissions are respected', () => {
-    expect(true).toBe(true);
+  it('32. RBAC check ensures cashier/staff permissions are respected', async () => {
+    const kitchenRes = await interpretGlobalVoiceCommand('Payment collect karo', 'kitchen', 'kitchen', 'rest_test', mockMenuItems);
+    expect(kitchenRes.intent).toBe('RBAC_REJECTED');
+
+    const captainRes = await interpretGlobalVoiceCommand('Staff permission change karo', 'captain', 'captain', 'rest_test', mockMenuItems);
+    expect(captainRes.intent).toBe('RBAC_REJECTED');
+
+    const cashierRes = await interpretGlobalVoiceCommand('Inventory settings change karo', 'pos', 'cashier', 'rest_test', mockMenuItems);
+    expect(cashierRes.intent).toBe('RBAC_REJECTED');
   });
 
   it('33. existing POS regression check passes', () => {
     expect(true).toBe(true);
+  });
+
+  it('34. global navigation commands ("POS kholo", "Kitchen kholo", "Tables kholo", etc.)', async () => {
+    const posNav = await interpretGlobalVoiceCommand('POS kholo', 'kitchen', 'owner', 'rest_test', mockMenuItems);
+    expect(posNav.intent).toBe('NAVIGATE');
+    expect(posNav.targetView).toBe('pos');
+
+    const kitchenNav = await interpretGlobalVoiceCommand('Kitchen kholo', 'pos', 'owner', 'rest_test', mockMenuItems);
+    expect(kitchenNav.intent).toBe('NAVIGATE');
+    expect(kitchenNav.targetView).toBe('kitchen');
+
+    const tablesNav = await interpretGlobalVoiceCommand('Tables kholo', 'pos', 'owner', 'rest_test', mockMenuItems);
+    expect(tablesNav.intent).toBe('NAVIGATE');
+    expect(tablesNav.targetView).toBe('captain');
+
+    const inventoryNav = await interpretGlobalVoiceCommand('Inventory kholo', 'pos', 'owner', 'rest_test', mockMenuItems);
+    expect(inventoryNav.intent).toBe('NAVIGATE');
+    expect(inventoryNav.targetView).toBe('inventory');
+
+    const reportsNav = await interpretGlobalVoiceCommand('Reports kholo', 'pos', 'owner', 'rest_test', mockMenuItems);
+    expect(reportsNav.intent).toBe('NAVIGATE');
+    expect(reportsNav.targetView).toBe('reports');
+
+    const ordersNav = await interpretGlobalVoiceCommand('Orders kholo', 'pos', 'owner', 'rest_test', mockMenuItems);
+    expect(ordersNav.intent).toBe('NAVIGATE');
+    expect(ordersNav.targetView).toBe('orders');
+
+    const staffNav = await interpretGlobalVoiceCommand('Staff kholo', 'pos', 'owner', 'rest_test', mockMenuItems);
+    expect(staffNav.intent).toBe('NAVIGATE');
+    expect(staffNav.targetView).toBe('staff');
+
+    const settingsNav = await interpretGlobalVoiceCommand('Settings kholo', 'pos', 'owner', 'rest_test', mockMenuItems);
+    expect(settingsNav.intent).toBe('NAVIGATE');
+    expect(settingsNav.targetView).toBe('restaurant');
+  });
+
+  it('35. invalid quantities (0, -1, 1.5, 101) are rejected safely', () => {
+    const resZero = matchVoiceTranscriptToMenu('0 veg biryani', mockMenuItems, 'auto', true);
+    expect(resZero.matchedItems).toHaveLength(0);
+
+    const resNeg = matchVoiceTranscriptToMenu('-1 veg biryani', mockMenuItems, 'auto', true);
+    expect(resNeg.matchedItems).toHaveLength(0);
+
+    const resFloat = matchVoiceTranscriptToMenu('1.5 veg biryani', mockMenuItems, 'auto', true);
+    expect(resFloat.matchedItems).toHaveLength(0);
+
+    const resLarge = matchVoiceTranscriptToMenu('101 veg biryani', mockMenuItems, 'auto', true);
+    expect(resLarge.matchedItems).toHaveLength(0);
+  });
+
+  it('36. valid quantities ("ek biryani", "do biryani", "teen biryani") parse correctly', () => {
+    const resEk = matchVoiceTranscriptToMenu('ek veg biryani', mockMenuItems, 'auto', true);
+    expect(resEk.matchedItems[0].quantity).toBe(1);
+
+    const resDo = matchVoiceTranscriptToMenu('do veg biryani', mockMenuItems, 'auto', true);
+    expect(resDo.matchedItems[0].quantity).toBe(2);
+
+    const resTeen = matchVoiceTranscriptToMenu('teen veg biryani', mockMenuItems, 'auto', true);
+    expect(resTeen.matchedItems[0].quantity).toBe(3);
+  });
+
+  it('37. unknown menu query ("pizza") returns unmatched state without cart mutation', () => {
+    const res = matchVoiceTranscriptToMenu('1 pizza', mockMenuItems, 'auto', true);
+    expect(res.matchedItems).toHaveLength(0);
+    expect(res.unmatchedItems).toHaveLength(1);
+    expect(res.unmatchedItems[0].rawQuery).toContain('pizza');
+  });
+
+  it('38. custom cart event dispatch triggers listener exactly once', () => {
+    const listener = vi.fn();
+    window.addEventListener('ros-voice-add-to-cart', listener);
+
+    const customEvt = new CustomEvent('ros-voice-add-to-cart', {
+      detail: { itemsToAdd: [{ item: mockMenuItems[0], quantity: 2 }] }
+    });
+    window.dispatchEvent(customEvt);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener('ros-voice-add-to-cart', listener);
+  });
+
+  it('39. custom clear cart event dispatches safely', () => {
+    const clearListener = vi.fn();
+    window.addEventListener('ros-voice-clear-cart', clearListener);
+
+    window.dispatchEvent(new CustomEvent('ros-voice-clear-cart'));
+
+    expect(clearListener).toHaveBeenCalledTimes(1);
+    window.removeEventListener('ros-voice-clear-cart', clearListener);
   });
 });

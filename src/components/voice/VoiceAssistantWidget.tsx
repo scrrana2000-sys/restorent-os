@@ -182,6 +182,17 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     }
   }, []);
 
+  // Stop mic & TTS immediately if user logs out or user session ends
+  useEffect(() => {
+    if (!user) {
+      if (voiceServiceRef.current) {
+        voiceServiceRef.current.cancelListening();
+      }
+      defaultVoiceTtsService.stop();
+      setVoiceState('OFF');
+    }
+  }, [user]);
+
   // Safe Continuous Restart with Exponential Backoff Guard
   const scheduleAutoRestart = useCallback(() => {
     if (restartCountRef.current > 3) {

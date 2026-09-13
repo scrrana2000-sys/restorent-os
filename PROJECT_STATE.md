@@ -1,22 +1,24 @@
 # RestaurantOS — Master Project State & Status
 
 ## Current Milestone & Phase Status
-- **Current Active Milestone**: Milestone 11 — Voice-Assisted POS Ordering Engine
-- **Active Operational Phase**: Phase 11D Voice Ordering Merge vs Replace Logic COMPLETE & VERIFIED
-- **Voice Ordering Engine Status**: COMPLETE & VERIFIED
-  - Local speech parser (No Gemini API, 0 latency, zero quota usage)
-  - Phonetic, Hinglish & Devanagari dictionary mapping (e.g. "chawal", "roti", "paani", "chai", "murg", "dahi", "meetha", "दो वेज बिरयानी", "एक कोक")
+- **Current Active Milestone**: Milestone 11 — Global RestaurantOS Voice Assistant
+- **Active Operational Phase**: Phase 11E Final Adversarial Integration + Regression Verification COMPLETE & VERIFIED
+- **Voice Ordering & Global Assistant Status**: COMPLETE & VERIFIED
+  - Single Global Assistant architecture mounted at authenticated application shell (`AdminLayout.tsx`)
+  - Canonical Assistant Character rendered consistently across all views
+  - Context-Aware Voice Interpreter (`globalVoiceInterpreter.ts`) with navigation, inventory, analytics, kitchen KOT queries, and POS voice ordering
+  - Navigation voice commands ("POS kholo", "Kitchen kholo", "Tables kholo", "Inventory kholo", "Reports kholo", "Orders kholo", "Staff kholo", "Settings kholo")
   - Multi-candidate ambiguity resolver (surface options for vague queries like "biryani")
   - Voice Order trigger button & bottom-sheet modal with real-time transcript
-  - Voice Draft Accumulation & Merging (`mergeMatchedItemResults`):
-    - "Speak More" preserves existing voice draft items
-    - Additional utterances merge (same item -> quantity accumulates; new item -> appends)
-    - Full voice draft merges into POS cart upon "Add to Cart"
+  - Global custom event decoupling (`ros-voice-add-to-cart`, `ros-voice-clear-cart`) with zero event listener leakage
   - Strict confirmation before cart modification
+  - Full RBAC protection across all staff roles (Owner, Manager, Cashier, Kitchen, Captain, Accountant)
+  - Strict cross-tenant isolation enforcement
+  - Double confirmation / submit guards (`isSubmitting` guard)
   - Hardware back-button history registration & Audit log integration
   - Microphone Permission UX: `SUPPORTED + GRANTED`, `SUPPORTED + PROMPT`, `SUPPORTED + DENIED`, `UNSUPPORTED`
   - Explicit `[ Allow Microphone ]`, `[ Try Again ]`, and `[ Use Menu Instead ]` actions
-  - Comprehensive Verification Test Suite: 10/10 Phase 11D merge logic tests passing
+  - Comprehensive Verification Test Suite: 39/39 Phase 11E tests passing (100% pass rate)
 
 ---
 
@@ -30,6 +32,7 @@
 - **Milestone 6 — Security, Multi-Device, Staff Operations & Role Management (Phases 6A–6F)**: COMPLETE & LOCKED
 - **Milestone 7 — Inventory, Stock Ledger, Procurement, Recipe Consumption & Intelligence (Phases 7A–7F)**: COMPLETE & LOCKED
 - **Milestone 8 — Printer & Hardware Integration (Phases 8A–8B)**: COMPLETE / CONDITIONAL
+- **Milestone 11 — Global RestaurantOS Assistant & Voice-Assisted POS Engine**: COMPLETE & VERIFIED
 - **Phase 3 — Billing → Payment → Completion → Table Close Lifecycle**: COMPLETE & LOCKED
 - **Phase 3.5 / 3.6 — Financial & Operational Integrity Hardening**: COMPLETE & LOCKED
 - **Phase 4 — Production Readiness & Multi-Device Verification**: COMPLETE & LOCKED
