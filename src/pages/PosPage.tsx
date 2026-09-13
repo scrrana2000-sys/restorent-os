@@ -419,6 +419,28 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     [restaurant?.defaultTaxRate]
   );
 
+  // Listen for Global Voice Assistant events
+  React.useEffect(() => {
+    const handleVoiceAddEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && Array.isArray(detail.itemsToAdd)) {
+        handleVoiceAddToCart(detail.itemsToAdd);
+      }
+    };
+
+    const handleVoiceClearEvent = () => {
+      handleClearCart();
+    };
+
+    window.addEventListener('ros-voice-add-to-cart', handleVoiceAddEvent);
+    window.addEventListener('ros-voice-clear-cart', handleVoiceClearEvent);
+
+    return () => {
+      window.removeEventListener('ros-voice-add-to-cart', handleVoiceAddEvent);
+      window.removeEventListener('ros-voice-clear-cart', handleVoiceClearEvent);
+    };
+  }, [handleVoiceAddToCart, handleClearCart]);
+
   // Hold Order
   const handleHoldOrder = () => {
     if (cartItems.length === 0) return;
@@ -900,13 +922,6 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         userRole={user?.email ? 'staff' : 'cashier'}
         userId={user?.uid || 'cashier'}
         userName={user?.displayName || user?.email || 'Cashier'}
-        onAddToCart={handleVoiceAddToCart}
-        onClearCart={handleClearCart}
-      />
-
-      <VoiceAssistantWidget
-        menuItems={menuItems}
-        currencySymbol={symbol}
         onAddToCart={handleVoiceAddToCart}
         onClearCart={handleClearCart}
       />

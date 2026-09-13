@@ -7,6 +7,7 @@ import { ShieldAlert, RefreshCw, ExternalLink } from 'lucide-react';
 import { SecurityRulesNotice } from '../common/SecurityRulesNotice';
 import { firebaseConfig } from '../../config/firebase';
 import { useModalBackHandler } from '../../hooks/useModalBackHandler';
+import { VoiceAssistantWidget } from '../voice/VoiceAssistantWidget';
 
 interface AdminLayoutProps {
   currentView: AdminView;
@@ -172,6 +173,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           currentView={currentView}
           onNavigate={onNavigate}
           onOpenMoreMenu={() => setIsMobileMenuOpen(true)}
+        />
+
+        {/* Global Canonical RestaurantOS Assistant */}
+        <VoiceAssistantWidget
+          currentView={currentView}
+          onNavigate={onNavigate}
         />
       </div>
     </div>

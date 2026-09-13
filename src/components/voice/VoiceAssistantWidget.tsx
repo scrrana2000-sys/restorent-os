@@ -12,7 +12,10 @@ import {
   Sparkles,
   HelpCircle,
   ChevronDown,
-  Globe
+  Globe,
+  Send,
+  Compass,
+  ArrowRight
 } from 'lucide-react';
 import { MenuItem } from '../../types/menu';
 import {
@@ -34,28 +37,56 @@ import {
 import { isVoiceRecognitionSupported, checkMicrophonePermission } from '../../services/voice/voiceSupport';
 import { RestaurantOsAssistantCharacter } from './RestaurantOsAssistantCharacter';
 import { useModalBackHandler } from '../../hooks/useModalBackHandler';
+import { useAuth } from '../../context/AuthContext';
+import { useRestaurant } from '../../context/RestaurantContext';
+import { interpretGlobalVoiceCommand } from '../../services/voice/globalVoiceInterpreter';
+import { AdminView } from '../layout/Sidebar';
+import { isViewAllowed } from '../../utils/permissions';
 
-interface VoiceAssistantWidgetProps {
-  menuItems: MenuItem[];
+export interface VoiceAssistantWidgetProps {
+  currentView?: string;
+  onNavigate?: (view: AdminView) => void;
+  menuItems?: MenuItem[];
   currencySymbol?: string;
-  onAddToCart: (itemsToAdd: { item: MenuItem; quantity: number }[]) => void;
+  onAddToCart?: (itemsToAdd: { item: MenuItem; quantity: number }[]) => void;
   onClearCart?: () => void;
   className?: string;
 }
 
 export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
-  menuItems,
-  currencySymbol = '₹',
-  onAddToCart,
-  onClearCart,
+  currentView: propCurrentView,
+  onNavigate,
+  menuItems: propsMenuItems,
+  currencySymbol: propsCurrencySymbol,
+  onAddToCart: propsOnAddToCart,
+  onClearCart: propsOnClearCart,
   className = ''
 }) => {
+  // Context hooks (safe fallback if rendered outside contexts in tests)
+  const authContext = useAuth();
+  const restaurantContext = useRestaurant();
+
+  const user = authContext?.user || null;
+  const profile = authContext?.profile || null;
+  const userRole = profile?.role || 'owner';
+
+  const restaurant = restaurantContext?.restaurant || null;
+  const contextMenuItems = restaurantContext?.menuItems || [];
+  const effectiveMenuItems = propsMenuItems || contextMenuItems || [];
+  const effectiveCurrencySymbol = propsCurrencySymbol || restaurant?.currencySymbol || '₹';
+  const effectiveRestaurantId = restaurant?.id || profile?.restaurantId || 'rest_default';
+  const effectiveView = propCurrentView || 'pos';
+
   // Settings & Storage State
   const [settings, setSettings] = useState<VoiceAssistantSettings>(getVoiceAssistantSettings);
   const [showIntroBubble, setShowIntroBubble] = useState<boolean>(!isAssistantIntroShown());
   const [isWaving, setIsWaving] = useState<boolean>(!isAssistantIntroShown());
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [permissionPromptOpen, setPermissionPromptOpen] = useState<boolean>(false);
+  const [isExpandedPanelOpen, setIsExpandedPanelOpen] = useState<boolean>(false);
+
+  // Text fallback input
+  const [textInput, setTextInput] = useState<string>('');
 
   // Assistant & Voice Engine State
   const [voiceState, setVoiceState] = useState<VoiceState>(settings.enabled ? 'IDLE' : 'OFF');
@@ -80,9 +111,10 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const voiceServiceRef = useRef<VoiceRecognitionService | null>(null);
 
-  // Modal Back Handler for Settings & Permission Drawer
+  // Modal Back Handler for Settings, Permission Drawer & Panel
   useModalBackHandler(isSettingsOpen, () => setIsSettingsOpen(false), 'voice-assistant-settings');
   useModalBackHandler(permissionPromptOpen, () => setPermissionPromptOpen(false), 'voice-assistant-perm-prompt');
+  useModalBackHandler(isExpandedPanelOpen, () => setIsExpandedPanelOpen(false), 'voice-assistant-expanded-panel');
 
   // Initialize VoiceRecognitionService
   useEffect(() => {
@@ -125,7 +157,7 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
       defaultVoiceTtsService.stop();
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     };
-  }, [settings.enabled, settings.alwaysListening, settings.language, settings.spokenResponses, menuItems]);
+  }, [settings.enabled, settings.alwaysListening, settings.language, settings.spokenResponses, effectiveMenuItems]);
 
   // Initial Intro Greeting
   useEffect(() => {
@@ -169,55 +201,81 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     }, 10000);
   }, [settings.enabled, settings.alwaysListening, settings.language]);
 
-  // Handle Transcript Processing against Menu Catalog
-  const handleProcessTranscript = (transcript: string) => {
+  // Handle Transcript Processing against Global Context & Menu Catalog
+  const handleProcessTranscript = async (transcript: string) => {
     if (!transcript.trim()) return;
 
     setVoiceState('PROCESSING');
-    setSpeechBubbleText('Menu check kar raha hoon...');
+    setSpeechBubbleText('Command check kar raha hoon...');
 
-    const result = matchVoiceTranscriptToMenu(transcript, menuItems, settings.language, true);
+    try {
+      const result = await interpretGlobalVoiceCommand(
+        transcript,
+        effectiveView,
+        userRole,
+        effectiveRestaurantId,
+        effectiveMenuItems,
+        settings.language
+      );
 
-    if (result.action === 'CLEAR_CART') {
-      setPendingAction('CLEAR_CART');
-      setVoiceState('CONFIRMATION');
-      const text = 'Kya aap poora cart clear karna chahte hain?';
-      setSpeechBubbleText(text);
-      defaultVoiceTtsService.speak(text, settings.language, { enabled: settings.spokenResponses });
-      return;
-    }
+      if (result.intent === 'NAVIGATE' && result.targetView) {
+        setVoiceState('SUCCESS');
+        setSpeechBubbleText(result.responseText);
+        defaultVoiceTtsService.speak(result.responseText, settings.language, { enabled: settings.spokenResponses });
+        if (onNavigate) {
+          onNavigate(result.targetView as AdminView);
+        }
+        return;
+      }
 
-    // Merge matched items into existing draft
-    if (result.matchedItems.length > 0) {
-      setDraftMatchedItems((prev) => mergeMatchedItemResults(prev, result.matchedItems));
-    }
+      if (result.intent === 'CLEAR_CART') {
+        setPendingAction('CLEAR_CART');
+        setVoiceState('CONFIRMATION');
+        setSpeechBubbleText(result.responseText);
+        defaultVoiceTtsService.speak(result.responseText, settings.language, { enabled: settings.spokenResponses });
+        return;
+      }
 
-    setAmbiguousCandidates(result.ambiguousItems);
-    setUnmatchedItems(result.unmatchedItems);
+      if (result.intent === 'POS_ORDER') {
+        if (result.matchedItems && result.matchedItems.length > 0) {
+          setDraftMatchedItems((prev) => mergeMatchedItemResults(prev, result.matchedItems!));
+        }
+        if (result.ambiguousItems) {
+          setAmbiguousCandidates(result.ambiguousItems);
+        }
 
-    if (result.needsClarification && result.ambiguousItems.length > 0) {
-      setVoiceState('NEEDS_CLARIFICATION');
-      const amb = result.ambiguousItems[0];
-      const text = `Kaunsi ${amb.rawQuery} chahiye? Kripya select karein:`;
-      setSpeechBubbleText(text);
-      defaultVoiceTtsService.speak(text, settings.language, { enabled: settings.spokenResponses });
-    } else if (result.matchedItems.length > 0 || draftMatchedItems.length > 0) {
-      setVoiceState('CONFIRMATION');
-      const combined = mergeMatchedItemResults(draftMatchedItems, result.matchedItems);
-      const itemsDesc = combined
-        .map((m) => `${m.quantity} ${m.menuItem.shortName || m.menuItem.name}`)
-        .join(', ');
-      const text = `Mainne ${itemsDesc} suna hai. Cart mein add kar doon?`;
-      setSpeechBubbleText(text);
-      defaultVoiceTtsService.speak(text, settings.language, { enabled: settings.spokenResponses });
-    } else if (result.unmatchedItems.length > 0) {
+        if (result.ambiguousItems && result.ambiguousItems.length > 0) {
+          setVoiceState('NEEDS_CLARIFICATION');
+        } else {
+          setVoiceState('CONFIRMATION');
+        }
+        setSpeechBubbleText(result.responseText);
+        defaultVoiceTtsService.speak(result.responseText, settings.language, { enabled: settings.spokenResponses });
+        return;
+      }
+
+      if (result.intent === 'INVENTORY_QUERY' || result.intent === 'REPORTS_QUERY' || result.intent === 'KITCHEN_QUERY') {
+        setVoiceState('SUCCESS');
+        setSpeechBubbleText(result.responseText);
+        defaultVoiceTtsService.speak(result.responseText, settings.language, { enabled: settings.spokenResponses });
+        return;
+      }
+
+      if (result.intent === 'RBAC_REJECTED' || result.intent === 'SECURITY_REJECTED') {
+        setVoiceState('ERROR');
+        setSpeechBubbleText(result.responseText);
+        defaultVoiceTtsService.speak(result.responseText, settings.language, { enabled: settings.spokenResponses });
+        return;
+      }
+
+      // Default unmatched fallback
       setVoiceState('ERROR');
-      const text = `Sorry, "${result.unmatchedItems[0].rawQuery}" humare menu mein nahi mila. Dobara bolye!`;
-      setSpeechBubbleText(text);
-      defaultVoiceTtsService.speak(text, settings.language, { enabled: settings.spokenResponses });
-    } else {
-      setVoiceState('IDLE');
-      setSpeechBubbleText('Order dena ho to mujhe boliye!');
+      setSpeechBubbleText(result.responseText);
+      defaultVoiceTtsService.speak(result.responseText, settings.language, { enabled: settings.spokenResponses });
+    } catch (err) {
+      console.warn('[GlobalVoiceAssistant] Interpreter error:', err);
+      setVoiceState('ERROR');
+      setSpeechBubbleText('Command processing mein error aayi.');
     }
   };
 
@@ -252,13 +310,17 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     setSpeechBubbleText('Voice Assistant muted. Tap mic to wake!');
   };
 
-  // Confirm and Add Draft to Cart (Double-submit guarded)
+  // Confirm and Add Draft to Cart / Execute Action (Double-submit guarded)
   const handleConfirmAddToCart = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
     if (pendingAction === 'CLEAR_CART') {
-      onClearCart?.();
+      if (propsOnClearCart) {
+        propsOnClearCart();
+      } else {
+        window.dispatchEvent(new CustomEvent('ros-voice-clear-cart'));
+      }
       setPendingAction('NONE');
       setVoiceState('SUCCESS');
       const text = 'Cart poora clear kar diya gaya hai.';
@@ -269,7 +331,17 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
         item: m.menuItem,
         quantity: m.quantity
       }));
-      onAddToCart(itemsToAdd);
+
+      // Auto-navigate to POS if currently in another view
+      if (effectiveView !== 'pos' && onNavigate && isViewAllowed(userRole, 'pos')) {
+        onNavigate('pos');
+      }
+
+      if (propsOnAddToCart) {
+        propsOnAddToCart(itemsToAdd);
+      } else {
+        window.dispatchEvent(new CustomEvent('ros-voice-add-to-cart', { detail: { itemsToAdd } }));
+      }
 
       setVoiceState('SUCCESS');
       const count = draftMatchedItems.reduce((s, i) => s + i.quantity, 0);
@@ -285,7 +357,7 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
         handleStartListening();
       } else {
         setVoiceState('IDLE');
-        setSpeechBubbleText('Aur kuch order karna hai?');
+        setSpeechBubbleText('Aur kuch help chahiye?');
       }
     }, 2500);
   };
@@ -320,6 +392,15 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     }
   };
 
+  // Handle Text Fallback Submission
+  const handleTextSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!textInput.trim()) return;
+    const text = textInput;
+    setTextInput('');
+    handleProcessTranscript(text);
+  };
+
   // Dismiss Intro & Save Preference
   const handleDismissIntro = (dontShowAgain = false) => {
     setShowIntroBubble(false);
@@ -339,16 +420,32 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
 
   const isListening = voiceState === 'LISTENING' || voiceState === 'HEARING';
 
+  // Contextual Suggestion Chips based on view
+  const getContextualSuggestions = () => {
+    if (effectiveView === 'pos') {
+      return ['2 Veg Biryani', 'Clear Cart', 'Kitchen View'];
+    } else if (effectiveView === 'kitchen') {
+      return ['Kitchen Status', 'POS View', 'Orders Page'];
+    } else if (effectiveView === 'inventory') {
+      return ['Rice Stock', 'Paneer Stock', 'POS View'];
+    } else if (effectiveView === 'reports') {
+      return ['Today Sales', 'POS View', 'Inventory View'];
+    } else if (effectiveView === 'captain') {
+      return ['Table Status', 'POS View', 'Kitchen View'];
+    }
+    return ['POS View', 'Kitchen View', 'Inventory View', 'Today Sales'];
+  };
+
   return (
     <>
       {/* Outer Fixed Assistant Dock (Bottom-Left) */}
       <div
         id="restaurantos-voice-assistant-dock"
-        className={`fixed bottom-16 sm:bottom-4 left-3 sm:left-4 z-30 flex flex-col items-start gap-2 pointer-events-none ${className}`}
+        className={`fixed bottom-16 sm:bottom-4 left-3 sm:left-4 z-40 flex flex-col items-start gap-2 pointer-events-none ${className}`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {/* Interactive Speech Bubble attached to Character */}
-        {(speechBubbleText || showIntroBubble || voiceState === 'CONFIRMATION' || voiceState === 'NEEDS_CLARIFICATION') && (
+        {/* Interactive Speech Bubble & Compact Assistant Panel attached to Character */}
+        {(speechBubbleText || showIntroBubble || voiceState === 'CONFIRMATION' || voiceState === 'NEEDS_CLARIFICATION' || isExpandedPanelOpen) && (
           <div
             id="voice-assistant-speech-bubble"
             className="pointer-events-auto max-w-[280px] sm:max-w-[340px] bg-white border border-indigo-100 rounded-2xl p-3 shadow-xl text-xs sm:text-sm text-gray-800 animate-in fade-in slide-in-from-bottom-2 duration-300 relative mb-1"
@@ -360,7 +457,10 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
             <div className="flex items-center justify-between mb-1.5 border-b border-gray-100 pb-1">
               <div className="flex items-center gap-1.5 text-indigo-700 font-bold text-xs">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>RestaurantOS Assistant</span>
+                <span>RestaurantOS Voice Assistant</span>
+                <span className="text-[10px] px-1.5 py-0.2 bg-indigo-50 text-indigo-600 rounded-full border border-indigo-100 uppercase tracking-wider font-semibold">
+                  {effectiveView}
+                </span>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -388,152 +488,224 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
             {/* Main Speech Text */}
             <p className="font-medium text-gray-700 leading-snug mb-2">{speechBubbleText}</p>
 
-            {/* 1. Clarification Candidates Selection */}
+            {/* Clarification Candidates Selection */}
             {voiceState === 'NEEDS_CLARIFICATION' && ambiguousCandidates.length > 0 && (
               <div className="space-y-1.5 my-2">
-                <p className="text-[11px] font-semibold text-amber-700">Select options:</p>
+                <p className="text-[11px] font-semibold text-amber-700">Select option:</p>
                 <div className="flex flex-wrap gap-1.5">
                   {ambiguousCandidates[0].candidates.map((cand) => (
                     <button
                       key={cand.itemId}
                       type="button"
                       onClick={() => handleSelectAmbiguousCandidate(cand, 0)}
-                      className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold text-xs border border-indigo-200 transition active:scale-95"
+                      className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded-lg text-xs font-medium transition"
                     >
-                      {cand.shortName || cand.name} ({currencySymbol}
-                      {cand.price})
+                      {cand.shortName || cand.name} ({effectiveCurrencySymbol}{cand.price})
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* 2. Confirmation Action Buttons */}
+            {/* Confirmation Controls */}
             {voiceState === 'CONFIRMATION' && (
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
                 <button
                   type="button"
-                  id="voice-assistant-confirm-btn"
                   onClick={handleConfirmAddToCart}
                   disabled={isSubmitting}
-                  className="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-xs active:scale-95 transition flex items-center justify-center gap-1"
+                  className="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1 shadow-sm transition disabled:opacity-50"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>{pendingAction === 'CLEAR_CART' ? 'Yes, Clear' : 'Yes, Add to Cart'}</span>
+                  <span>Confirm Action</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setVoiceState('IDLE');
                     setDraftMatchedItems([]);
                     setPendingAction('NONE');
-                    setSpeechBubbleText('Cancelled! Kuch aur order dena hai?');
+                    setVoiceState('IDLE');
+                    setSpeechBubbleText('Cancelled. Main aapki aur kya help karoon?');
                   }}
-                  className="py-1.5 px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold text-xs transition active:scale-95"
+                  className="py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition"
                 >
                   Cancel
                 </button>
               </div>
             )}
 
-            {/* 3. Intro Action Buttons */}
-            {showIntroBubble && (
-              <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
+            {/* Text Fallback Input Field */}
+            <form onSubmit={handleTextSubmit} className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
+              <input
+                type="text"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                placeholder="Type command or query..."
+                className="flex-1 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
+              />
+              <button
+                type="submit"
+                disabled={!textInput.trim()}
+                className="p-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl transition"
+                title="Send command"
+              >
+                <Send className="w-3 h-3" />
+              </button>
+            </form>
+
+            {/* Quick Contextual Action Chips & Manual Action */}
+            <div className="flex flex-wrap items-center gap-1 mt-2">
+              {getContextualSuggestions().map((sug) => (
+                <button
+                  key={sug}
+                  type="button"
+                  onClick={() => handleProcessTranscript(sug)}
+                  className="px-2 py-0.5 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 rounded-md text-[10px] font-medium transition"
+                >
+                  {sug}
+                </button>
+              ))}
+              {onNavigate && (
                 <button
                   type="button"
-                  onClick={() => {
-                    handleDismissIntro(true);
-                    handleStartListening();
-                  }}
-                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-bold transition shadow-2xs"
+                  onClick={() => onNavigate(effectiveView === 'pos' ? 'kitchen' : 'pos')}
+                  className="ml-auto px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-[10px] font-medium flex items-center gap-0.5 transition"
                 >
-                  Enable Voice Assistant
+                  <span>Use Menu Instead</span>
+                  <ArrowRight className="w-2.5 h-2.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleDismissIntro(true)}
-                  className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-xs font-medium transition"
-                >
-                  Got it
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
-        {/* Character & Action Control Dock Bar */}
-        <div className="pointer-events-auto flex items-center gap-2 bg-white/95 backdrop-blur-md p-1.5 pr-3 rounded-full border border-indigo-100 shadow-lg">
-          {/* Animated Character Avatar */}
+        {/* Character Visual Anchor & Main Toggle Button */}
+        <div className="pointer-events-auto flex items-end gap-2">
           <RestaurantOsAssistantCharacter
             state={voiceState}
             isWaving={isWaving}
-            size="sm"
-            onClick={isListening ? handleStopListening : handleStartListening}
+            onClick={() => {
+              if (!isListening && voiceState !== 'PROCESSING') {
+                handleStartListening();
+              } else {
+                handleStopListening();
+              }
+            }}
+            className="shadow-2xl"
           />
 
-          {/* Quick Mic Action & Status Toggle */}
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-gray-800">Voice Assistant</span>
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isListening
-                    ? 'bg-rose-500 animate-ping'
-                    : settings.enabled
-                    ? 'bg-emerald-500'
-                    : 'bg-gray-300'
-                }`}
-              />
-            </div>
-            <span className="text-[10px] text-gray-500 font-medium">
-              {isListening
-                ? '🎙 Listening...'
-                : settings.enabled
-                ? 'Tap mic or say order'
-                : '🔇 Assistant Off'}
-            </span>
-          </div>
-
-          {/* Action Mic Toggle Button */}
+          {/* Floating Mic Control Button */}
           <button
             type="button"
             id="voice-assistant-main-mic-btn"
-            onClick={isListening ? handleStopListening : handleStartListening}
-            className={`p-2 rounded-full transition active:scale-95 ml-1 ${
+            onClick={() => {
+              if (isListening) {
+                handleStopListening();
+              } else {
+                handleStartListening();
+              }
+            }}
+            className={`p-2.5 sm:p-3 rounded-2xl text-white shadow-lg flex items-center justify-center transition-all transform hover:scale-105 active:scale-95 ${
               isListening
-                ? 'bg-rose-500 text-white shadow-md shadow-rose-200 animate-pulse'
-                : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+                ? 'bg-rose-500 hover:bg-rose-600 ring-4 ring-rose-200 animate-pulse'
+                : 'bg-indigo-600 hover:bg-indigo-700'
             }`}
-            aria-label={isListening ? 'Stop listening' : 'Start listening'}
-            title={isListening ? 'Mute Microphone' : 'Start Voice Order'}
+            title={isListening ? 'Stop Listening' : 'Wake Voice Assistant'}
+            aria-label={isListening ? 'Stop Listening' : 'Wake Voice Assistant'}
           >
-            {isListening ? <Mic className="w-4 h-4 animate-bounce" /> : <Mic className="w-4 h-4" />}
-          </button>
-
-          {/* Settings Trigger */}
-          <button
-            type="button"
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition"
-            title="Assistant Settings"
-          >
-            <Settings className="w-4 h-4" />
+            {isListening ? <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5" />}
           </button>
         </div>
       </div>
 
-      {/* Permission Request Modal */}
-      {permissionPromptOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-gray-100 space-y-4 text-center">
-            <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center mx-auto text-indigo-600">
-              <Mic className="w-6 h-6 animate-pulse" />
+      {/* Settings Modal Drawer */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+                <Settings className="w-4 h-4 text-indigo-600" />
+                <span>Voice Assistant Settings</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <h3 className="text-base font-bold text-gray-900">Enable Voice Assistant</h3>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              Voice Assistant ko order sunne aur cart mein add karne ke liye microphone access permission chahiye.
+
+            <div className="space-y-4 text-xs">
+              {/* Language Selection */}
+              <div>
+                <label className="block font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Speech Recognition Language</span>
+                </label>
+                <select
+                  value={settings.language}
+                  onChange={(e) => updateSettings({ language: e.target.value as VoiceLanguage })}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="auto">Auto-detect (Hinglish / English / Hindi)</option>
+                  <option value="hi-IN">Hindi (हिंदी - दो वेज बिरयानी)</option>
+                  <option value="en-IN">English (Indian Accent)</option>
+                </select>
+              </div>
+
+              {/* Always Listening Toggle */}
+              <div className="flex items-center justify-between p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                <div>
+                  <p className="font-semibold text-indigo-950">Always Listening</p>
+                  <p className="text-[10px] text-indigo-700 mt-0.5">Keeps mic ready across pages</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.alwaysListening}
+                  onChange={(e) => updateSettings({ alwaysListening: e.target.checked })}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Spoken TTS Responses */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <div>
+                  <p className="font-semibold text-gray-800">Spoken Voice Responses (TTS)</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Assistant speaks confirmations aloud</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.spokenResponses}
+                  onChange={(e) => updateSettings({ spokenResponses: e.target.checked })}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsSettingsOpen(false)}
+              className="mt-5 w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Permission Request Prompt Drawer */}
+      {permissionPromptOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-gray-100 text-center">
+            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Mic className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-bold text-gray-900">Microphone Access Required</h3>
+            <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+              RestaurantOS Assistant needs microphone access to listen to your voice commands. Please allow microphone access in your browser prompt.
             </p>
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="mt-4 flex gap-2">
               <button
                 type="button"
                 onClick={async () => {
@@ -542,132 +714,16 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
                     await voiceServiceRef.current.startListening(settings.language);
                   }
                 }}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-xs transition active:scale-98"
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition"
               >
-                Allow & Start Listening
+                Allow & Start
               </button>
               <button
                 type="button"
                 onClick={() => setPermissionPromptOpen(false)}
-                className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium text-xs transition"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition"
               >
-                Not Now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Settings Modal Drawer */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-5 max-w-md w-full shadow-2xl border border-gray-100 space-y-4 text-left">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2 text-indigo-700 font-bold text-sm">
-                <Settings className="w-4 h-4" />
-                <span>Voice Assistant Settings</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSettingsOpen(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded-md transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs text-gray-700">
-              {/* Voice Assistant Toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
-                <div>
-                  <p className="font-bold text-gray-900">Voice Assistant</p>
-                  <p className="text-[11px] text-gray-500">Enable smart voice order assistant</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => updateSettings({ enabled: !settings.enabled })}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition ${
-                    settings.enabled ? 'bg-indigo-600 justify-end' : 'bg-gray-300 justify-start'
-                  }`}
-                >
-                  <span className="w-4 h-4 rounded-full bg-white shadow-md" />
-                </button>
-              </div>
-
-              {/* Hands-Free Always Listening */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
-                <div>
-                  <p className="font-bold text-gray-900">Always Listening (Hands-free)</p>
-                  <p className="text-[11px] text-gray-500">Auto-restarts listening after order confirmation</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => updateSettings({ alwaysListening: !settings.alwaysListening })}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition ${
-                    settings.alwaysListening ? 'bg-indigo-600 justify-end' : 'bg-gray-300 justify-start'
-                  }`}
-                >
-                  <span className="w-4 h-4 rounded-full bg-white shadow-md" />
-                </button>
-              </div>
-
-              {/* Spoken Responses TTS */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
-                <div>
-                  <p className="font-bold text-gray-900">Spoken Voice Responses (TTS)</p>
-                  <p className="text-[11px] text-gray-500">Speak assistant replies through device speaker</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !settings.spokenResponses;
-                    updateSettings({ spokenResponses: next });
-                    defaultVoiceTtsService.setEnabled(next);
-                  }}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition ${
-                    settings.spokenResponses ? 'bg-indigo-600 justify-end' : 'bg-gray-300 justify-start'
-                  }`}
-                >
-                  <span className="w-4 h-4 rounded-full bg-white shadow-md" />
-                </button>
-              </div>
-
-              {/* Recognition Language Selector */}
-              <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-2">
-                <div className="flex items-center gap-1.5 font-bold text-gray-900">
-                  <Globe className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Voice Recognition Language</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'auto', label: 'Auto (Hinglish)' },
-                    { id: 'hi-IN', label: 'Hindi (हिंदी)' },
-                    { id: 'en-IN', label: 'English (India)' }
-                  ].map((l) => (
-                    <button
-                      key={l.id}
-                      type="button"
-                      onClick={() => updateSettings({ language: l.id as VoiceLanguage })}
-                      className={`py-2 px-2 rounded-lg font-bold text-[11px] transition text-center border ${
-                        settings.language === l.id
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
-                      }`}
-                    >
-                      {l.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 text-center">
-              <button
-                type="button"
-                onClick={() => setIsSettingsOpen(false)}
-                className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition"
-              >
-                Save & Close
+                Cancel
               </button>
             </div>
           </div>
