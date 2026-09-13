@@ -23,6 +23,7 @@ import {
 } from '../../services/voice/voiceSupport';
 import { VoiceTranscript } from './VoiceTranscript';
 import { VoiceMatchPreview } from './VoiceMatchPreview';
+import { RestaurantOsAssistantCharacter } from './RestaurantOsAssistantCharacter';
 import { VoiceConfirmation } from './VoiceConfirmation';
 import { useModalBackHandler } from '../../hooks/useModalBackHandler';
 import { auditService } from '../../services/auditService';
@@ -385,14 +386,12 @@ export const VoiceOrderModal: React.FC<VoiceOrderModalProps> = ({
       >
         {/* Modal Header */}
         <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-sm">
-              <Mic className="w-5 h-5" />
-            </div>
+          <div className="flex items-center gap-3">
+            <RestaurantOsAssistantCharacter state={voiceState} size="sm" showBadge={false} />
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-                  Voice Ordering
+                  RestaurantOS Voice Assistant
                 </h3>
                 <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 rounded-full">
                   No-Gemini API

@@ -158,6 +158,10 @@ export function parseVoiceTranscript(rawTranscript: string): {
     cleaned.includes('empty cart') ||
     cleaned.includes('sab hata do') ||
     cleaned.includes('sab hatao') ||
+    cleaned.includes('sara order clear') ||
+    cleaned.includes('saara order clear') ||
+    cleaned.includes('order clear') ||
+    cleaned.includes('sab clear') ||
     cleaned.includes('poora cart saaf') ||
     cleaned.includes('कार्ट खाली') ||
     cleaned.includes('सब हटाओ')

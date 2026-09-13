@@ -24,6 +24,7 @@ import { BillReceiptModal } from '../components/pos/BillReceiptModal';
 import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersModal';
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
 import { VoiceOrderModal } from '../components/voice/VoiceOrderModal';
+import { VoiceAssistantWidget } from '../components/voice/VoiceAssistantWidget';
 import { AdminView } from '../components/layout/Sidebar';
 import { useModalBackHandler } from '../hooks/useModalBackHandler';
 
@@ -899,6 +900,13 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         userRole={user?.email ? 'staff' : 'cashier'}
         userId={user?.uid || 'cashier'}
         userName={user?.displayName || user?.email || 'Cashier'}
+        onAddToCart={handleVoiceAddToCart}
+        onClearCart={handleClearCart}
+      />
+
+      <VoiceAssistantWidget
+        menuItems={menuItems}
+        currencySymbol={symbol}
         onAddToCart={handleVoiceAddToCart}
         onClearCart={handleClearCart}
       />

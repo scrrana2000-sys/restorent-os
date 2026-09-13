@@ -301,7 +301,7 @@ describe('Voice Ordering - UI Components Unit Tests', () => {
       />
     );
 
-    expect(screen.getByText('Voice Ordering')).toBeDefined();
+    expect(screen.getByText('RestaurantOS Voice Assistant')).toBeDefined();
     expect(screen.getByText(/Speak in Hindi or English/i)).toBeDefined();
   });
 });

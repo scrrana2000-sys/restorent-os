@@ -137,7 +137,9 @@ export function matchItemAgainstMenu(
   }
 
   const query = normalizeQuery(intent.cleanedName);
-  if (!query || menuItems.length === 0) {
+  const availableItems = menuItems.filter((item) => item.isAvailable !== false);
+
+  if (!query || availableItems.length === 0) {
     return {
       unmatched: {
         rawQuery: intent.rawQuery,
@@ -148,7 +150,7 @@ export function matchItemAgainstMenu(
   }
 
   // 1. Exact Name Matches (case-insensitive)
-  const exactMatches = menuItems.filter(
+  const exactMatches = availableItems.filter(
     (item) =>
       item.name.toLowerCase().trim() === query ||
       (item.shortName && item.shortName.toLowerCase().trim() === query)
@@ -179,7 +181,7 @@ export function matchItemAgainstMenu(
   const queryTokens = query.split(/\s+/).filter((t) => t.length > 0);
   const substringCandidates: { item: MenuItem; score: number }[] = [];
 
-  for (const item of menuItems) {
+  for (const item of availableItems) {
     const itemName = item.name.toLowerCase();
     const itemShort = (item.shortName || '').toLowerCase();
 
