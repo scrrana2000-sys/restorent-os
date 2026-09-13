@@ -449,10 +449,10 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
 
   return (
     <>
-      {/* Outer Fixed Assistant Dock (Bottom-Left) */}
+      {/* Outer Fixed Assistant Dock (Bottom-Left on mobile, left of content on desktop) */}
       <div
         id="restaurantos-voice-assistant-dock"
-        className={`fixed bottom-16 sm:bottom-4 left-3 sm:left-4 z-40 flex flex-col items-start gap-2 pointer-events-none ${className}`}
+        className={`fixed bottom-16 sm:bottom-4 left-3 sm:left-4 lg:left-72 z-40 flex flex-col items-start gap-2 pointer-events-none ${className}`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {/* Interactive Speech Bubble & Compact Assistant Panel attached to Character */}
@@ -483,16 +483,18 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
                 >
                   <Settings className="w-3.5 h-3.5" />
                 </button>
-                {showIntroBubble && (
-                  <button
-                    type="button"
-                    onClick={() => handleDismissIntro(false)}
-                    className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-600 transition"
-                    title="Close bubble"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDismissIntro(false);
+                    setSpeechBubbleText('');
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-600 transition"
+                  title="Close bubble"
+                  aria-label="Close bubble"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
 

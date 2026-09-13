@@ -89,11 +89,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* Mobile Drawer / Desktop Sidebar (Layer 4: z-50 on mobile, covers 100dvh, above backdrop & bottom nav) */}
+      {/* Mobile Drawer / Desktop Sidebar (Layer 4: z-50 on mobile, lg:z-30 on desktop, covers 100dvh, above backdrop & bottom nav) */}
       <aside
         id="app-sidebar-drawer"
         aria-label="Sidebar Navigation"
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 sm:w-80 max-w-[86vw] lg:w-64 bg-slate-900 text-white flex flex-col h-full h-[100dvh] max-h-[100dvh] shadow-2xl transition-transform duration-200 ease-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 lg:z-30 w-72 sm:w-80 max-w-[86vw] lg:w-64 bg-slate-900 text-white flex flex-col h-full h-[100dvh] max-h-[100dvh] shadow-2xl transition-transform duration-200 ease-out lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
