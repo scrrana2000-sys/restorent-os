@@ -410,4 +410,40 @@ describe('Phase 11D - Animated Voice Assistant & Character Verification', () => 
     expect(clearListener).toHaveBeenCalledTimes(1);
     window.removeEventListener('ros-voice-clear-cart', clearListener);
   });
+
+  it('40. user can fully close the voice assistant via dismiss button and reopen via dock button', async () => {
+    render(<VoiceAssistantWidget menuItems={mockMenuItems} />);
+
+    // Initially active character should be rendered
+    const dismissBtn = screen.getByTestId('btn-dismiss-assistant-character');
+    expect(dismissBtn).toBeDefined();
+
+    // Click dismiss button to fully close
+    fireEvent.click(dismissBtn);
+
+    // After closing, the character dock is replaced by the minimal reopen button
+    const reopenBtn = await screen.findByTestId('btn-reopen-voice-assistant');
+    expect(reopenBtn).toBeDefined();
+    expect(reopenBtn.textContent).toContain('Open Voice Assistant');
+
+    // Click reopen to restore
+    fireEvent.click(reopenBtn);
+
+    // Active character is restored
+    expect(await screen.findByTestId('btn-dismiss-assistant-character')).toBeDefined();
+  });
+
+  it('41. user can fully close assistant via speech bubble button and settings modal', async () => {
+    render(<VoiceAssistantWidget menuItems={mockMenuItems} />);
+
+    // Speech bubble button
+    const bubbleCloseBtn = screen.getByTestId('btn-fully-close-assistant');
+    expect(bubbleCloseBtn).toBeDefined();
+
+    fireEvent.click(bubbleCloseBtn);
+
+    // Assistant is fully closed
+    expect(await screen.findByTestId('btn-reopen-voice-assistant')).toBeDefined();
+  });
 });
+

@@ -15,7 +15,9 @@ import {
   Globe,
   Send,
   Compass,
-  ArrowRight
+  ArrowRight,
+  EyeOff,
+  Power
 } from 'lucide-react';
 import { MenuItem } from '../../types/menu';
 import {
@@ -30,6 +32,8 @@ import { defaultVoiceTtsService } from '../../services/voice/voiceTtsService';
 import {
   getVoiceAssistantSettings,
   saveVoiceAssistantSettings,
+  setVoiceAssistantEnabled,
+  VOICE_ASSISTANT_TOGGLE_EVENT,
   isAssistantIntroShown,
   markAssistantIntroShown,
   VoiceAssistantSettings
@@ -180,6 +184,32 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     } else {
       setSpeechBubbleText('Hi! 👋 Main RestaurantOS ka Voice Assistant hoon.');
     }
+  }, []);
+
+  // Listen to Global Voice Assistant Toggle Event
+  useEffect(() => {
+    const handleToggleEvent = (e: Event) => {
+      const custom = e as CustomEvent<{ enabled?: boolean }>;
+      const isEnabled =
+        custom.detail?.enabled !== undefined
+          ? custom.detail.enabled
+          : getVoiceAssistantSettings().enabled;
+      setSettings((prev) => ({ ...prev, enabled: isEnabled }));
+      if (isEnabled) {
+        setVoiceState('IDLE');
+        setSpeechBubbleText('Hi! 👋 Main ready hoon. Command boliye!');
+      } else {
+        if (voiceServiceRef.current) {
+          voiceServiceRef.current.cancelListening();
+        }
+        defaultVoiceTtsService.stop();
+        setVoiceState('OFF');
+        setSpeechBubbleText('');
+      }
+    };
+
+    window.addEventListener(VOICE_ASSISTANT_TOGGLE_EVENT, handleToggleEvent);
+    return () => window.removeEventListener(VOICE_ASSISTANT_TOGGLE_EVENT, handleToggleEvent);
   }, []);
 
   // Stop mic & TTS immediately if user logs out or user session ends
@@ -420,6 +450,31 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     }
   };
 
+  // Fully Close and Hide Voice Assistant from Screen
+  const handleFullyCloseAssistant = () => {
+    if (voiceServiceRef.current) {
+      voiceServiceRef.current.cancelListening();
+    }
+    defaultVoiceTtsService.stop();
+    setVoiceState('OFF');
+    setSpeechBubbleText('');
+    setShowIntroBubble(false);
+    setIsExpandedPanelOpen(false);
+    setIsSettingsOpen(false);
+    setVoiceAssistantEnabled(false);
+    setSettings((prev) => ({ ...prev, enabled: false }));
+  };
+
+  // Re-open and Wake Voice Assistant
+  const handleReopenAssistant = () => {
+    setVoiceAssistantEnabled(true);
+    setSettings((prev) => ({ ...prev, enabled: true }));
+    setVoiceState('IDLE');
+    setSpeechBubbleText('Hi! 👋 Main ready hoon. Command boliye!');
+    setIsWaving(true);
+    setTimeout(() => setIsWaving(false), 2000);
+  };
+
   // Settings Updater
   const updateSettings = (newPartial: Partial<VoiceAssistantSettings>) => {
     const updated = saveVoiceAssistantSettings(newPartial);
@@ -446,6 +501,29 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     }
     return ['POS View', 'Kitchen View', 'Inventory View', 'Today Sales'];
   };
+
+  // When fully closed, render an unobtrusive, non-overlapping floating restore button
+  if (!settings.enabled) {
+    return (
+      <div
+        id="restaurantos-voice-assistant-closed-dock"
+        className={`fixed bottom-16 sm:bottom-4 left-3 sm:left-4 z-40 ${className}`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <button
+          type="button"
+          data-testid="btn-reopen-voice-assistant"
+          onClick={handleReopenAssistant}
+          className="px-3 py-1.5 bg-white/95 hover:bg-white text-indigo-700 hover:text-indigo-800 border border-indigo-200/90 rounded-full shadow-lg text-xs font-bold flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 group backdrop-blur-xs"
+          title="Open Voice Assistant"
+          aria-label="Open Voice Assistant"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+          <span className="text-xs font-semibold">Open Voice Assistant</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -485,13 +563,23 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
                 </button>
                 <button
                   type="button"
+                  data-testid="btn-fully-close-assistant"
+                  onClick={handleFullyCloseAssistant}
+                  className="p-1 hover:bg-rose-50 rounded-md text-slate-400 hover:text-rose-600 transition"
+                  title="Fully Close Assistant (Hide character from screen)"
+                  aria-label="Fully Close Assistant"
+                >
+                  <EyeOff className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     handleDismissIntro(false);
                     setSpeechBubbleText('');
                   }}
                   className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-600 transition"
-                  title="Close bubble"
-                  aria-label="Close bubble"
+                  title="Close bubble only"
+                  aria-label="Close bubble only"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -578,6 +666,16 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
                   {sug}
                 </button>
               ))}
+              <button
+                type="button"
+                data-testid="btn-chip-hide-assistant"
+                onClick={handleFullyCloseAssistant}
+                className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/60 rounded-md text-[10px] font-semibold flex items-center gap-1 transition"
+                title="Hide Voice Assistant from screen"
+              >
+                <EyeOff className="w-2.5 h-2.5" />
+                <span>Fully Close</span>
+              </button>
               {onNavigate && (
                 <button
                   type="button"
@@ -593,7 +691,19 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
         )}
 
         {/* Character Visual Anchor & Main Toggle Button */}
-        <div className="pointer-events-auto flex items-end gap-2">
+        <div className="pointer-events-auto flex items-end gap-2 relative group">
+          {/* Quick Character Dismiss Button */}
+          <button
+            type="button"
+            data-testid="btn-dismiss-assistant-character"
+            onClick={handleFullyCloseAssistant}
+            className="absolute -top-2 left-0 w-5 h-5 bg-slate-800/90 hover:bg-rose-600 text-white rounded-full flex items-center justify-center text-[10px] shadow-md opacity-80 hover:opacity-100 transition-all z-20"
+            title="Fully Close Assistant"
+            aria-label="Fully Close Assistant"
+          >
+            <X className="w-3 h-3" />
+          </button>
+
           <RestaurantOsAssistantCharacter
             state={voiceState}
             isWaving={isWaving}
@@ -650,6 +760,28 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
             </div>
 
             <div className="space-y-4 text-xs">
+              {/* Master Enable/Disable Switch */}
+              <div className="flex items-center justify-between p-3 bg-indigo-50/70 rounded-xl border border-indigo-200">
+                <div>
+                  <p className="font-semibold text-indigo-950">Show Assistant on Screen</p>
+                  <p className="text-[10px] text-indigo-700 mt-0.5">Toggle character avatar and floating mic</p>
+                </div>
+                <input
+                  type="checkbox"
+                  data-testid="toggle-voice-assistant-active"
+                  checked={settings.enabled}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    if (!enabled) {
+                      handleFullyCloseAssistant();
+                    } else {
+                      handleReopenAssistant();
+                    }
+                  }}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </div>
+
               {/* Language Selection */}
               <div>
                 <label className="block font-semibold text-gray-700 mb-1 flex items-center gap-1.5">
@@ -668,10 +800,10 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
               </div>
 
               {/* Always Listening Toggle */}
-              <div className="flex items-center justify-between p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
                 <div>
-                  <p className="font-semibold text-indigo-950">Always Listening</p>
-                  <p className="text-[10px] text-indigo-700 mt-0.5">Keeps mic ready across pages</p>
+                  <p className="font-semibold text-gray-800">Always Listening</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Keeps mic ready across pages</p>
                 </div>
                 <input
                   type="checkbox"
@@ -696,13 +828,24 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(false)}
-              className="mt-5 w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition"
-            >
-              Done
-            </button>
+            <div className="mt-5 flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="btn-modal-fully-close"
+                onClick={handleFullyCloseAssistant}
+                className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+                <span>Fully Close</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

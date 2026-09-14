@@ -60,3 +60,23 @@ export function markAssistantIntroShown(): void {
     }
   }
 }
+
+export const VOICE_ASSISTANT_TOGGLE_EVENT = 'restaurantos_voice_assistant_toggle';
+
+export function setVoiceAssistantEnabled(enabled: boolean): VoiceAssistantSettings {
+  const updated = saveVoiceAssistantSettings({ enabled });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(VOICE_ASSISTANT_TOGGLE_EVENT, { detail: { enabled } })
+    );
+  }
+  return updated;
+}
+
+export function toggleVoiceAssistant(): boolean {
+  const current = getVoiceAssistantSettings();
+  const next = !current.enabled;
+  setVoiceAssistantEnabled(next);
+  return next;
+}
+

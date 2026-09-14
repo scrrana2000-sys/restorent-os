@@ -6,11 +6,18 @@ import {
   Store,
   ChevronDown,
   ShieldCheck,
-  Percent
+  Percent,
+  Sparkles,
+  Mic
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { OfflineSyncIndicator } from '../OfflineSyncIndicator';
+import {
+  getVoiceAssistantSettings,
+  toggleVoiceAssistant,
+  VOICE_ASSISTANT_TOGGLE_EVENT
+} from '../../services/voice/voiceSettings';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -25,8 +32,22 @@ export const Header: React.FC<HeaderProps> = ({
   const { restaurant, availableRestaurants, switchRestaurant, isSwitching } = useRestaurant();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isOutletOpen, setIsOutletOpen] = useState(false);
+  const [isAssistantEnabled, setIsAssistantEnabled] = useState(() => getVoiceAssistantSettings().enabled);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const outletRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleToggle = (e: Event) => {
+      const custom = e as CustomEvent<{ enabled?: boolean }>;
+      if (custom.detail?.enabled !== undefined) {
+        setIsAssistantEnabled(custom.detail.enabled);
+      } else {
+        setIsAssistantEnabled(getVoiceAssistantSettings().enabled);
+      }
+    };
+    window.addEventListener(VOICE_ASSISTANT_TOGGLE_EVENT, handleToggle);
+    return () => window.removeEventListener(VOICE_ASSISTANT_TOGGLE_EVENT, handleToggle);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -160,9 +181,30 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right section: System Status & User Profile */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         {/* Offline / Sync Queue Status Indicator */}
         <OfflineSyncIndicator />
+
+        {/* Voice Assistant Header Status / Toggle Button */}
+        <button
+          type="button"
+          onClick={() => {
+            const next = toggleVoiceAssistant();
+            setIsAssistantEnabled(next);
+          }}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
+            isAssistantEnabled
+              ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200/80 shadow-2xs'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+          }`}
+          title={isAssistantEnabled ? 'Voice Assistant is Visible (Click to Fully Close/Hide)' : 'Voice Assistant is Closed (Click to Open)'}
+          aria-label={isAssistantEnabled ? 'Hide Voice Assistant' : 'Show Voice Assistant'}
+        >
+          <Sparkles className={`w-3.5 h-3.5 ${isAssistantEnabled ? 'text-amber-500 animate-pulse' : 'text-slate-400'}`} />
+          <span className="hidden sm:inline">
+            {isAssistantEnabled ? 'Assistant ON' : 'Assistant OFF'}
+          </span>
+        </button>
 
         {/* Tax Mode Chip */}
         <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-xs font-semibold text-slate-700 border border-slate-200">
