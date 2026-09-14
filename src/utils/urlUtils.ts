@@ -227,3 +227,28 @@ export function isPublicBillRoute(): boolean {
   return extractBillParamsFromUrl() !== null;
 }
 
+/**
+ * Checks whether the current window location is an Android Custom Tab authentication flow.
+ */
+export function isCustomTabAuthRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('auth_mode') === 'custom_tab') return true;
+
+    if (window.location.hash) {
+      const hash = window.location.hash;
+      const questionIndex = hash.indexOf('?');
+      if (questionIndex !== -1) {
+        const hashParams = new URLSearchParams(hash.substring(questionIndex));
+        if (hashParams.get('auth_mode') === 'custom_tab') return true;
+      }
+    }
+  } catch (err) {
+    console.warn('[RestaurantOS] Error checking custom tab auth route:', err);
+  }
+
+  return false;
+}
+

@@ -11,8 +11,10 @@ import {
   isInvitationRoute,
   extractInvitationTokenFromUrl,
   isPublicBillRoute,
+  isCustomTabAuthRoute,
   PRODUCTION_BASE_PATH
 } from './utils/urlUtils';
+import { CustomTabAuthPage } from './pages/CustomTabAuthPage';
 
 // Code-split non-POS views for optimal bundle size and initial app load performance
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -45,10 +47,15 @@ const AdminApp: React.FC = () => {
   const isAcceptInvitation = isInvitationRoute();
   const invitationToken = extractInvitationTokenFromUrl();
   const isPublicBill = isPublicBillRoute();
+  const isCustomTabAuth = isCustomTabAuthRoute();
+
+  if (isCustomTabAuth) {
+    return <CustomTabAuthPage />;
+  }
 
   // Automatically correct/redirect currentView if it is unauthorized for the user's role
   useEffect(() => {
-    if (user && profile && !isAcceptInvitation && !isPublicBill) {
+    if (user && profile && !isAcceptInvitation && !isPublicBill && !isCustomTabAuth) {
       const role = profile.role || 'owner';
       if (!isViewAllowed(role, currentView)) {
         const views: AdminView[] = ['pos', 'captain', 'kitchen', 'orders', 'payments', 'inventory', 'dashboard', 'staff', 'restaurant', 'categories', 'items', 'reports', 'audit'];
