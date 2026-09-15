@@ -28,6 +28,8 @@ interface PosHeaderProps {
   activeSession: TableSession | null;
   onOpenTableModal: () => void;
   onClearTable?: () => void;
+  showTableSelector?: boolean;
+  allowedOrderTypes?: OrderType[];
   heldOrdersCount: number;
   onOpenHeldOrders: () => void;
   onOpenRecentOrders: () => void;
@@ -48,6 +50,8 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   activeSession,
   onOpenTableModal,
   onClearTable,
+  showTableSelector = true,
+  allowedOrderTypes = ['dineIn', 'takeaway', 'delivery'],
   heldOrdersCount,
   onOpenHeldOrders,
   onOpenRecentOrders,
@@ -200,56 +204,70 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
         </div>
       </div>
 
-      {/* 2. Quick Order Type Segmented Control (Matching Reference Image) */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* 2. Quick Order Type Segmented Control */}
+      <div
+        className={`grid gap-2 ${
+          allowedOrderTypes.length === 1
+            ? 'grid-cols-1'
+            : allowedOrderTypes.length === 2
+            ? 'grid-cols-2'
+            : 'grid-cols-3'
+        }`}
+      >
         {/* Dine-In */}
-        <button
-          id="order-type-dinein-btn"
-          type="button"
-          onClick={() => onOrderTypeChange('dineIn')}
-          className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${
-            orderType === 'dineIn'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'
-          }`}
-        >
-          <Utensils className={`w-4 h-4 shrink-0 ${orderType === 'dineIn' ? 'text-white' : 'text-indigo-600'}`} />
-          <span>Dine-In</span>
-        </button>
+        {allowedOrderTypes.includes('dineIn') && (
+          <button
+            id="order-type-dinein-btn"
+            type="button"
+            onClick={() => onOrderTypeChange('dineIn')}
+            className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${
+              orderType === 'dineIn'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'
+            }`}
+          >
+            <Utensils className={`w-4 h-4 shrink-0 ${orderType === 'dineIn' ? 'text-white' : 'text-indigo-600'}`} />
+            <span>Dine-In</span>
+          </button>
+        )}
 
         {/* Parcel */}
-        <button
-          id="order-type-takeaway-btn"
-          type="button"
-          onClick={() => onOrderTypeChange('takeaway')}
-          className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${
-            orderType === 'takeaway'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'
-          }`}
-        >
-          <ShoppingBag className={`w-4 h-4 shrink-0 ${orderType === 'takeaway' ? 'text-white' : 'text-slate-700'}`} />
-          <span>Parcel</span>
-        </button>
+        {allowedOrderTypes.includes('takeaway') && (
+          <button
+            id="order-type-takeaway-btn"
+            type="button"
+            onClick={() => onOrderTypeChange('takeaway')}
+            className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${
+              orderType === 'takeaway'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'
+            }`}
+          >
+            <ShoppingBag className={`w-4 h-4 shrink-0 ${orderType === 'takeaway' ? 'text-white' : 'text-slate-700'}`} />
+            <span>Parcel</span>
+          </button>
+        )}
 
         {/* Delivery */}
-        <button
-          id="order-type-delivery-btn"
-          type="button"
-          onClick={() => onOrderTypeChange('delivery')}
-          className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${
-            orderType === 'delivery'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'
-          }`}
-        >
-          <Bike className={`w-4 h-4 shrink-0 ${orderType === 'delivery' ? 'text-white' : 'text-slate-700'}`} />
-          <span>Delivery</span>
-        </button>
+        {allowedOrderTypes.includes('delivery') && (
+          <button
+            id="order-type-delivery-btn"
+            type="button"
+            onClick={() => onOrderTypeChange('delivery')}
+            className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${
+              orderType === 'delivery'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'
+            }`}
+          >
+            <Bike className={`w-4 h-4 shrink-0 ${orderType === 'delivery' ? 'text-white' : 'text-slate-700'}`} />
+            <span>Delivery</span>
+          </button>
+        )}
       </div>
 
-      {/* 3. Selected Table Row (Only for Dine-In, exactly matching reference image) */}
-      {orderType === 'dineIn' && (
+      {/* 3. Selected Table Row (Only for Dine-In when table selector is enabled) */}
+      {showTableSelector && orderType === 'dineIn' && (
         <div className="flex items-center gap-2 pt-0.5">
           {/* Table Selector Pill */}
           <button

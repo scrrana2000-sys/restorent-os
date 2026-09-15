@@ -12,13 +12,23 @@ describe('firestore.rules Static Security & RBAC Audit', () => {
     expect(rulesContent).toMatch(/service\s+cloud\.firestore/);
   });
 
-  it('does NOT contain dangerously permissive rules (allow read, write: if true)', () => {
+  it('does NOT contain dangerously permissive rules for private root or write access', () => {
     expect(rulesContent).not.toMatch(/allow\s+read,\s*write\s*:\s*if\s+true/i);
-    expect(rulesContent).not.toMatch(/allow\s+read\s*:\s*if\s+true/i);
     expect(rulesContent).not.toMatch(/allow\s+write\s*:\s*if\s+true/i);
     expect(rulesContent).not.toMatch(/allow\s+read,\s*write\s*:\s*if\s+request\.auth\s*!=\s*null\s*;/i);
     expect(rulesContent).not.toMatch(/allow\s+write\s*:\s*if\s+request\.auth\s*!=\s*null\s*;/i);
   });
+
+  it('keeps private restaurants collection strictly protected while exposing sanitized publicRestaurants', () => {
+    // Private restaurants match enforces member access only
+    expect(rulesContent).toMatch(/match\s+\/restaurants\/\{restaurantId\}/);
+    expect(rulesContent).toMatch(/allow\s+read\s*:\s*if\s+canAccessRestaurant\(restaurantId\);/);
+
+    // Sanitized publicRestaurants collection allows public read but strict staff write
+    expect(rulesContent).toMatch(/match\s+\/publicRestaurants\/\{restaurantId\}/);
+    expect(rulesContent).toMatch(/allow\s+read:\s*if\s+true;/);
+  });
+
 
   it('enforces default deny on root document match', () => {
     expect(rulesContent).toMatch(/match\s+\/\{document=\*\*\}/);

@@ -173,7 +173,10 @@ export function validateOrderItem(item: Partial<OrderItem>): ValidationResult {
 // Order Validation
 // -------------------------------------------------------------
 
-export function validateOrder(order: Partial<Order>): ValidationResult {
+export function validateOrder(
+  order: Partial<Order>,
+  options?: { skipTableRequirement?: boolean }
+): ValidationResult {
   const errors: Record<string, string> = {};
 
   if (!order.restaurantId || typeof order.restaurantId !== 'string' || order.restaurantId.trim() === '') {
@@ -192,8 +195,13 @@ export function validateOrder(order: Partial<Order>): ValidationResult {
     errors.status = `status must be one of: ${VALID_ORDER_STATUSES.join(', ')}`;
   }
 
-  // Dine-in orders must specify a tableId if not in draft
-  if (order.orderType === 'dineIn' && order.status !== 'draft' && !order.tableId) {
+  // Dine-in orders must specify a tableId if not in draft, unless skipTableRequirement is specified (e.g. counter dine-in)
+  if (
+    order.orderType === 'dineIn' &&
+    order.status !== 'draft' &&
+    !order.tableId &&
+    !options?.skipTableRequirement
+  ) {
     errors.tableId = 'tableId is required for confirmed dine-in orders.';
   }
 

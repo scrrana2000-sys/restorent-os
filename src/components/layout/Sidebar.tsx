@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
+import { getRestaurantOperatingProfile } from '../../config/restaurantOperatingModes';
 import { isViewAllowed } from '../../utils/permissions';
 
 export type AdminView = 'pos' | 'kitchen' | 'captain' | 'dashboard' | 'restaurant' | 'categories' | 'items' | 'settings' | 'reports' | 'audit' | 'orders' | 'payments' | 'staff' | 'inventory';
@@ -38,7 +39,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile
 }) => {
-  const { restaurant, availableRestaurants, switchRestaurant, isSwitching } = useRestaurant();
+  const { restaurant, operatingProfile, availableRestaurants, switchRestaurant, isSwitching } = useRestaurant();
+  const resolvedProfile = operatingProfile || getRestaurantOperatingProfile(restaurant);
   const { user, profile } = useAuth();
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
 
@@ -73,7 +75,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const userRole = profile?.role || 'owner';
-  const allowedNavigation = mainNavigation.filter((item) => isViewAllowed(userRole, item.id));
+
+  const isViewOperationallyAllowed = (viewId: AdminView): boolean => {
+    const nav = resolvedProfile?.navigation;
+    if (!nav) return true;
+    switch (viewId) {
+      case 'pos':
+        return nav.isPosVisible;
+      case 'captain':
+        return nav.isCaptainVisible;
+      case 'kitchen':
+        return nav.isKitchenVisible;
+      case 'orders':
+        return nav.isOrdersVisible;
+      case 'payments':
+        return nav.isPaymentsVisible;
+      case 'inventory':
+        return nav.isInventoryVisible;
+      case 'dashboard':
+        return nav.isDashboardVisible;
+      case 'reports':
+        return nav.isReportsVisible;
+      case 'audit':
+        return nav.isAuditVisible;
+      case 'staff':
+        return nav.isStaffVisible;
+      case 'restaurant':
+      case 'settings':
+        return nav.isRestaurantVisible;
+      case 'categories':
+        return nav.isCategoriesVisible;
+      case 'items':
+        return nav.isItemsVisible;
+      default:
+        return true;
+    }
+  };
+
+  const allowedNavigation = mainNavigation.filter(
+    (item) => isViewOperationallyAllowed(item.id) && isViewAllowed(userRole, item.id)
+  );
 
   const futureModules: { label: string; icon: React.ComponentType<{ className?: string }>; milestone: string }[] = [];
 

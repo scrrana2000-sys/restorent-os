@@ -3,6 +3,7 @@ import { Sidebar, AdminView } from './Sidebar';
 import { Header } from './Header';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { getRestaurantOperatingProfile } from '../../config/restaurantOperatingModes';
 import { ShieldAlert, RefreshCw, ExternalLink } from 'lucide-react';
 import { SecurityRulesNotice } from '../common/SecurityRulesNotice';
 import { firebaseConfig } from '../../config/firebase';
@@ -21,10 +22,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   children
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { restaurant, error, retry, loading: restaurantLoading, isSwitching } = useRestaurant();
+  const { restaurant, operatingProfile, error, retry, loading: restaurantLoading, isSwitching } = useRestaurant();
+  const resolvedProfile = operatingProfile || getRestaurantOperatingProfile(restaurant);
 
   // Deterministic Back button handling for mobile sidebar menu
   useModalBackHandler(isMobileMenuOpen, () => setIsMobileMenuOpen(false), 'admin-mobile-sidebar');
+
+  const isViewOperationallyDisabled =
+    (currentView === 'kitchen' && !resolvedProfile.capabilities.kitchenEnabled) ||
+    (currentView === 'captain' && !resolvedProfile.capabilities.captainEnabled) ||
+    (currentView === 'inventory' && !resolvedProfile.capabilities.inventoryEnabled);
 
   const isPermissionError =
     error &&
@@ -158,6 +165,32 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 <RefreshCw className={`w-3.5 h-3.5 ${restaurantLoading ? 'animate-spin' : ''}`} />
                 {restaurantLoading ? 'Connecting...' : 'Retry Connection'}
               </button>
+            </div>
+          ) : isViewOperationallyDisabled ? (
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-8 text-center max-w-md mx-auto my-12 shadow-sm">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-4 border border-indigo-200/60">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <h2 className="text-base font-bold text-slate-900 mb-1.5">Module Disabled</h2>
+              <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+                The {currentView} workflow is not enabled in your current operating mode ({resolvedProfile.mode.replace('_', ' ')}). You can customize enabled capabilities anytime in Restaurant Setup.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('pos')}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors"
+                >
+                  Go to POS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('restaurant')}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
+                >
+                  Configure Capabilities
+                </button>
+              </div>
             </div>
           ) : React.isValidElement(children) ? (
             React.cloneElement(children as React.ReactElement<{ onOpenMobileMenu?: () => void }>, {

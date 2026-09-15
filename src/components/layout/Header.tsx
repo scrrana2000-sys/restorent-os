@@ -32,17 +32,21 @@ export const Header: React.FC<HeaderProps> = ({
   const { restaurant, availableRestaurants, switchRestaurant, isSwitching } = useRestaurant();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isOutletOpen, setIsOutletOpen] = useState(false);
-  const [isAssistantEnabled, setIsAssistantEnabled] = useState(() => getVoiceAssistantSettings().enabled);
+  const [isAssistantEnabled, setIsAssistantEnabled] = useState(() => {
+    const s = getVoiceAssistantSettings();
+    return s.enabled && !s.completelyHidden;
+  });
   const dropdownRef = useRef<HTMLDivElement>(null);
   const outletRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleToggle = (e: Event) => {
-      const custom = e as CustomEvent<{ enabled?: boolean }>;
-      if (custom.detail?.enabled !== undefined) {
-        setIsAssistantEnabled(custom.detail.enabled);
+      const custom = e as CustomEvent<{ enabled?: boolean; completelyHidden?: boolean }>;
+      if (custom.detail?.enabled !== undefined && custom.detail?.completelyHidden !== undefined) {
+        setIsAssistantEnabled(custom.detail.enabled && !custom.detail.completelyHidden);
       } else {
-        setIsAssistantEnabled(getVoiceAssistantSettings().enabled);
+        const s = getVoiceAssistantSettings();
+        setIsAssistantEnabled(s.enabled && !s.completelyHidden);
       }
     };
     window.addEventListener(VOICE_ASSISTANT_TOGGLE_EVENT, handleToggle);

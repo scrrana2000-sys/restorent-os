@@ -20,6 +20,21 @@ export type CategoryFormData = {
   isActive: boolean;
 };
 
+export interface MenuItemVariant {
+  id: string;
+  name: string;
+  price: number;
+  isAvailable?: boolean;
+}
+
+export interface MenuItemAddon {
+  id: string;
+  name: string;
+  price: number;
+  isAvailable?: boolean;
+  isRequired?: boolean;
+}
+
 export interface MenuItem {
   itemId: string;
   restaurantId: string;
@@ -33,8 +48,12 @@ export interface MenuItem {
   taxInclusive: boolean;
   foodType: FoodType;
   isAvailable: boolean;
+  isActive?: boolean;
   sku: string;
   sortOrder: number;
+  variants?: MenuItemVariant[];
+  addons?: MenuItemAddon[];
+  addOns?: MenuItemAddon[];
   createdAt?: any;
   updatedAt?: any;
 }

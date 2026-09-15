@@ -5,10 +5,13 @@ import {
   CookingPot,
   Receipt,
   CreditCard,
+  Boxes,
   MoreHorizontal
 } from 'lucide-react';
 import { AdminView } from './Sidebar';
 import { useAuth } from '../../context/AuthContext';
+import { useRestaurant } from '../../context/RestaurantContext';
+import { getRestaurantOperatingProfile } from '../../config/restaurantOperatingModes';
 import { isViewAllowed } from '../../utils/permissions';
 
 interface MobileBottomNavProps {
@@ -25,18 +28,44 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   dueOrdersCount = 0
 }) => {
   const { profile } = useAuth();
+  const { operatingProfile, restaurant } = useRestaurant();
+  const resolvedProfile = operatingProfile || getRestaurantOperatingProfile(restaurant);
   const userRole = profile?.role || 'owner';
 
-  const operationalNav: { id: AdminView; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  const operationalNavCandidates: { id: AdminView; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'pos', label: 'POS', icon: Store },
     { id: 'captain', label: 'Tables', icon: Layers },
     { id: 'kitchen', label: 'Kitchen', icon: CookingPot },
     { id: 'orders', label: 'Orders', icon: Receipt },
-    { id: 'payments', label: 'Payments', icon: CreditCard }
+    { id: 'payments', label: 'Payments', icon: CreditCard },
+    { id: 'inventory', label: 'Stock', icon: Boxes }
   ];
 
-  // Filter based on RBAC permissions
-  const allowedNav = operationalNav.filter((item) => isViewAllowed(userRole, item.id));
+  const isViewOperationallyAllowed = (viewId: AdminView): boolean => {
+    const nav = resolvedProfile?.navigation;
+    if (!nav) return true;
+    switch (viewId) {
+      case 'pos':
+        return nav.isPosVisible;
+      case 'captain':
+        return nav.isCaptainVisible;
+      case 'kitchen':
+        return nav.isKitchenVisible;
+      case 'orders':
+        return nav.isOrdersVisible;
+      case 'payments':
+        return nav.isPaymentsVisible;
+      case 'inventory':
+        return nav.isInventoryVisible;
+      default:
+        return true;
+    }
+  };
+
+  // Filter based on operating capabilities AND RBAC permissions (max 4 primary tabs + More)
+  const allowedNav = operationalNavCandidates
+    .filter((item) => isViewOperationallyAllowed(item.id) && isViewAllowed(userRole, item.id))
+    .slice(0, 4);
 
   return (
     <nav

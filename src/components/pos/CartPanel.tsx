@@ -39,6 +39,8 @@ interface CartPanelProps {
   isSubmitting?: boolean;
   symbol?: string;
   onCloseTable?: () => void;
+  showCreateKot?: boolean;
+  primaryAction?: 'send_to_kitchen' | 'direct_payment';
 }
 
 export const CartPanel: React.FC<CartPanelProps> = ({
@@ -58,7 +60,9 @@ export const CartPanel: React.FC<CartPanelProps> = ({
   onOpenPayment,
   isSubmitting = false,
   symbol = '₹',
-  onCloseTable
+  onCloseTable,
+  showCreateKot = true,
+  primaryAction = 'send_to_kitchen'
 }) => {
   const [editingNotesItemId, setEditingNotesItemId] = useState<string | null>(null);
   const [noteInput, setNoteInput] = useState('');
@@ -332,41 +336,80 @@ export const CartPanel: React.FC<CartPanelProps> = ({
             </div>
           </div>
 
-          {/* PRIMARY ACTION: SEND TO KITCHEN */}
+          {/* ACTION BUTTONS (Adaptive based on operating mode) */}
           <div className="space-y-1.5 pt-0.5">
-            <button
-              id="pos-send-to-kitchen-btn"
-              type="button"
-              disabled={isSubmitting}
-              onClick={onCreateKot}
-              className="w-full h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-500/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5"
-            >
-              <Flame className="w-4 h-4 text-red-600 fill-red-600" />
-              <span>SEND TO KITCHEN</span>
-            </button>
+            {showCreateKot ? (
+              <>
+                <button
+                  id="pos-send-to-kitchen-btn"
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={onCreateKot}
+                  className="w-full h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-500/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <Flame className="w-4 h-4 text-red-600 fill-red-600" />
+                  <span>SEND TO KITCHEN</span>
+                </button>
 
-            {/* Secondary Actions: Hold & Settle */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={onHoldOrder}
-                className="flex items-center justify-center gap-1.5 h-10 px-3 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs active:scale-95 disabled:opacity-50 transition-colors"
-              >
-                <PauseCircle className="w-3.5 h-3.5 text-amber-600" />
-                <span>Hold</span>
-              </button>
+                {/* Secondary Actions: Hold & Settle */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={onHoldOrder}
+                    className="flex items-center justify-center gap-1.5 h-10 px-3 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs active:scale-95 disabled:opacity-50 transition-colors"
+                  >
+                    <PauseCircle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Hold</span>
+                  </button>
 
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={onOpenPayment}
-                className="flex items-center justify-center gap-1.5 h-10 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-2xs active:scale-95 disabled:opacity-50 transition-colors"
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                <span>Pay & Settle</span>
-              </button>
-            </div>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={onOpenPayment}
+                    className="flex items-center justify-center gap-1.5 h-10 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-2xs active:scale-95 disabled:opacity-50 transition-colors"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Pay & Settle</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  id="pos-charge-settle-btn"
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={onOpenPayment}
+                  className="w-full h-11 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-black text-sm transition-all shadow-md shadow-indigo-600/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>CHARGE & SETTLE</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={onHoldOrder}
+                    className="flex items-center justify-center gap-1.5 h-10 px-3 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs active:scale-95 disabled:opacity-50 transition-colors"
+                  >
+                    <PauseCircle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Hold Order</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={onCreateKot}
+                    className="flex items-center justify-center gap-1.5 h-10 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs active:scale-95 disabled:opacity-50 transition-colors border border-slate-200"
+                    title="Save order as unpaid / due"
+                  >
+                    <span>Save Order</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

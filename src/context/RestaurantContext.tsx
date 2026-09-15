@@ -2,6 +2,10 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { Restaurant, RestaurantFormData } from '../types/restaurant';
 import {
+  getRestaurantOperatingProfile,
+  RestaurantOperatingProfile
+} from '../config/restaurantOperatingModes';
+import {
   getRestaurantById,
   getRestaurantsForUser,
   createDefaultRestaurant,
@@ -19,6 +23,7 @@ import { StaffRole } from '../types/auth';
 
 interface RestaurantContextType {
   restaurant: Restaurant | null;
+  operatingProfile: RestaurantOperatingProfile;
   loading: boolean;
   error: string | null;
   updateSettings: (data: Partial<RestaurantFormData>) => Promise<void>;
@@ -609,8 +614,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     })}`;
   }, [restaurant?.currencySymbol]);
 
+  const operatingProfile = React.useMemo(() => {
+    return getRestaurantOperatingProfile(restaurant);
+  }, [restaurant]);
+
   const value = React.useMemo(() => ({
     restaurant,
+    operatingProfile,
     loading,
     error,
     updateSettings,
@@ -621,6 +631,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     isSwitching
   }), [
     restaurant,
+    operatingProfile,
     loading,
     error,
     updateSettings,
@@ -641,6 +652,7 @@ export function useRestaurant() {
   if (!context) {
     return {
       restaurant: null,
+      operatingProfile: getRestaurantOperatingProfile(null),
       loading: false,
       error: null,
       retry: () => {},

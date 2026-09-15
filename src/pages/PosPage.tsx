@@ -24,7 +24,6 @@ import { BillReceiptModal } from '../components/pos/BillReceiptModal';
 import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersModal';
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
 import { VoiceOrderModal } from '../components/voice/VoiceOrderModal';
-import { VoiceAssistantWidget } from '../components/voice/VoiceAssistantWidget';
 import { AdminView } from '../components/layout/Sidebar';
 import { useModalBackHandler } from '../hooks/useModalBackHandler';
 
@@ -36,7 +35,7 @@ interface PosPageProps {
 }
 
 export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }) => {
-  const { restaurant, loading: restaurantLoading, error: restaurantError } = useRestaurant();
+  const { restaurant, operatingProfile, loading: restaurantLoading, error: restaurantError } = useRestaurant();
   const { user } = useAuth();
   const restaurantId = restaurant?.restaurantId || '';
 
@@ -51,9 +50,23 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Order & Cart state
-  const [orderType, setOrderType] = useState<OrderType>('dineIn');
+  const [orderType, setOrderType] = useState<OrderType>(
+    operatingProfile?.posBehavior?.defaultOrderType || 'dineIn'
+  );
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [activeSession, setActiveSession] = useState<TableSession | null>(null);
+
+  // Sync default order type when operatingProfile loads or changes
+  useEffect(() => {
+    const allowed = operatingProfile?.posBehavior?.allowedOrderTypes;
+    if (allowed && allowed.length > 0 && !allowed.includes(orderType)) {
+      setOrderType(operatingProfile.posBehavior.defaultOrderType || allowed[0]);
+    } else if (orderType === 'dineIn' && !operatingProfile?.workflow?.hasTableFlow) {
+      if (operatingProfile?.posBehavior?.defaultOrderType) {
+        setOrderType(operatingProfile.posBehavior.defaultOrderType);
+      }
+    }
+  }, [operatingProfile, orderType]);
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [orderDiscount, setOrderDiscount] = useState<DiscountSpec | undefined>(undefined);
@@ -77,7 +90,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
 
   const [activeOrderForPayment, setActiveOrderForPayment] = useState<Order | null>(null);
   const [activeOrderForBill, setActiveOrderForBill] = useState<Order | null>(null);
-  const [sentOrderInfo, setSentOrderInfo] = useState<{ order: Order; kot: KOT } | null>(null);
+  const [sentOrderInfo, setSentOrderInfo] = useState<{ order: Order; kot: KOT | null } | null>(null);
 
   // Processing & Toast feedback
   const [activeMobileTab, setActiveMobileTab] = useState<'menu' | 'cart'>('menu');
@@ -476,7 +489,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     setHeldDrafts((prev) => prev.filter((d) => d.id !== id));
   };
 
-  // Create Order & KOT Flow
+  // Create Order & KOT Flow (Adaptive based on operating mode)
   const handleCreateKot = async () => {
     if (cartItems.length === 0) {
       setStatusMessage({ type: 'error', text: 'Cart is empty.' });
@@ -486,7 +499,9 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     let targetSessionId: string | undefined = undefined;
     let targetTableId: string | undefined = undefined;
 
-    if (orderType === 'dineIn') {
+    const hasTableFlow = operatingProfile?.workflow?.hasTableFlow ?? true;
+
+    if (orderType === 'dineIn' && hasTableFlow) {
       if (!selectedTable) {
         setIsTableModalOpen(true);
         setStatusMessage({ type: 'error', text: 'Please select an active table for Dine-In order.' });
@@ -529,8 +544,10 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     try {
       const clientReqId = `req_ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
-      // 1. Authoritatively create order and KOT atomically
-      const { order: newOrder, kot: newKot } = await orderService.createOrderAndKOTFromCart({
+      // Authoritatively create order (and KOT if kitchen workflow is active)
+      const { order: newOrder, kot: newKot } = await orderService.createOrderForOperatingMode({
+        restaurant,
+        operatingProfile,
         restaurantId,
         cartState: { items: cartItems, orderDiscount, notes: orderNotes },
         orderType,
@@ -542,22 +559,30 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         clientRequestId: clientReqId
       });
 
-      // 2. Success state
+      // Success state
       handleClearCart();
-      setSentOrderInfo({ order: newOrder, kot: newKot });
-      setStatusMessage({
-        type: 'success',
-        text: `Order #${newOrder.orderNumber} placed & sent to Kitchen! (KOT: ${newKot.kotNumber})`
-      });
+      if (newKot) {
+        setSentOrderInfo({ order: newOrder, kot: newKot });
+        setStatusMessage({
+          type: 'success',
+          text: `Order #${newOrder.orderNumber} placed & sent to Kitchen! (KOT: ${newKot.kotNumber})`
+        });
+      } else {
+        setSentOrderInfo({ order: newOrder, kot: null });
+        setStatusMessage({
+          type: 'success',
+          text: `Order #${newOrder.orderNumber} placed successfully!`
+        });
+      }
     } catch (err: any) {
-      console.error('KOT creation error:', err);
-      setStatusMessage({ type: 'error', text: err.message || 'Failed to create order or KOT.' });
+      console.error('Order creation error:', err);
+      setStatusMessage({ type: 'error', text: err.message || 'Failed to create order.' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Payment Open Flow
+  // Payment Open Flow (Adaptive based on operating mode)
   const handleOpenPayment = async () => {
     if (cartItems.length === 0) {
       setStatusMessage({ type: 'error', text: 'Cart is empty.' });
@@ -567,7 +592,9 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     let targetSessionId: string | undefined = undefined;
     let targetTableId: string | undefined = undefined;
 
-    if (orderType === 'dineIn') {
+    const hasTableFlow = operatingProfile?.workflow?.hasTableFlow ?? true;
+
+    if (orderType === 'dineIn' && hasTableFlow) {
       if (!selectedTable) {
         setIsTableModalOpen(true);
         setStatusMessage({ type: 'error', text: 'Please select an active table for Dine-In order.' });
@@ -610,8 +637,10 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     try {
       const clientReqId = `req_ord_pay_${Date.now()}`;
 
-      // Create Order and KOT atomically so the kitchen is instantly notified of the new order
-      const { order: newOrder, kot: newKot } = await orderService.createOrderAndKOTFromCart({
+      // Create Order (and KOT if kitchen enabled) through authoritative operating mode abstraction
+      const { order: newOrder } = await orderService.createOrderForOperatingMode({
+        restaurant,
+        operatingProfile,
         restaurantId,
         cartState: { items: cartItems, orderDiscount, notes: orderNotes },
         orderType,
@@ -650,6 +679,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
       {/* POS Top Header */}
       <PosHeader
         orderType={orderType}
+        allowedOrderTypes={operatingProfile?.posBehavior?.allowedOrderTypes}
         onOrderTypeChange={(type) => {
           setOrderType(type);
           if (type !== 'dineIn') {
@@ -664,6 +694,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
           setSelectedTable(null);
           setActiveSession(null);
         }}
+        showTableSelector={operatingProfile?.posBehavior?.showTableSelector ?? true}
         heldOrdersCount={heldDrafts.length}
         onOpenHeldOrders={() => setIsHeldOrdersModalOpen(true)}
         paymentDueCount={paymentDueOrders.length}
@@ -775,6 +806,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
             onCreateKot={handleCreateKot}
             onOpenPayment={handleOpenPayment}
             onCloseTable={() => handleCloseTableSession()}
+            showCreateKot={operatingProfile?.posBehavior?.showCreateKot ?? true}
+            primaryAction={operatingProfile?.posBehavior?.defaultCheckoutAction ?? 'send_to_kitchen'}
             isSubmitting={isSubmitting}
           />
         </div>

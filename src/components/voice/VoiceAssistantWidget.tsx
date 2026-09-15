@@ -33,6 +33,7 @@ import {
   getVoiceAssistantSettings,
   saveVoiceAssistantSettings,
   setVoiceAssistantEnabled,
+  setVoiceAssistantCompletelyHidden,
   VOICE_ASSISTANT_TOGGLE_EVENT,
   isAssistantIntroShown,
   markAssistantIntroShown,
@@ -166,6 +167,10 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
   // Initial Intro Greeting
   useEffect(() => {
     if (!isAssistantIntroShown()) {
+      if (!settings.enabled || settings.completelyHidden) {
+        markAssistantIntroShown();
+        return;
+      }
       setVoiceState('entering');
       const walkTimer = setTimeout(() => {
         setVoiceState('wave');
@@ -182,20 +187,28 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
 
       return () => clearTimeout(walkTimer);
     } else {
-      setSpeechBubbleText('Hi! 👋 Main RestaurantOS ka Voice Assistant hoon.');
+      if (settings.enabled && !settings.completelyHidden) {
+        setSpeechBubbleText('Hi! 👋 Main RestaurantOS ka Voice Assistant hoon.');
+      }
     }
-  }, []);
+  }, [settings.enabled, settings.completelyHidden]);
 
   // Listen to Global Voice Assistant Toggle Event
   useEffect(() => {
     const handleToggleEvent = (e: Event) => {
-      const custom = e as CustomEvent<{ enabled?: boolean }>;
+      const custom = e as CustomEvent<{ enabled?: boolean; completelyHidden?: boolean }>;
+      const currentSettings = getVoiceAssistantSettings();
       const isEnabled =
         custom.detail?.enabled !== undefined
           ? custom.detail.enabled
-          : getVoiceAssistantSettings().enabled;
-      setSettings((prev) => ({ ...prev, enabled: isEnabled }));
-      if (isEnabled) {
+          : currentSettings.enabled;
+      const isCompletelyHidden =
+        custom.detail?.completelyHidden !== undefined
+          ? custom.detail.completelyHidden
+          : currentSettings.completelyHidden;
+
+      setSettings((prev) => ({ ...prev, enabled: isEnabled, completelyHidden: isCompletelyHidden }));
+      if (isEnabled && !isCompletelyHidden) {
         setVoiceState('IDLE');
         setSpeechBubbleText('Hi! 👋 Main ready hoon. Command boliye!');
       } else {
@@ -450,7 +463,22 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     }
   };
 
-  // Fully Close and Hide Voice Assistant from Screen
+  // Dismiss / Close Voice Assistant to minimal dock
+  const handleCloseToMinimalDock = () => {
+    if (voiceServiceRef.current) {
+      voiceServiceRef.current.cancelListening();
+    }
+    defaultVoiceTtsService.stop();
+    setVoiceState('OFF');
+    setSpeechBubbleText('');
+    setShowIntroBubble(false);
+    setIsExpandedPanelOpen(false);
+    setIsSettingsOpen(false);
+    const updated = setVoiceAssistantEnabled(false);
+    setSettings(updated);
+  };
+
+  // Fully Close and Hide Voice Assistant completely from Screen
   const handleFullyCloseAssistant = () => {
     if (voiceServiceRef.current) {
       voiceServiceRef.current.cancelListening();
@@ -461,14 +489,15 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     setShowIntroBubble(false);
     setIsExpandedPanelOpen(false);
     setIsSettingsOpen(false);
-    setVoiceAssistantEnabled(false);
-    setSettings((prev) => ({ ...prev, enabled: false }));
+    const updated = setVoiceAssistantCompletelyHidden(true);
+    setSettings(updated);
   };
 
   // Re-open and Wake Voice Assistant
   const handleReopenAssistant = () => {
-    setVoiceAssistantEnabled(true);
-    setSettings((prev) => ({ ...prev, enabled: true }));
+    const updated = setVoiceAssistantEnabled(true);
+    setVoiceAssistantCompletelyHidden(false);
+    setSettings({ ...updated, completelyHidden: false });
     setVoiceState('IDLE');
     setSpeechBubbleText('Hi! 👋 Main ready hoon. Command boliye!');
     setIsWaving(true);
@@ -502,7 +531,12 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
     return ['POS View', 'Kitchen View', 'Inventory View', 'Today Sales'];
   };
 
-  // When fully closed, render an unobtrusive, non-overlapping floating restore button
+  // If completely closed and hidden by user, do not render any elements on screen
+  if (settings.completelyHidden) {
+    return null;
+  }
+
+  // When disabled/minimized, render an unobtrusive restore button with a complete close button
   if (!settings.enabled) {
     return (
       <div
@@ -510,17 +544,29 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
         className={`fixed bottom-16 sm:bottom-4 left-3 sm:left-4 z-40 ${className}`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <button
-          type="button"
-          data-testid="btn-reopen-voice-assistant"
-          onClick={handleReopenAssistant}
-          className="px-3 py-1.5 bg-white/95 hover:bg-white text-indigo-700 hover:text-indigo-800 border border-indigo-200/90 rounded-full shadow-lg text-xs font-bold flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 group backdrop-blur-xs"
-          title="Open Voice Assistant"
-          aria-label="Open Voice Assistant"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-          <span className="text-xs font-semibold">Open Voice Assistant</span>
-        </button>
+        <div className="flex items-center gap-1 bg-white/95 hover:bg-white text-indigo-700 border border-indigo-200/90 rounded-full shadow-lg p-0.5 transition-all group backdrop-blur-xs">
+          <button
+            type="button"
+            data-testid="btn-reopen-voice-assistant"
+            onClick={handleReopenAssistant}
+            className="px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 hover:text-indigo-900 transition-colors"
+            title="Open Voice Assistant"
+            aria-label="Open Voice Assistant"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+            <span className="text-xs font-semibold">Open Voice Assistant</span>
+          </button>
+          <button
+            type="button"
+            data-testid="btn-completely-close-assistant"
+            onClick={handleFullyCloseAssistant}
+            className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-full transition-colors"
+            title="Fully Close (Hide completely from screen)"
+            aria-label="Fully Close Assistant"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     );
   }
@@ -564,22 +610,20 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
                 <button
                   type="button"
                   data-testid="btn-fully-close-assistant"
-                  onClick={handleFullyCloseAssistant}
-                  className="p-1 hover:bg-rose-50 rounded-md text-slate-400 hover:text-rose-600 transition"
-                  title="Fully Close Assistant (Hide character from screen)"
-                  aria-label="Fully Close Assistant"
+                  onClick={handleCloseToMinimalDock}
+                  className="p-1 hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-600 transition"
+                  title="Minimize to dock"
+                  aria-label="Minimize Assistant"
                 >
                   <EyeOff className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    handleDismissIntro(false);
-                    setSpeechBubbleText('');
-                  }}
-                  className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-600 transition"
-                  title="Close bubble only"
-                  aria-label="Close bubble only"
+                  data-testid="btn-completely-hide-assistant"
+                  onClick={handleFullyCloseAssistant}
+                  className="p-1 hover:bg-rose-50 rounded-md text-slate-400 hover:text-rose-600 transition"
+                  title="Hide completely from screen"
+                  aria-label="Hide completely from screen"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -696,10 +740,10 @@ export const VoiceAssistantWidget: React.FC<VoiceAssistantWidgetProps> = ({
           <button
             type="button"
             data-testid="btn-dismiss-assistant-character"
-            onClick={handleFullyCloseAssistant}
+            onClick={handleCloseToMinimalDock}
             className="absolute -top-2 left-0 w-5 h-5 bg-slate-800/90 hover:bg-rose-600 text-white rounded-full flex items-center justify-center text-[10px] shadow-md opacity-80 hover:opacity-100 transition-all z-20"
-            title="Fully Close Assistant"
-            aria-label="Fully Close Assistant"
+            title="Dismiss Assistant"
+            aria-label="Dismiss Assistant"
           >
             <X className="w-3 h-3" />
           </button>

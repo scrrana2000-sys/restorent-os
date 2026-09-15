@@ -46,8 +46,9 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
   onClose,
   onOrderPlaced
 }) => {
-  const { restaurant } = useRestaurant();
+  const { restaurant, operatingProfile } = useRestaurant();
   const { user } = useAuth();
+  const isKitchenEnabled = operatingProfile?.capabilities?.kitchenEnabled ?? true;
   const restaurantId = restaurant?.restaurantId || '';
   const currencySymbol = restaurant?.currencySymbol || '₹';
 
@@ -245,7 +246,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
         // Enqueue offline operation
         offlineSyncService.enqueue(
           restaurantId,
-          'create_order_with_kot',
+          isKitchenEnabled ? 'create_order_with_kot' : 'create_order',
           {
             cartState: { items: cart, notes: orderNotes },
             orderType: 'dineIn',
@@ -257,28 +258,52 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
           },
           clientRequestId
         );
-        setSuccessMessage('Offline mode: Order & KOT queued locally for synchronization.');
+        setSuccessMessage(
+          isKitchenEnabled
+            ? 'Offline mode: Order & KOT queued locally for synchronization.'
+            : 'Offline mode: Order queued locally for synchronization.'
+        );
         setTimeout(() => {
           onClose();
         }, 1500);
         return;
       }
 
-      const result = await orderService.createOrderAndKOTFromCart({
-        restaurantId,
-        cartState: { items: cart, notes: orderNotes },
-        orderType: 'dineIn',
-        source: 'captain',
-        tableId: table.id,
-        tableSessionId: currentSession.id,
-        notes: orderNotes,
-        createdBy: user?.uid || 'floor_captain',
-        clientRequestId
-      });
+      let result: { order: Order; kot?: KOT | null };
+      if (isKitchenEnabled) {
+        result = await orderService.createOrderAndKOTFromCart({
+          restaurantId,
+          cartState: { items: cart, notes: orderNotes },
+          orderType: 'dineIn',
+          source: 'captain',
+          tableId: table.id,
+          tableSessionId: currentSession.id,
+          notes: orderNotes,
+          createdBy: user?.uid || 'floor_captain',
+          clientRequestId
+        });
+      } else {
+        const order = await orderService.createOrderFromCart({
+          restaurantId,
+          cartState: { items: cart, notes: orderNotes },
+          orderType: 'dineIn',
+          source: 'captain',
+          tableId: table.id,
+          tableSessionId: currentSession.id,
+          notes: orderNotes,
+          createdBy: user?.uid || 'floor_captain',
+          clientRequestId
+        });
+        result = { order, kot: null };
+      }
 
-      setSuccessMessage(`Order #${result.order.orderNumber} sent to kitchen! (KOT: ${result.kot.kotNumber})`);
+      if (result.kot) {
+        setSuccessMessage(`Order #${result.order.orderNumber} sent to kitchen! (KOT: ${result.kot.kotNumber})`);
+      } else {
+        setSuccessMessage(`Order #${result.order.orderNumber} confirmed successfully!`);
+      }
       if (onOrderPlaced) {
-        onOrderPlaced(result.order, result.kot);
+        onOrderPlaced(result.order, result.kot as any);
       }
 
       setTimeout(() => {
@@ -286,7 +311,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
       }, 1200);
     } catch (err: any) {
       console.error('Failed to submit staff order:', err);
-      setErrorMessage(err.message || 'Failed to submit order to kitchen.');
+      setErrorMessage(err.message || 'Failed to submit order.');
     } finally {
       setIsSubmitting(false);
     }
@@ -759,15 +784,23 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                   )}
                 </div>
 
-                {/* Overall Kitchen Instructions Box */}
+                {/* Overall Instructions Box */}
                 <div className="pt-2 space-y-1.5">
                   <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                    <CookingPot className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Overall Kitchen Instructions</span>
+                    {isKitchenEnabled ? (
+                      <CookingPot className="w-3.5 h-3.5 text-amber-400" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                    <span>{isKitchenEnabled ? 'Overall Kitchen Instructions' : 'Overall Order Instructions'}</span>
                   </label>
                   <textarea
                     rows={2}
-                    placeholder="Overall kitchen instructions (e.g. serve starters first)..."
+                    placeholder={
+                      isKitchenEnabled
+                        ? 'Overall kitchen instructions (e.g. serve starters first)...'
+                        : 'Special instructions for this order...'
+                    }
                     value={orderNotes}
                     onChange={(e) => setOrderNotes(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 transition-colors resize-none"
@@ -775,7 +808,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                 </div>
               </div>
 
-              {/* Step 2 Bottom Section: Estimated Total & Big Send to Kitchen Button */}
+              {/* Step 2 Bottom Section: Estimated Total & Big Submit Button */}
               <div className="p-3 sm:p-4 bg-slate-950 border-t border-slate-800 space-y-3 shrink-0">
                 <div className="flex items-center justify-between text-xs sm:text-sm px-1">
                   <span className="text-slate-400 font-medium">Estimated Total ({totalItemsCount} items):</span>
@@ -784,7 +817,7 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                   </span>
                 </div>
 
-                {/* Big Send to Kitchen Button & Back to Menu Action */}
+                {/* Big Submit Button & Back to Menu Action */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
@@ -803,9 +836,15 @@ export const StaffOrderModal: React.FC<StaffOrderModalProps> = ({
                     disabled={isSubmitting || cart.length === 0}
                     className="sm:col-span-2 h-12 min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/30 active:scale-[0.99]"
                   >
-                    <CookingPot className="w-5 h-5 text-white" />
+                    {isKitchenEnabled ? (
+                      <CookingPot className="w-5 h-5 text-white" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5 text-white" />
+                    )}
                     <span>
-                      {isSubmitting ? 'SENDING TO KITCHEN...' : 'SEND TO KITCHEN'}
+                      {isSubmitting
+                        ? (isKitchenEnabled ? 'SENDING TO KITCHEN...' : 'CONFIRMING ORDER...')
+                        : (isKitchenEnabled ? 'SEND TO KITCHEN' : 'CONFIRM ORDER')}
                     </span>
                   </button>
                 </div>

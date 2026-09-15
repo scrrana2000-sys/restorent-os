@@ -12,9 +12,16 @@ import {
   extractInvitationTokenFromUrl,
   isPublicBillRoute,
   isCustomTabAuthRoute,
+  isCustomerDiscoveryRoute,
+  isCustomerRestaurantRoute,
+  extractRestaurantIdentifierFromUrl,
+  buildPublicRestaurantUrl,
   PRODUCTION_BASE_PATH
 } from './utils/urlUtils';
 import { CustomTabAuthPage } from './pages/CustomTabAuthPage';
+import { PublicCustomerDiscoveryPage } from './pages/PublicCustomerDiscoveryPage';
+import { CustomerRestaurantPage } from './pages/customer/CustomerRestaurantPage';
+import { CustomerRestaurantMenuPage } from './pages/customer/CustomerRestaurantMenuPage';
 
 // Code-split non-POS views for optimal bundle size and initial app load performance
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -42,20 +49,102 @@ const ViewFallback = () => (
 const AdminApp: React.FC = () => {
   const { user, profile, loading } = useAuth();
   const [currentView, setCurrentView] = useState<AdminView>('pos');
+  const [routeState, setRouteState] = useState<number>(0);
 
-  // Check if current URL is an invitation acceptance route
+  // Listen for browser hash and history navigation
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setRouteState((prev) => prev + 1);
+    };
+
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
+
+  // Check route conditions
   const isAcceptInvitation = isInvitationRoute();
   const invitationToken = extractInvitationTokenFromUrl();
   const isPublicBill = isPublicBillRoute();
   const isCustomTabAuth = isCustomTabAuthRoute();
+  const isCustomerRestaurant = isCustomerRestaurantRoute();
+  const restaurantIdentifier = extractRestaurantIdentifierFromUrl();
+  const isCustomerDiscovery = isCustomerDiscoveryRoute();
 
   if (isCustomTabAuth) {
     return <CustomTabAuthPage />;
   }
 
+  // M9-F Customer Restaurant Public Menu Route (/r/:slug/menu, #r/:slug/menu, ?r=:slug&view=menu, etc.)
+  if (isCustomerRestaurant && restaurantIdentifier?.isMenu) {
+    return (
+      <CustomerRestaurantMenuPage
+        slug={restaurantIdentifier?.slug}
+        code={restaurantIdentifier?.code}
+        onBack={() => {
+          const target = restaurantIdentifier?.slug || restaurantIdentifier?.code || '';
+          if (target) {
+            window.location.hash = `r/${target}`;
+          } else {
+            const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
+            window.location.href = `${base}?view=discover`;
+          }
+        }}
+        onViewProfile={(profile) => {
+          window.location.hash = `r/${profile.publicSlug}`;
+        }}
+        onBackToDiscovery={() => {
+          if (window.location.hash) {
+            window.location.hash = 'discover';
+          } else {
+            const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
+            window.location.href = `${base}?view=discover`;
+          }
+        }}
+      />
+    );
+  }
+
+  // M9-E Customer Restaurant Public Profile Route (/r/:slug, #r/:slug, ?r=:slug, etc.)
+  if (isCustomerRestaurant) {
+    return (
+      <CustomerRestaurantPage
+        slug={restaurantIdentifier?.slug}
+        code={restaurantIdentifier?.code}
+        onViewMenu={(profile) => {
+          window.location.hash = `r/${profile.publicSlug}/menu`;
+        }}
+        onBackToDiscovery={() => {
+          if (window.location.hash) {
+            window.location.hash = 'discover';
+          } else {
+            const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
+            window.location.href = `${base}?view=discover`;
+          }
+        }}
+      />
+    );
+  }
+
+  // M9-D Customer Restaurant Discovery Route (?view=discover, #discover, etc.)
+  if (isCustomerDiscovery) {
+    return (
+      <PublicCustomerDiscoveryPage
+        onBackToApp={() => {
+          const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
+          window.location.href = base;
+        }}
+      />
+    );
+  }
+
   // Automatically correct/redirect currentView if it is unauthorized for the user's role
   useEffect(() => {
-    if (user && profile && !isAcceptInvitation && !isPublicBill && !isCustomTabAuth) {
+    if (user && profile && !isAcceptInvitation && !isPublicBill && !isCustomTabAuth && !isCustomerDiscovery && !isCustomerRestaurant) {
       const role = profile.role || 'owner';
       if (!isViewAllowed(role, currentView)) {
         const views: AdminView[] = ['pos', 'captain', 'kitchen', 'orders', 'payments', 'inventory', 'dashboard', 'staff', 'restaurant', 'categories', 'items', 'reports', 'audit'];
@@ -65,7 +154,7 @@ const AdminApp: React.FC = () => {
         }
       }
     }
-  }, [user, profile, currentView, isAcceptInvitation, isPublicBill]);
+  }, [user, profile, currentView, isAcceptInvitation, isPublicBill, isCustomerDiscovery, isCustomerRestaurant]);
 
   if (isPublicBill) {
     return (

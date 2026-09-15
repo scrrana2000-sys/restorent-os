@@ -459,8 +459,19 @@ export const LoginPage: React.FC = () => {
           )}
         </div>
 
+        {/* Customer Discovery Link */}
+        <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+          <a
+            href="?view=discover"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <span>Are you a customer? Discover Restaurants & Order</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </a>
+        </div>
+
         {/* Milestone Indicator */}
-        <p className="mt-6 text-center text-xs text-slate-500">
+        <p className="mt-4 text-center text-xs text-slate-500">
           RestaurantOS Foundation • Milestone 1 • Cloud Firestore
         </p>
       </div>

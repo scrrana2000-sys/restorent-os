@@ -415,6 +415,18 @@ service cloud.firestore {
     }
 
     // ============================================================
+    // PUBLIC RESTAURANTS DISCOVERY
+    // Sanitized, non-sensitive public discovery collection.
+    // Read-only to public customers; writable only by restaurant owners/managers.
+    // ============================================================
+    match /publicRestaurants/{restaurantId} {
+      allow read: if true;
+      allow write: if isSignedIn() && (
+        isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager')
+      );
+    }
+
+    // ============================================================
     // DEFAULT DENY
     // ============================================================
 
@@ -423,3 +435,4 @@ service cloud.firestore {
     }
   }
 }
+

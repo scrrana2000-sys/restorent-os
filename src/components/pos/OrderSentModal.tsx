@@ -29,7 +29,7 @@ export const OrderSentModal: React.FC<OrderSentModalProps> = ({
     return () => clearTimeout(timer);
   }, [isOpen, onClose]);
 
-  if (!isOpen || !order || !kot) return null;
+  if (!isOpen || !order) return null;
 
   const orderType = order.orderType;
 
@@ -41,10 +41,10 @@ export const OrderSentModal: React.FC<OrderSentModalProps> = ({
           <CheckCircle2 className="w-10 h-10" />
         </div>
 
-        {/* Clear Big Headline for Low Literacy */}
+        {/* Clear Big Headline */}
         <div>
           <h2 className="text-lg font-black text-slate-900 tracking-tight leading-tight uppercase">
-            ORDER SENT TO KITCHEN
+            {kot ? 'ORDER SENT TO KITCHEN' : 'ORDER CREATED'}
           </h2>
           <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-black">
             {orderType === 'dineIn' ? (
@@ -64,7 +64,7 @@ export const OrderSentModal: React.FC<OrderSentModalProps> = ({
               </>
             )}
             <span className="text-slate-400">•</span>
-            <span>KOT #{kot.kotNumber}</span>
+            <span>{kot ? `KOT #${kot.kotNumber}` : `#${order.orderNumber}`}</span>
           </div>
         </div>
 

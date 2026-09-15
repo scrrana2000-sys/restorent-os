@@ -5,6 +5,7 @@ export interface VoiceAssistantSettings {
   alwaysListening: boolean;
   spokenResponses: boolean;
   language: VoiceLanguage;
+  completelyHidden?: boolean;
 }
 
 const SETTINGS_KEY = 'restaurantos_voice_settings';
@@ -14,7 +15,8 @@ const DEFAULT_SETTINGS: VoiceAssistantSettings = {
   enabled: true,
   alwaysListening: false,
   spokenResponses: true,
-  language: 'auto'
+  language: 'auto',
+  completelyHidden: false
 };
 
 export function getVoiceAssistantSettings(): VoiceAssistantSettings {
@@ -64,10 +66,15 @@ export function markAssistantIntroShown(): void {
 export const VOICE_ASSISTANT_TOGGLE_EVENT = 'restaurantos_voice_assistant_toggle';
 
 export function setVoiceAssistantEnabled(enabled: boolean): VoiceAssistantSettings {
-  const updated = saveVoiceAssistantSettings({ enabled });
+  const updated = saveVoiceAssistantSettings({
+    enabled,
+    ...(enabled ? { completelyHidden: false } : {})
+  });
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
-      new CustomEvent(VOICE_ASSISTANT_TOGGLE_EVENT, { detail: { enabled } })
+      new CustomEvent(VOICE_ASSISTANT_TOGGLE_EVENT, {
+        detail: { enabled, completelyHidden: updated.completelyHidden }
+      })
     );
   }
   return updated;
@@ -75,8 +82,26 @@ export function setVoiceAssistantEnabled(enabled: boolean): VoiceAssistantSettin
 
 export function toggleVoiceAssistant(): boolean {
   const current = getVoiceAssistantSettings();
-  const next = !current.enabled;
-  setVoiceAssistantEnabled(next);
+  const isCurrentlyActive = current.enabled && !current.completelyHidden;
+  const next = !isCurrentlyActive;
+  if (next) {
+    setVoiceAssistantEnabled(true);
+  } else {
+    setVoiceAssistantCompletelyHidden(true);
+  }
   return next;
 }
+
+export function setVoiceAssistantCompletelyHidden(completelyHidden: boolean): VoiceAssistantSettings {
+  const updated = saveVoiceAssistantSettings({ completelyHidden, enabled: !completelyHidden });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(VOICE_ASSISTANT_TOGGLE_EVENT, {
+        detail: { enabled: !completelyHidden, completelyHidden }
+      })
+    );
+  }
+  return updated;
+}
+
 

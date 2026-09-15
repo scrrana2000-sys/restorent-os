@@ -13,8 +13,10 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { Restaurant, RestaurantFormData } from '../types/restaurant';
+import { FULL_SERVICE_CAPABILITIES } from '../config/restaurantOperatingModes';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { enforcePermission } from '../utils/permissions';
+import { syncPublicRestaurantProfile } from './customerDiscoveryService';
 
 export async function getRestaurantById(restaurantId: string): Promise<Restaurant | null> {
   console.log('[RestaurantOS Debug] getRestaurantById lookup:', {
@@ -169,6 +171,8 @@ export async function getOrCreateInitialRestaurant(
         provisioningType: 'initial_owner',
         createdBy: userId,
         isActive: true,
+        restaurantOperatingMode: 'full_service',
+        restaurantCapabilities: { ...FULL_SERVICE_CAPABILITIES },
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -205,10 +209,21 @@ export async function updateRestaurantProfile(
       ...data,
       updatedAt: serverTimestamp()
     });
+
+    // Best-effort sync to public discovery profile
+    try {
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        await syncPublicRestaurantProfile({ restaurantId: snap.id, ...snap.data() } as Restaurant);
+      }
+    } catch (syncErr) {
+      console.warn('[RestaurantOS Discovery] Best-effort public sync warning:', syncErr);
+    }
   } catch (error) {
     throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${restaurantId}`);
   }
 }
+
 
 export function subscribeToRestaurant(
   restaurantId: string,
@@ -269,6 +284,8 @@ export async function createRestaurantBranch(
       provisioningType: 'explicit_outlet',
       createdBy: userId,
       isActive: true,
+      restaurantOperatingMode: 'full_service',
+      restaurantCapabilities: { ...FULL_SERVICE_CAPABILITIES },
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
@@ -280,7 +297,13 @@ export async function createRestaurantBranch(
     });
 
     await setDoc(restaurantRef, newRestaurant);
+    try {
+      await syncPublicRestaurantProfile(newRestaurant);
+    } catch (syncErr) {
+      console.warn('[RestaurantOS Discovery] Best-effort public sync warning on branch create:', syncErr);
+    }
     return newRestaurant;
+
   } catch (error) {
     console.error('[RestaurantOS Debug] createRestaurantBranch error:', error);
     throw handleFirestoreError(error, OperationType.CREATE, 'restaurants');

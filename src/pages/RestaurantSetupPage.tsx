@@ -1,8 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Store, Building2, MapPin, Receipt, Globe, Save, CheckCircle2, AlertCircle, Plus, LayoutGrid, Check, Search } from 'lucide-react';
+import {
+  Store,
+  Building2,
+  MapPin,
+  Receipt,
+  Globe,
+  Save,
+  CheckCircle2,
+  AlertCircle,
+  Plus,
+  LayoutGrid,
+  Check,
+  Search,
+  Sliders,
+  Sparkles,
+  Mic,
+  MicOff,
+  CookingPot,
+  Layers,
+  Boxes,
+  Truck,
+  ShoppingBag,
+  Eye,
+  EyeOff
+} from 'lucide-react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useAuth } from '../context/AuthContext';
-import { RestaurantFormData, TaxMode } from '../types/restaurant';
+import { RestaurantFormData, TaxMode, RestaurantOperatingMode, RestaurantCapabilities } from '../types/restaurant';
 import { validateRestaurantSettings } from '../utils/validation';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
@@ -11,6 +35,13 @@ import { createRestaurantBranch } from '../services/restaurantService';
 import { TableManagementSection } from '../components/restaurant/TableManagementSection';
 import { PrinterSettingsSection } from '../components/restaurant/PrinterSettingsSection';
 import { auditUserRestaurants, DuplicateAuditReport } from '../services/duplicateRestaurantAuditService';
+import { getDefaultCapabilitiesForMode } from '../config/restaurantOperatingModes';
+import {
+  getVoiceAssistantSettings,
+  setVoiceAssistantCompletelyHidden,
+  VOICE_ASSISTANT_TOGGLE_EVENT,
+  VoiceAssistantSettings
+} from '../services/voice/voiceSettings';
 
 const CURRENCY_OPTIONS = [
   { code: 'INR', symbol: '₹', label: 'Indian Rupee (₹ INR)' },
@@ -42,8 +73,20 @@ export const RestaurantSetupPage: React.FC = () => {
     currencySymbol: '₹',
     timezone: 'Asia/Kolkata',
     taxMode: 'exclusive',
-    defaultTaxRate: 5.0
+    defaultTaxRate: 5.0,
+    restaurantOperatingMode: 'full_service',
+    restaurantCapabilities: getDefaultCapabilitiesForMode('full_service')
   });
+
+  const [voiceSettings, setVoiceSettings] = useState<VoiceAssistantSettings>(getVoiceAssistantSettings);
+
+  useEffect(() => {
+    const handleVoiceToggle = () => {
+      setVoiceSettings(getVoiceAssistantSettings());
+    };
+    window.addEventListener(VOICE_ASSISTANT_TOGGLE_EVENT, handleVoiceToggle);
+    return () => window.removeEventListener(VOICE_ASSISTANT_TOGGLE_EVENT, handleVoiceToggle);
+  }, []);
 
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -63,6 +106,10 @@ export const RestaurantSetupPage: React.FC = () => {
 
   useEffect(() => {
     if (restaurant) {
+      const mode = restaurant.restaurantOperatingMode || 'full_service';
+      const defaultCaps = getDefaultCapabilitiesForMode(mode);
+      const caps = restaurant.restaurantCapabilities || defaultCaps;
+
       setFormData({
         name: restaurant.name || '',
         legalName: restaurant.legalName || '',
@@ -79,14 +126,35 @@ export const RestaurantSetupPage: React.FC = () => {
         currencySymbol: restaurant.currencySymbol || '₹',
         timezone: restaurant.timezone || 'Asia/Kolkata',
         taxMode: restaurant.taxMode || 'exclusive',
-        defaultTaxRate: restaurant.defaultTaxRate !== undefined ? restaurant.defaultTaxRate : 5.0
+        defaultTaxRate: restaurant.defaultTaxRate !== undefined ? restaurant.defaultTaxRate : 5.0,
+        restaurantOperatingMode: mode,
+        restaurantCapabilities: caps
       });
     }
-    // Deliberately keyed on restaurantId only (not the whole `restaurant` object):
-    // subscribeToRestaurant() emits a fresh object on every live update, and
-    // depending on the full object here would wipe out in-progress edits
-    // (e.g. mid-typing) whenever any realtime update arrives.
   }, [restaurant?.restaurantId]);
+
+  const handleOperatingModeSelect = (mode: RestaurantOperatingMode) => {
+    const caps = getDefaultCapabilitiesForMode(mode);
+    setFormData((prev) => ({
+      ...prev,
+      restaurantOperatingMode: mode,
+      restaurantCapabilities: caps
+    }));
+  };
+
+  const handleCapabilityToggle = (capKey: keyof RestaurantCapabilities) => {
+    setFormData((prev) => {
+      const currentCaps = prev.restaurantCapabilities || getDefaultCapabilitiesForMode(prev.restaurantOperatingMode || 'full_service');
+      return {
+        ...prev,
+        restaurantOperatingMode: 'custom',
+        restaurantCapabilities: {
+          ...currentCaps,
+          [capKey]: !currentCaps[capKey]
+        }
+      };
+    });
+  };
 
   const handleCurrencyChange = (code: string) => {
     const selected = CURRENCY_OPTIONS.find((c) => c.code === code);
@@ -376,6 +444,267 @@ export const RestaurantSetupPage: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
               helperText="E.g. Asia/Kolkata, UTC, America/New_York"
             />
+          </div>
+        </div>
+
+        {/* Operating Model & Capabilities Configuration */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-6">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+            <Sliders className="w-5 h-5 text-indigo-600" />
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Adaptive Operating Model & Store Format</h3>
+              <p className="text-xs text-slate-500">Configure RestaurantOS workflow based on your operational scale and staffing</p>
+            </div>
+          </div>
+
+          {/* Operating Mode Selector Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Full Service */}
+            <div
+              id="mode-card-full-service"
+              onClick={() => handleOperatingModeSelect('full_service')}
+              className={`cursor-pointer rounded-xl p-4 border transition-all ${
+                formData.restaurantOperatingMode === 'full_service'
+                  ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-600/20 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                  FS
+                </div>
+                {formData.restaurantOperatingMode === 'full_service' && (
+                  <span className="p-1 rounded-full bg-indigo-600 text-white">
+                    <Check className="w-3 h-3" />
+                  </span>
+                )}
+              </div>
+              <h4 className="text-sm font-bold text-slate-900">Full Service</h4>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Traditional dine-in with Tables, Captains, Kitchen KOT, and Inventory management.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1">
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">Tables</span>
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">Captains</span>
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">Kitchen KOT</span>
+              </div>
+            </div>
+
+            {/* Single Person / Quick Counter */}
+            <div
+              id="mode-card-single-person"
+              onClick={() => handleOperatingModeSelect('single_person')}
+              className={`cursor-pointer rounded-xl p-4 border transition-all ${
+                formData.restaurantOperatingMode === 'single_person'
+                  ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-600/20 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs">
+                  1P
+                </div>
+                {formData.restaurantOperatingMode === 'single_person' && (
+                  <span className="p-1 rounded-full bg-indigo-600 text-white">
+                    <Check className="w-3 h-3" />
+                  </span>
+                )}
+              </div>
+              <h4 className="text-sm font-bold text-slate-900">Single Person / Quick Counter</h4>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Fast counter billing for 1 person. Direct charge & settlement. Tables optional, no kitchen KOT required.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1">
+                <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md font-medium">Direct Pay</span>
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">No Waiters</span>
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">Fast POS</span>
+              </div>
+            </div>
+
+            {/* Small Team */}
+            <div
+              id="mode-card-small-team"
+              onClick={() => handleOperatingModeSelect('small_team')}
+              className={`cursor-pointer rounded-xl p-4 border transition-all ${
+                formData.restaurantOperatingMode === 'small_team'
+                  ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-600/20 shadow-xs'
+                  : 'border-slate-200 hover:border-slate-300 bg-white'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
+                  ST
+                </div>
+                {formData.restaurantOperatingMode === 'small_team' && (
+                  <span className="p-1 rounded-full bg-indigo-600 text-white">
+                    <Check className="w-3 h-3" />
+                  </span>
+                )}
+              </div>
+              <h4 className="text-sm font-bold text-slate-900">Small Team / Cafe</h4>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Direct counter billing with optional kitchen KOT. No dedicated waiter/captain workflow.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1">
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">Kitchen KOT</span>
+                <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">Direct Pay</span>
+                <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-medium">Compact</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Granular Capabilities Toggles */}
+          <div className="pt-2 border-t border-slate-100">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-3">
+              Module Capabilities (Custom Controls)
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {/* Tables */}
+              <label id="cap-toggle-tables" className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-slate-600" />
+                  <span className="text-xs font-semibold text-slate-800">Tables & Floor</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.restaurantCapabilities?.tablesEnabled ?? true}
+                  onChange={() => handleCapabilityToggle('tablesEnabled')}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </label>
+
+              {/* Kitchen */}
+              <label id="cap-toggle-kitchen" className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <CookingPot className="w-4 h-4 text-slate-600" />
+                  <span className="text-xs font-semibold text-slate-800">Kitchen & KOT</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.restaurantCapabilities?.kitchenEnabled ?? true}
+                  onChange={() => handleCapabilityToggle('kitchenEnabled')}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </label>
+
+              {/* Captain */}
+              <label id="cap-toggle-captain" className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-slate-600" />
+                  <span className="text-xs font-semibold text-slate-800">Captain / Waiter App</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.restaurantCapabilities?.captainEnabled ?? true}
+                  onChange={() => handleCapabilityToggle('captainEnabled')}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </label>
+
+              {/* Inventory */}
+              <label id="cap-toggle-inventory" className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Boxes className="w-4 h-4 text-slate-600" />
+                  <span className="text-xs font-semibold text-slate-800">Inventory & Stock</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.restaurantCapabilities?.inventoryEnabled ?? true}
+                  onChange={() => handleCapabilityToggle('inventoryEnabled')}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </label>
+
+              {/* Takeaway */}
+              <label id="cap-toggle-takeaway" className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-4 h-4 text-slate-600" />
+                  <span className="text-xs font-semibold text-slate-800">Takeaway Orders</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.restaurantCapabilities?.takeawayEnabled ?? true}
+                  onChange={() => handleCapabilityToggle('takeawayEnabled')}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </label>
+
+              {/* Delivery */}
+              <label id="cap-toggle-delivery" className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-slate-600" />
+                  <span className="text-xs font-semibold text-slate-800">Delivery Orders</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.restaurantCapabilities?.deliveryEnabled ?? true}
+                  onChange={() => handleCapabilityToggle('deliveryEnabled')}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Voice Assistant Control Section */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-6">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+            <Sparkles className="w-5 h-5 text-indigo-600" />
+            <div>
+              <h3 className="text-base font-bold text-slate-900">AI Voice Assistant Visibility & Settings</h3>
+              <p className="text-xs text-slate-500">Manage voice assistant widget appearance and full close controls</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${voiceSettings.completelyHidden ? 'bg-slate-400' : voiceSettings.enabled ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                <h4 className="text-sm font-bold text-slate-900">
+                  Status:{' '}
+                  {voiceSettings.completelyHidden
+                    ? 'Fully Closed & Hidden from screen'
+                    : voiceSettings.enabled
+                    ? 'Active & Visible on screen'
+                    : 'Minimized / Floating button'}
+                </h4>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {voiceSettings.completelyHidden
+                  ? 'The voice assistant widget is completely hidden from the viewport. You can restore it anytime with the button on the right.'
+                  : 'Interactive AI voice assistant handles billing, stock queries, and navigation via voice.'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {voiceSettings.completelyHidden || !voiceSettings.enabled ? (
+                <button
+                  id="btn-show-voice-assistant"
+                  type="button"
+                  onClick={() => {
+                    const updated = setVoiceAssistantCompletelyHidden(false);
+                    setVoiceSettings(updated);
+                  }}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Show Voice Assistant</span>
+                </button>
+              ) : (
+                <button
+                  id="btn-hide-voice-assistant"
+                  type="button"
+                  onClick={() => {
+                    const updated = setVoiceAssistantCompletelyHidden(true);
+                    setVoiceSettings(updated);
+                  }}
+                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
+                >
+                  <EyeOff className="w-3.5 h-3.5" />
+                  <span>Fully Close Assistant</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

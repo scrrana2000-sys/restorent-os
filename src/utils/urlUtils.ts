@@ -252,3 +252,161 @@ export function isCustomTabAuthRoute(): boolean {
   return false;
 }
 
+/**
+ * Checks whether the current window location is a public customer discovery route (?view=discover or #discover or ?discover=true).
+ */
+export function isCustomerDiscoveryRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (
+      searchParams.get('view') === 'discover' ||
+      searchParams.get('mode') === 'customer' ||
+      searchParams.get('discover') === 'true'
+    ) {
+      return true;
+    }
+
+    if (window.location.hash) {
+      const hash = window.location.hash.toLowerCase();
+      if (
+        hash.includes('discover') ||
+        hash.includes('view=discover') ||
+        hash.includes('mode=customer')
+      ) {
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn('[RestaurantOS] Error checking customer discovery route:', err);
+  }
+
+  return false;
+}
+
+export interface PublicRestaurantRouteParams {
+  slug?: string;
+  code?: string;
+  isMenu?: boolean;
+}
+
+/**
+ * Builds the canonical public restaurant profile or menu URL.
+ * Preserves GitHub Pages compatibility through hash routing or path routing.
+ *
+ * Example:
+ * buildPublicRestaurantUrl('sharma-sweets-raichur') -> https://scrrana2000-sys.github.io/restorent-os/#r/sharma-sweets-raichur
+ * buildPublicRestaurantUrl('sharma-sweets-raichur', true) -> https://scrrana2000-sys.github.io/restorent-os/#r/sharma-sweets-raichur/menu
+ */
+export function buildPublicRestaurantUrl(slugOrCode: string, isMenu: boolean = false): string {
+  const cleanId = (slugOrCode || '').trim();
+  const baseUrl = getPublicAppBaseUrl();
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const suffix = isMenu ? '/menu' : '';
+  return `${normalizedBase}#r/${encodeURIComponent(cleanId)}${suffix}`;
+}
+
+/**
+ * Safely extracts restaurant identifier (slug or code) and menu intent from URL path, hash, or query parameters.
+ */
+export function extractRestaurantIdentifierFromUrl(): PublicRestaurantRouteParams | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    // 1. Check Search Parameters (?r=xxx or ?slug=xxx or ?code=xxx or ?restaurant=xxx)
+    const searchParams = new URLSearchParams(window.location.search);
+    const querySlug = searchParams.get('r') || searchParams.get('slug') || searchParams.get('restaurant');
+    const queryCode = searchParams.get('code');
+    const isMenuQuery = searchParams.get('menu') === 'true' || searchParams.get('view') === 'menu';
+
+    if (querySlug && querySlug.trim()) {
+      const trimmed = querySlug.trim();
+      if (trimmed.startsWith('R-') || trimmed.startsWith('r-') || trimmed.startsWith('ROS-') || trimmed.startsWith('ros-')) {
+        return {
+          code: trimmed.toUpperCase(),
+          isMenu: isMenuQuery
+        };
+      }
+      return {
+        slug: trimmed,
+        isMenu: isMenuQuery
+      };
+    }
+
+    if (queryCode && queryCode.trim()) {
+      return {
+        code: queryCode.trim().toUpperCase(),
+        isMenu: isMenuQuery
+      };
+    }
+
+    // 2. Check Hash Route (e.g. #r/slug, #/r/slug, #r/slug/menu, #code=R-0YG9I)
+    if (window.location.hash) {
+      const hash = window.location.hash;
+      const cleanHash = hash.startsWith('#') ? hash.slice(1) : hash;
+
+      // Handle hash query params like #r=slug or #?r=slug
+      if (cleanHash.includes('=')) {
+        const queryStart = cleanHash.indexOf('?');
+        const hashQueryStr = queryStart !== -1 ? cleanHash.slice(queryStart + 1) : cleanHash;
+        const hashParams = new URLSearchParams(hashQueryStr);
+        const hashSlug = hashParams.get('r') || hashParams.get('slug') || hashParams.get('restaurant');
+        const hashCode = hashParams.get('code');
+        const hashMenu = hashParams.get('menu') === 'true' || hashParams.get('view') === 'menu';
+
+        if (hashSlug && hashSlug.trim()) {
+          return { slug: hashSlug.trim(), isMenu: hashMenu };
+        }
+        if (hashCode && hashCode.trim()) {
+          return { code: hashCode.trim().toUpperCase(), isMenu: hashMenu };
+        }
+      }
+
+      // Handle route patterns like #r/slug or #/r/slug/menu or #restaurant/slug
+      const normalizedPath = cleanHash.startsWith('/') ? cleanHash.slice(1) : cleanHash;
+      const parts = normalizedPath.split('/').filter(Boolean);
+
+      if (parts[0] === 'r' || parts[0] === 'restaurant') {
+        const identifier = parts[1];
+        const isMenu = parts[2] === 'menu';
+        if (identifier && identifier.trim()) {
+          const trimmed = identifier.trim();
+          if (trimmed.startsWith('R-') || trimmed.startsWith('r-')) {
+            return { code: trimmed.toUpperCase(), isMenu };
+          }
+          return { slug: trimmed, isMenu };
+        }
+      }
+    }
+
+    // 3. Check Pathname (e.g. /r/:slug or /restorent-os/r/:slug)
+    const pathname = window.location.pathname || '';
+    const pathParts = pathname.split('/').filter(Boolean);
+    const rIndex = pathParts.findIndex((p) => p === 'r' || p === 'restaurant');
+
+    if (rIndex !== -1 && pathParts[rIndex + 1]) {
+      const identifier = pathParts[rIndex + 1].trim();
+      const isMenu = pathParts[rIndex + 2] === 'menu';
+      if (identifier) {
+        if (identifier.startsWith('R-') || identifier.startsWith('r-')) {
+          return { code: identifier.toUpperCase(), isMenu };
+        }
+        return { slug: identifier, isMenu };
+      }
+    }
+  } catch (err) {
+    console.warn('[RestaurantOS] Error extracting restaurant identifier from URL:', err);
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether the current window location represents a customer restaurant profile route.
+ */
+export function isCustomerRestaurantRoute(): boolean {
+  return extractRestaurantIdentifierFromUrl() !== null;
+}
+
+

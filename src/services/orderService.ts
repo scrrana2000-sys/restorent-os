@@ -31,6 +31,11 @@ import { sanitizeFirestoreData } from '../utils/sanitize';
 import { stockConsumptionService } from './stockConsumptionService';
 import { orderFinalizationService } from './orderFinalizationService';
 import { parseTimestampToMillis } from '../utils/dateUtils';
+import { Restaurant } from '../types/restaurant';
+import {
+  getRestaurantOperatingProfile,
+  RestaurantOperatingProfile
+} from '../config/restaurantOperatingModes';
 
 export interface CreateOrderFromCartInput {
   restaurantId: string;
@@ -44,6 +49,12 @@ export interface CreateOrderFromCartInput {
   taxJurisdiction?: TaxJurisdiction;
   createdBy?: string;
   clientRequestId?: string; // Phase 2G idempotency preparation
+  skipTableSessionValidation?: boolean;
+}
+
+export interface CreateOrderForOperatingModeInput extends CreateOrderFromCartInput {
+  operatingProfile?: RestaurantOperatingProfile;
+  restaurant?: Restaurant | null;
 }
 
 export interface OrderHistoryFilterOptions {
@@ -199,7 +210,7 @@ export class OrderService implements IOrderService {
     await enforcePermission(cleanRestaurantId, 'create_orders');
 
     // 1. Validate Dine-In Pre-conditions
-    if (orderType === 'dineIn') {
+    if (orderType === 'dineIn' && !input.skipTableSessionValidation) {
       if (!tableSessionId || typeof tableSessionId !== 'string' || tableSessionId.trim() === '') {
         throw new Error('Dine-in orders require a valid tableSessionId.');
       }
@@ -417,7 +428,9 @@ export class OrderService implements IOrderService {
     };
 
     // 4. Validate complete order structure and financial invariants
-    const validation = validateOrder(orderPayload);
+    const validation = validateOrder(orderPayload, {
+      skipTableRequirement: input.skipTableSessionValidation || !orderPayload.tableId
+    });
     if (!validation.isValid) {
       throw new Error(`Order validation failed: ${validation.error}`);
     }
@@ -455,7 +468,7 @@ export class OrderService implements IOrderService {
     await enforcePermission(cleanRestaurantId, 'create_orders');
 
     // 1. Validate Dine-In Pre-conditions
-    if (orderType === 'dineIn') {
+    if (orderType === 'dineIn' && !input.skipTableSessionValidation) {
       if (!tableSessionId || typeof tableSessionId !== 'string' || tableSessionId.trim() === '') {
         throw new Error('Dine-in orders require a valid tableSessionId.');
       }
@@ -794,7 +807,9 @@ export class OrderService implements IOrderService {
     };
 
     // 4. Validate complete order structure
-    const orderValidation = validateOrder(orderPayload);
+    const orderValidation = validateOrder(orderPayload, {
+      skipTableRequirement: input.skipTableSessionValidation || !orderPayload.tableId
+    });
     if (!orderValidation.isValid) {
       throw new Error(`Order validation failed: ${orderValidation.error}`);
     }
@@ -971,6 +986,38 @@ export class OrderService implements IOrderService {
   }
 
   /**
+   * Safe service-level workflow abstraction for creating orders according to the active
+   * operating mode and capabilities of the restaurant.
+   *
+   * - If kitchen workflow is enabled: dispatches through authoritative Order + KOT pipeline.
+   * - If kitchen workflow is disabled (e.g. single_person mode): creates canonical Order
+   *   without generating redundant KOT records, preserving all financial calculations,
+   *   minor integer units, taxes, discounts, audit logs, and inventory consumption.
+   */
+  async createOrderForOperatingMode(
+    input: CreateOrderForOperatingModeInput
+  ): Promise<{ order: Order; kot: KOT | null }> {
+    const { restaurant, operatingProfile } = input;
+    const resolvedProfile = operatingProfile || (restaurant ? getRestaurantOperatingProfile(restaurant) : getRestaurantOperatingProfile(null));
+
+    const skipTableSession = !resolvedProfile.capabilities.tablesEnabled;
+
+    if (resolvedProfile.capabilities.kitchenEnabled) {
+      const res = await this.createOrderAndKOTFromCart({
+        ...input,
+        skipTableSessionValidation: skipTableSession
+      });
+      return { order: res.order, kot: res.kot };
+    } else {
+      const order = await this.createOrderFromCart({
+        ...input,
+        skipTableSessionValidation: skipTableSession
+      });
+      return { order, kot: null };
+    }
+  }
+
+  /**
    * Persists a pre-constructed order entity into Firestore.
    * Hardened with Idempotency Key binding to prevent duplicate orders across retries/network drops.
    */
@@ -983,7 +1030,9 @@ export class OrderService implements IOrderService {
     const path = ordersPath(cleanRestaurantId);
 
     // Validate order
-    const validation = validateOrder(orderData);
+    const validation = validateOrder(orderData, {
+      skipTableRequirement: !orderData.tableId
+    });
     if (!validation.isValid) {
       throw new Error(`Order validation failed: ${validation.error}`);
     }

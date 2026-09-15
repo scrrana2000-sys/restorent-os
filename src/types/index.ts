@@ -20,3 +20,4 @@ export * from './supplier';
 export * from './purchaseOrder';
 export * from './recipe';
 export * from './printer';
+export * from './customer';

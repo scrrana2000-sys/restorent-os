@@ -1,8 +1,21 @@
 # RestaurantOS — Master Project State & Status
 
 ## Current Milestone & Phase Status
-- **Current Active Milestone**: Milestone 11 — Global RestaurantOS Voice Assistant
-- **Active Operational Phase**: Phase 11E Final Adversarial Integration + Regression Verification COMPLETE & VERIFIED
+- **Current Active Milestone**: Milestone 8.5 — Adaptive Operating Model & Small Restaurant Mode
+- **Active Operational Phase**: M8.5 Final Release Gate & Verification COMPLETE & VERIFIED
+- **Milestone 8.5 Status**: COMPLETE / VERIFIED
+  - **Single Person / Quick Counter Mode**: Streamlined single-operator workflow (`tablesEnabled: false`, `kitchenEnabled: false`, `captainEnabled: false`), suppressing table selection, KOT generation, and captain dispatch while enabling direct review and counter payment.
+  - **Small Team / Cafe Mode**: Optimized for counter ordering with separate kitchen preparation (`kitchenEnabled: true`, `captainEnabled: false`), sending KOTs directly to Kitchen Display while eliminating captain steps.
+  - **Full Service Mode**: Preserves comprehensive end-to-end multi-step operations (POS → Tables → Sessions → Captain → KOT → Kitchen → Billing → Settlement → Inventory → Reports → Staff) without regressions.
+  - **Custom Configuration Mode**: Granular capability toggles for maximum operational flexibility (`tablesEnabled`, `kitchenEnabled`, `captainEnabled`, `inventoryEnabled`, `takeawayEnabled`, `deliveryEnabled`, `paymentsEnabled`).
+  - **Central Operating Profile Resolver (`getRestaurantOperatingProfile`)**: Single authoritative function deriving active capabilities, navigation visibility, workflow properties, and POS behaviors with zero duplicated logic.
+  - **Adaptive POS Interface**: Header dynamically renders only valid order types (`allowedOrderTypes`), auto-reconciling active selections and hiding table selectors when tables are disabled.
+  - **Dynamic Order Types**: Automatically filters order types based on capabilities (e.g., tables OFF eliminates Dine-In; takeaway OFF eliminates Takeaway; delivery OFF eliminates Delivery).
+  - **Direct Counter Payment**: Instant billing and settlement for counter workflows (`allowDirectPayment: true`) without requiring KOT completion or table closure preconditions.
+  - **Backward Compatibility**: Seamless fallbacks for legacy restaurant documents lacking operating mode or capability fields, safely defaulting to `full_service` profile.
+  - **RBAC Preservation**: Operating profile strictly governs UX and workflow ergonomics; authorization and tenant boundary security are enforced at RBAC rules and Firestore levels. No client flag may bypass permissions.
+  - **Tenant Isolation**: Restaurant configurations and operating profiles remain strictly restaurant-scoped and switch cleanly across multi-outlet contexts without cross-tenant state leakage.
+  - **AI Assistant Full Close Integration**: Single global assistant instance supports three states (`ACTIVE`, `MINIMIZED`, `FULLY_CLOSED`). In `FULLY_CLOSED`, the widget completely unmounts, ceases microphone/speech activity, and persists state across reloads, with a restore toggle provided in Restaurant Setup.
 - **Voice Ordering & Global Assistant Status**: COMPLETE & VERIFIED
   - Single Global Assistant architecture mounted at authenticated application shell (`AdminLayout.tsx`)
   - Canonical Assistant Character rendered consistently across all views
@@ -32,6 +45,13 @@
 - **Milestone 6 — Security, Multi-Device, Staff Operations & Role Management (Phases 6A–6F)**: COMPLETE & LOCKED
 - **Milestone 7 — Inventory, Stock Ledger, Procurement, Recipe Consumption & Intelligence (Phases 7A–7F)**: COMPLETE & LOCKED
 - **Milestone 8 — Printer & Hardware Integration (Phases 8A–8B)**: COMPLETE / CONDITIONAL
+- **Milestone 8.5 — Adaptive Operating Model & Small Restaurant Mode**: COMPLETE & VERIFIED
+- **Milestone 9 — Customer App & Online Ordering**: IN PROGRESS
+  - **Phase 9A — Public Restaurant Identity & Safe Model**: COMPLETE & VERIFIED
+  - **Phase 9B — Public Restaurant Discovery Service / Query**: COMPLETE & VERIFIED
+  - **Phase 9C — Customer Location Context & Manual City Fallback**: COMPLETE & VERIFIED
+- **Milestone 10 — Multi-Branch & Chain Enterprise Management**: NOT STARTED *(Protected / Future Scope)*
+
 - **Milestone 11 — Global RestaurantOS Assistant & Voice-Assisted POS Engine**: COMPLETE & VERIFIED
 - **Phase 3 — Billing → Payment → Completion → Table Close Lifecycle**: COMPLETE & LOCKED
 - **Phase 3.5 / 3.6 — Financial & Operational Integrity Hardening**: COMPLETE & LOCKED
@@ -63,11 +83,17 @@ The production Firebase project environment has been migrated and verified:
 
 ## Verification & Build Status
 
-- **Test Suite**: 81 test files in repository, 100% pass rate
-- **TypeScript Check**: PASS (`npx tsc --noEmit` -> exit code 0)
-- **Linter Check**: PASS (`npm run lint` -> exit code 0)
+- **Repository Verification**: COMPLETE / VERIFIED
+- **Live Firebase**: NOT VERIFIED
+- **Test Suite Results**:
+  - **Total Test Files**: 98 test files
+  - **Total Tests**: 1,311 tests
+  - **Passed**: 1,311 tests (100% pass rate)
+  - **Failed**: 0 failed
+  - **Skipped**: 0 skipped
+- **TypeScript**: PASS (`npx tsc --noEmit` -> exit code 0)
+- **Lint**: PASS (`npm run lint` -> exit code 0)
 - **Production Build**: PASS (`npm run build` -> exit code 0)
-- **Vitest Execution**: PASS (`npx vitest run` -> exit code 0)
 
 ---
 
@@ -143,6 +169,39 @@ A Dine-In table session cannot be closed if any of the following conditions exis
 3. Active, non-terminal KOTs exist.
 - When closing a table session after payment settlement, any remaining active KOTs are automatically transitioned to served with an audit log event (`session_closed_auto_served`).
 - Once all protections are satisfied, the session closes, `table.activeSessionId` is cleared, table status becomes `available`, and an audit event (`session_closed`) is recorded.
+
+### 6. Adaptive Operating Model & Small Restaurant Modes (Milestone 8.5)
+The application dynamically adapts its workflow, POS behavior, and navigation according to the restaurant's operational profile:
+- **Operating Modes**:
+  - **Single Person / Quick Counter (`single_person`)**: Tailored for solo counter operators and kiosks. Suppresses table selection, KOT kitchen routing, and captain ordering. Enables direct counter review and settlement.
+  - **Small Team / Cafe (`small_team`)**: Designed for quick counter ordering backed by a dedicated prep kitchen. Suppresses captain order flow while retaining KOTs and Kitchen Display operations.
+  - **Full Service (`full_service`)**: Traditional multi-tier restaurant workflow (Tables → Sessions → Captain → KOT → Kitchen → Billing → Settlement). Default for legacy or unconfigured restaurants.
+  - **Custom Configuration (`custom`)**: Granular control permitting restaurant owners to toggle any individual capability based on operational requirements.
+- **Granular Capability Toggles (`RestaurantCapabilities`)**:
+  - `tablesEnabled`: Governs table management view, table selector in POS, and Dine-In eligibility.
+  - `kitchenEnabled`: Governs KDS / Kitchen Queue view and KOT dispatch requirements before payment.
+  - `captainEnabled`: Governs Captain / Staff mobile order view and Captain modal workflows.
+  - `inventoryEnabled`: Governs Stock & Inventory Ledger views.
+  - `takeawayEnabled`: Controls takeaway order type availability.
+  - `deliveryEnabled`: Controls delivery order type availability.
+  - `paymentsEnabled`: Controls financial settlement flows.
+- **Authoritative Profile Resolver (`getRestaurantOperatingProfile`)**:
+  - Single pure function calculating active capabilities, navigation visibility, workflow properties, and POS configuration.
+  - Gracefully falls back to `full_service` profile when mode or capabilities are omitted or undefined.
+- **Adaptive POS Interface & Dynamic Order Types**:
+  - Automatically filters available order types (`allowedOrderTypes`), eliminating Dine-In when `tablesEnabled: false`, Takeaway when `takeawayEnabled: false`, and Delivery when `deliveryEnabled: false`.
+  - Dynamically reconciles active selection to valid default when restaurant configuration changes.
+  - Shows table selector only when `tablesEnabled: true`.
+- **Direct Counter Payment Flow**:
+  - When `kitchenEnabled: false` (e.g. `single_person`), `posBehavior.allowDirectPayment` is activated, allowing immediate "Review & Pay" checkout without intermediate KOT lifecycle requirements.
+- **RBAC & Security Preservation**:
+  - Operating modes only modify presentation and UX workflows.
+  - All operations remain strictly governed by user roles (`owner`, `manager`, `cashier`, `kitchen`, `captain`, `accountant`) and Firestore security rules. No client-side capability flag can bypass backend authorization.
+- **Tenant Isolation**:
+  - All operating modes and capability configurations are stored strictly within the scoped restaurant document. Switching restaurants instantly refreshes the operating profile without state leakage.
+- **AI Assistant Full Close Integration**:
+  - Supports three lifecycle states: `ACTIVE`, `MINIMIZED`, and `FULLY_CLOSED`.
+  - In `FULLY_CLOSED`, the floating widget completely unmounts, speech recognition is aborted, speech bubbles are suppressed, and the closed preference is stored in local persistence. A "Restore Voice Assistant" control in Restaurant Setup allows reactivation.
 
 ---
 
