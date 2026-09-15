@@ -94,7 +94,7 @@ const PublicCustomerDiscoveryPageContent: React.FC<PublicCustomerDiscoveryPagePr
                   RestaurantOS
                 </span>
                 <span className="text-[9px] sm:text-[10px] font-bold text-orange-600 uppercase tracking-wider block truncate">
-                  Glass-Neumorphic Customer Experience
+                  Online Food Discovery
                 </span>
               </div>
             </div>
