@@ -19,7 +19,8 @@ import {
   ChevronRight,
   FileText,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Lock
 } from 'lucide-react';
 import { useCustomerCart } from '../../context/CustomerCartContext';
 import {
@@ -88,7 +89,7 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
     deliveryInstructions: initialDeliveryDetails?.deliveryInstructions || ''
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('upi');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [validationResult, setValidationResult] = useState<CheckoutValidationResult | null>(null);
   const [createdIntent, setCreatedIntent] = useState<CustomerCheckoutIntent | null>(null);
 
@@ -576,46 +577,44 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
                   <button
                     type="button"
                     id="checkout-payment-upi"
-                    onClick={() => setPaymentMethod('upi')}
-                    className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all min-h-[48px] ${
-                      paymentMethod === 'upi'
-                        ? 'border-orange-600 bg-orange-50/50 text-orange-950 shadow-2xs font-bold'
-                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
-                    }`}
+                    disabled={true}
+                    className="w-full p-3 rounded-2xl border border-slate-100 bg-slate-50/60 text-slate-400 text-left flex items-center justify-between transition-all min-h-[48px] opacity-65 cursor-not-allowed"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
                         <QrCode className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="text-xs font-bold block text-slate-900">UPI / QR Code</span>
-                        <span className="text-[10px] text-slate-500">Google Pay, PhonePe, Paytm</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold block text-slate-400">UPI / QR Code</span>
+                          <span className="px-1.5 py-0.5 bg-slate-200/80 text-slate-500 text-[8px] font-extrabold uppercase tracking-wider rounded-md">Coming soon</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">Google Pay, PhonePe, Paytm</span>
                       </div>
                     </div>
-                    {paymentMethod === 'upi' && <Check className="w-4 h-4 text-orange-600" />}
+                    <Lock className="w-4 h-4 text-slate-400" />
                   </button>
 
                   {/* Card */}
                   <button
                     type="button"
                     id="checkout-payment-card"
-                    onClick={() => setPaymentMethod('card')}
-                    className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all min-h-[48px] ${
-                      paymentMethod === 'card'
-                        ? 'border-orange-600 bg-orange-50/50 text-orange-950 shadow-2xs font-bold'
-                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
-                    }`}
+                    disabled={true}
+                    className="w-full p-3 rounded-2xl border border-slate-100 bg-slate-50/60 text-slate-400 text-left flex items-center justify-between transition-all min-h-[48px] opacity-65 cursor-not-allowed"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
                         <CreditCard className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="text-xs font-bold block text-slate-900">Credit / Debit Card</span>
-                        <span className="text-[10px] text-slate-500">Visa, Mastercard, RuPay</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold block text-slate-400">Credit / Debit Card</span>
+                          <span className="px-1.5 py-0.5 bg-slate-200/80 text-slate-500 text-[8px] font-extrabold uppercase tracking-wider rounded-md">Coming soon</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">Visa, Mastercard, RuPay</span>
                       </div>
                     </div>
-                    {paymentMethod === 'card' && <Check className="w-4 h-4 text-orange-600" />}
+                    <Lock className="w-4 h-4 text-slate-400" />
                   </button>
 
                   {/* Cash */}
@@ -625,7 +624,7 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
                     onClick={() => setPaymentMethod('cash')}
                     className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all min-h-[48px] ${
                       paymentMethod === 'cash'
-                        ? 'border-orange-600 bg-orange-50/50 text-orange-950 shadow-2xs font-bold'
+                        ? 'border-emerald-600 bg-emerald-50/50 text-emerald-950 shadow-2xs font-bold'
                         : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
                     }`}
                   >
@@ -634,13 +633,16 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
                         <Banknote className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="text-xs font-bold block text-slate-900">
-                          {orderType === 'delivery' ? 'Cash on Delivery' : 'Pay at Counter'}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold block text-slate-900">
+                            {orderType === 'delivery' ? 'Cash on Delivery' : 'Pay at Counter'}
+                          </span>
+                          <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-extrabold uppercase tracking-wider rounded-md">Active</span>
+                        </div>
                         <span className="text-[10px] text-slate-500">Pay when receiving order</span>
                       </div>
                     </div>
-                    {paymentMethod === 'cash' && <Check className="w-4 h-4 text-orange-600" />}
+                    {paymentMethod === 'cash' && <Check className="w-4 h-4 text-emerald-600" />}
                   </button>
                 </div>
               </div>

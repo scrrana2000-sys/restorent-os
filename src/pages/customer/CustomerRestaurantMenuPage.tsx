@@ -82,6 +82,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
 
   // Checkout Modal state
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState<boolean>(false);
+  const orderJustSubmittedRef = useRef(false);
 
   // Local fallback cart counters if context is bypassed
   const [localCartCount, setLocalCartCount] = useState<number>(cartItemCount);
@@ -927,7 +928,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
             {/* Customer Cart Drawer */}
             <CustomerCartDrawer
               restaurantProfile={restaurant}
-              menuItems={menuData ? menuData.categories.flatMap((c) => c.items) : undefined}
+              menuItems={menuData ? menuData.allItems : undefined}
               onCheckout={() => {
                 closeCartDrawer();
                 setIsCheckoutModalOpen(true);
@@ -937,9 +938,19 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
             {/* Customer Checkout Modal */}
             <CustomerCheckoutModal
               isOpen={isCheckoutModalOpen}
-              onClose={() => setIsCheckoutModalOpen(false)}
+              onClose={() => {
+                setIsCheckoutModalOpen(false);
+                if (!orderJustSubmittedRef.current) {
+                  openCartDrawer();
+                } else {
+                  orderJustSubmittedRef.current = false;
+                }
+              }}
+              onOrderSubmitted={() => {
+                orderJustSubmittedRef.current = true;
+              }}
               restaurantProfile={restaurant}
-              menuItems={menuData ? menuData.categories.flatMap((c) => c.items) : undefined}
+              menuItems={menuData ? menuData.allItems : undefined}
               onEditCart={() => {
                 setIsCheckoutModalOpen(false);
                 openCartDrawer();

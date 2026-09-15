@@ -156,6 +156,9 @@ const AdminApp: React.FC = () => {
       onOpenOwnerCentral={() => {
         window.location.hash = 'owner';
       }}
+      onSelectRestaurant={(restaurant) => {
+        window.location.hash = `r/${restaurant.publicSlug}`;
+      }}
     />
   );
 };
