@@ -201,38 +201,38 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-4 sm:py-12 px-3 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background accents */}
       <div className="absolute inset-0 bg-[radial-gradient(#312e81_1px,transparent_1px)] [background-size:24px_24px] opacity-25" />
-      <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-indigo-600/15 blur-3xl" />
-      <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-indigo-900/20 blur-3xl" />
+      <div className="absolute -top-32 -right-32 w-72 sm:w-96 h-72 sm:h-96 rounded-full bg-indigo-600/15 blur-3xl" />
+      <div className="absolute -bottom-32 -left-32 w-72 sm:w-96 h-72 sm:h-96 rounded-full bg-indigo-900/20 blur-3xl" />
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         <div className="flex justify-center">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white shadow-xl shadow-indigo-600/30">
-            <UtensilsCrossed className="w-7 h-7" />
+          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white shadow-lg sm:shadow-xl shadow-indigo-600/30">
+            <UtensilsCrossed className="w-5 h-5 sm:w-7 sm:h-7" />
           </div>
         </div>
-        <h2 className="mt-5 text-center text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+        <h2 className="mt-3 sm:mt-5 text-center text-xl sm:text-3xl font-extrabold text-white tracking-tight">
           Restaurant<span className="text-indigo-400">OS</span>
         </h2>
-        <p className="mt-1.5 text-center text-xs sm:text-sm text-slate-400">
+        <p className="mt-1 text-center text-xs sm:text-sm text-slate-400">
           {isRegistering ? 'Create your Web Admin owner account' : 'Sign in to your restaurant admin console'}
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4 sm:px-0">
-        <div className="bg-white py-8 px-6 sm:px-10 shadow-2xl rounded-3xl border border-slate-100">
+      <div className="mt-4 sm:mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-0 sm:px-0">
+        <div className="bg-white py-5 px-4 sm:py-8 sm:px-10 shadow-xl sm:shadow-2xl rounded-2xl sm:rounded-3xl border border-slate-100">
           {/* Primary Google Sign-In Card */}
           <div className="space-y-3">
             <button
               type="button"
               onClick={handleGoogleSignIn}
               disabled={isGoogleLoading || isLoading}
-              className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-3 transition-all transform active:scale-[0.99] disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              className="w-full py-2.5 sm:py-3.5 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs sm:text-sm shadow-md sm:shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2.5 sm:gap-3 transition-all transform active:scale-[0.99] disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer"
             >
-              <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-white flex items-center justify-center shrink-0">
+                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
                     d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
@@ -344,11 +344,11 @@ export const LoginPage: React.FC = () => {
           )}
 
           {/* Divider with toggle for Email/Password */}
-          <div className="relative my-6">
+          <div className="relative my-4 sm:my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-200" />
             </div>
-            <div className="relative flex justify-center text-xs">
+            <div className="relative flex justify-center text-[11px] sm:text-xs">
               <button
                 type="button"
                 onClick={() => {
@@ -356,7 +356,7 @@ export const LoginPage: React.FC = () => {
                   setError(null);
                   setIsOperationNotAllowed(false);
                 }}
-                className="bg-white px-3 text-slate-500 hover:text-indigo-600 font-medium tracking-tight transition-colors"
+                className="bg-white px-2.5 text-slate-500 hover:text-indigo-600 font-medium tracking-tight transition-colors cursor-pointer"
               >
                 {showEmailAuth ? '▲ Hide Email Options' : '▼ Or sign in with Email & Password'}
               </button>
@@ -460,13 +460,13 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Customer Discovery Link */}
-        <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+        <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-100 text-center">
           <a
             href="?view=discover"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors"
+            className="inline-flex items-center justify-center gap-1.5 text-[11px] sm:text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg transition-colors max-w-full"
           >
-            <span>Are you a customer? Discover Restaurants & Order</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span className="truncate">Are you a customer? Discover Restaurants & Order</span>
+            <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
           </a>
         </div>
 

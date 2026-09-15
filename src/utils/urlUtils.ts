@@ -253,10 +253,67 @@ export function isCustomTabAuthRoute(): boolean {
 }
 
 /**
- * Checks whether the current window location is a public customer discovery route (?view=discover or #discover or ?discover=true).
+ * Checks whether the current window location represents the Owner Central route (/owner, #owner, ?view=owner, ?owner=true).
+ */
+export function isOwnerCentralRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const pathname = window.location.pathname || '';
+    const cleanPath = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+    if (cleanPath.endsWith('/owner') || pathname.includes('/owner/')) {
+      return true;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    if (
+      searchParams.get('view') === 'owner' ||
+      searchParams.get('mode') === 'owner' ||
+      searchParams.get('owner') === 'true'
+    ) {
+      return true;
+    }
+
+    if (window.location.hash) {
+      const hash = window.location.hash.toLowerCase();
+      if (
+        hash === '#owner' ||
+        hash.startsWith('#owner?') ||
+        hash.startsWith('#/owner') ||
+        hash.includes('view=owner') ||
+        hash.includes('mode=owner')
+      ) {
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn('[RestaurantOS] Error checking owner central route:', err);
+  }
+
+  return false;
+}
+
+/**
+ * Builds the canonical public URL for Owner Central (/owner or #owner).
+ */
+export function buildOwnerCentralUrl(): string {
+  const baseUrl = getPublicAppBaseUrl();
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBase}#owner`;
+}
+
+/**
+ * Checks whether the current window location is a public customer discovery route (?view=discover or #discover or ?discover=true or default root).
  */
 export function isCustomerDiscoveryRoute(): boolean {
   if (typeof window === 'undefined') return false;
+
+  // Owner central and other explicit public routes take precedence
+  if (isOwnerCentralRoute()) return false;
+  if (isCustomerRestaurantRoute()) return false;
+  if (isPublicBillRoute()) return false;
+  if (isInvitationRoute()) return false;
+  if (isCustomTabAuthRoute()) return false;
 
   try {
     const searchParams = new URLSearchParams(window.location.search);
@@ -277,12 +334,19 @@ export function isCustomerDiscoveryRoute(): boolean {
       ) {
         return true;
       }
+      // If hash exists and is something else (not discover), return false
+      if (hash && hash !== '#' && !hash.startsWith('#discover')) {
+        return false;
+      }
     }
+
+    // Default root path is the Customer Front Door
+    return true;
   } catch (err) {
     console.warn('[RestaurantOS] Error checking customer discovery route:', err);
   }
 
-  return false;
+  return true;
 }
 
 export interface PublicRestaurantRouteParams {

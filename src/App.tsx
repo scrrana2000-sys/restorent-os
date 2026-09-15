@@ -14,6 +14,7 @@ import {
   isCustomTabAuthRoute,
   isCustomerDiscoveryRoute,
   isCustomerRestaurantRoute,
+  isOwnerCentralRoute,
   extractRestaurantIdentifierFromUrl,
   buildPublicRestaurantUrl,
   PRODUCTION_BASE_PATH
@@ -22,6 +23,7 @@ import { CustomTabAuthPage } from './pages/CustomTabAuthPage';
 import { PublicCustomerDiscoveryPage } from './pages/PublicCustomerDiscoveryPage';
 import { CustomerRestaurantPage } from './pages/customer/CustomerRestaurantPage';
 import { CustomerRestaurantMenuPage } from './pages/customer/CustomerRestaurantMenuPage';
+import { OwnerCentralPage } from './pages/OwnerCentralPage';
 
 // Code-split non-POS views for optimal bundle size and initial app load performance
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -47,8 +49,6 @@ const ViewFallback = () => (
 );
 
 const AdminApp: React.FC = () => {
-  const { user, profile, loading } = useAuth();
-  const [currentView, setCurrentView] = useState<AdminView>('pos');
   const [routeState, setRouteState] = useState<number>(0);
 
   // Listen for browser hash and history navigation
@@ -73,88 +73,11 @@ const AdminApp: React.FC = () => {
   const isCustomTabAuth = isCustomTabAuthRoute();
   const isCustomerRestaurant = isCustomerRestaurantRoute();
   const restaurantIdentifier = extractRestaurantIdentifierFromUrl();
-  const isCustomerDiscovery = isCustomerDiscoveryRoute();
+  const isOwnerCentral = isOwnerCentralRoute();
 
   if (isCustomTabAuth) {
     return <CustomTabAuthPage />;
   }
-
-  // M9-F Customer Restaurant Public Menu Route (/r/:slug/menu, #r/:slug/menu, ?r=:slug&view=menu, etc.)
-  if (isCustomerRestaurant && restaurantIdentifier?.isMenu) {
-    return (
-      <CustomerRestaurantMenuPage
-        slug={restaurantIdentifier?.slug}
-        code={restaurantIdentifier?.code}
-        onBack={() => {
-          const target = restaurantIdentifier?.slug || restaurantIdentifier?.code || '';
-          if (target) {
-            window.location.hash = `r/${target}`;
-          } else {
-            const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
-            window.location.href = `${base}?view=discover`;
-          }
-        }}
-        onViewProfile={(profile) => {
-          window.location.hash = `r/${profile.publicSlug}`;
-        }}
-        onBackToDiscovery={() => {
-          if (window.location.hash) {
-            window.location.hash = 'discover';
-          } else {
-            const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
-            window.location.href = `${base}?view=discover`;
-          }
-        }}
-      />
-    );
-  }
-
-  // M9-E Customer Restaurant Public Profile Route (/r/:slug, #r/:slug, ?r=:slug, etc.)
-  if (isCustomerRestaurant) {
-    return (
-      <CustomerRestaurantPage
-        slug={restaurantIdentifier?.slug}
-        code={restaurantIdentifier?.code}
-        onViewMenu={(profile) => {
-          window.location.hash = `r/${profile.publicSlug}/menu`;
-        }}
-        onBackToDiscovery={() => {
-          if (window.location.hash) {
-            window.location.hash = 'discover';
-          } else {
-            const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
-            window.location.href = `${base}?view=discover`;
-          }
-        }}
-      />
-    );
-  }
-
-  // M9-D Customer Restaurant Discovery Route (?view=discover, #discover, etc.)
-  if (isCustomerDiscovery) {
-    return (
-      <PublicCustomerDiscoveryPage
-        onBackToApp={() => {
-          const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
-          window.location.href = base;
-        }}
-      />
-    );
-  }
-
-  // Automatically correct/redirect currentView if it is unauthorized for the user's role
-  useEffect(() => {
-    if (user && profile && !isAcceptInvitation && !isPublicBill && !isCustomTabAuth && !isCustomerDiscovery && !isCustomerRestaurant) {
-      const role = profile.role || 'owner';
-      if (!isViewAllowed(role, currentView)) {
-        const views: AdminView[] = ['pos', 'captain', 'kitchen', 'orders', 'payments', 'inventory', 'dashboard', 'staff', 'restaurant', 'categories', 'items', 'reports', 'audit'];
-        const firstAllowed = views.find((v) => isViewAllowed(role, v));
-        if (firstAllowed) {
-          setCurrentView(firstAllowed);
-        }
-      }
-    }
-  }, [user, profile, currentView, isAcceptInvitation, isPublicBill, isCustomerDiscovery, isCustomerRestaurant]);
 
   if (isPublicBill) {
     return (
@@ -176,59 +99,64 @@ const AdminApp: React.FC = () => {
     );
   }
 
-  const userRole = profile?.role || 'owner';
-
-  if (loading) {
+  // M9-F Customer Restaurant Public Menu Route (/r/:slug/menu, #r/:slug/menu, ?r=:slug&view=menu, etc.)
+  if (isCustomerRestaurant && restaurantIdentifier?.isMenu) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white shadow-2xl shadow-indigo-600/40 animate-pulse mb-4">
-          <UtensilsCrossed className="w-8 h-8" />
-        </div>
-        <h1 className="text-xl font-bold text-white tracking-tight">RestaurantOS</h1>
-        <p className="text-xs text-slate-400 mt-1">Connecting to Firestore cloud database...</p>
-      </div>
+      <CustomerRestaurantMenuPage
+        slug={restaurantIdentifier?.slug}
+        code={restaurantIdentifier?.code}
+        onBack={() => {
+          const target = restaurantIdentifier?.slug || restaurantIdentifier?.code || '';
+          if (target) {
+            window.location.hash = `r/${target}`;
+          } else {
+            window.location.hash = 'discover';
+          }
+        }}
+        onViewProfile={(profile) => {
+          window.location.hash = `r/${profile.publicSlug}`;
+        }}
+        onBackToDiscovery={() => {
+          window.location.hash = 'discover';
+        }}
+      />
     );
   }
 
-  if (!user) {
-    return <LoginPage />;
+  // M9-E Customer Restaurant Public Profile Route (/r/:slug, #r/:slug, ?r=:slug, etc.)
+  if (isCustomerRestaurant) {
+    return (
+      <CustomerRestaurantPage
+        slug={restaurantIdentifier?.slug}
+        code={restaurantIdentifier?.code}
+        onViewMenu={(profile) => {
+          window.location.hash = `r/${profile.publicSlug}/menu`;
+        }}
+        onBackToDiscovery={() => {
+          window.location.hash = 'discover';
+        }}
+      />
+    );
   }
 
-  const allowedToView = isViewAllowed(userRole, currentView);
+  // M9-K Owner Central Route (/owner, #owner, ?view=owner, ?owner=true)
+  if (isOwnerCentral) {
+    return (
+      <OwnerCentralPage
+        onBackToCustomerHome={() => {
+          window.location.hash = 'discover';
+        }}
+      />
+    );
+  }
 
+  // M9-K Customer Front Door at Root / (and #discover, ?view=discover)
   return (
-    <RestaurantProvider>
-      <AdminLayout currentView={currentView} onNavigate={setCurrentView}>
-        {allowedToView ? (
-          <Suspense fallback={<ViewFallback />}>
-            {currentView === 'pos' && <PosPage onNavigate={setCurrentView} />}
-            {currentView === 'captain' && <CaptainPage onNavigate={setCurrentView} />}
-            {currentView === 'kitchen' && <KitchenPage />}
-            {currentView === 'orders' && <OrdersPage />}
-            {currentView === 'payments' && <PaymentsPage />}
-            {currentView === 'inventory' && <InventoryPage />}
-            {currentView === 'dashboard' && <DashboardPage onNavigate={setCurrentView} />}
-            {currentView === 'staff' && <StaffPage />}
-            {currentView === 'restaurant' && <RestaurantSetupPage />}
-            {currentView === 'categories' && <CategoriesPage />}
-            {currentView === 'items' && <ItemsPage />}
-            {currentView === 'reports' && <ReportsPage />}
-            {currentView === 'audit' && <AuditPage />}
-            {currentView === 'settings' && <RestaurantSetupPage />}
-          </Suspense>
-        ) : (
-          <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center max-w-md mx-auto my-12 shadow-sm">
-            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4 border border-red-200/60">
-              <ShieldAlert className="w-6 h-6" />
-            </div>
-            <h2 className="text-base font-bold text-slate-900 mb-1.5">Unauthorized View</h2>
-            <p className="text-xs text-slate-600 mb-6 leading-relaxed">
-              Your staff role ({userRole}) does not have permission to access the "{currentView}" panel.
-            </p>
-          </div>
-        )}
-      </AdminLayout>
-    </RestaurantProvider>
+    <PublicCustomerDiscoveryPage
+      onOpenOwnerCentral={() => {
+        window.location.hash = 'owner';
+      }}
+    />
   );
 };
 
