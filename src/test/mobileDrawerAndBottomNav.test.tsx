@@ -259,4 +259,25 @@ describe('Mobile Drawer + Bottom Navigation Architecture & Layering Fixes', () =
     expect(screen.getByRole('button', { name: /^Kitchen$/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^More$/i })).toBeTruthy();
   });
+
+  // 9. Sidebar drawer contains Sign Out / Logout action
+  it('9. Sidebar drawer renders Sign Out button and calls logout on click', () => {
+    const handleNavigate = vi.fn();
+    const handleClose = vi.fn();
+
+    render(
+      <Sidebar
+        currentView="pos"
+        onNavigate={handleNavigate}
+        isOpenMobile={true}
+        onCloseMobile={handleClose}
+      />
+    );
+
+    const logoutBtn = screen.getByRole('button', { name: /Sign Out \/ Logout/i });
+    expect(logoutBtn).toBeTruthy();
+    expect(logoutBtn.className).toContain('min-h-[44px]');
+    fireEvent.click(logoutBtn);
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
 });

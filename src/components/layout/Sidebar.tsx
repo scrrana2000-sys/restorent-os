@@ -17,7 +17,10 @@ import {
   Users,
   X,
   ChevronDown,
-  Check
+  Check,
+  LogOut,
+  User,
+  Home
 } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
@@ -31,17 +34,19 @@ interface SidebarProps {
   onNavigate: (view: AdminView) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
+  onBackToCustomerHome?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentView,
   onNavigate,
   isOpenMobile,
-  onCloseMobile
+  onCloseMobile,
+  onBackToCustomerHome
 }) => {
   const { restaurant, operatingProfile, availableRestaurants, switchRestaurant, isSwitching } = useRestaurant();
   const resolvedProfile = operatingProfile || getRestaurantOperatingProfile(restaurant);
-  const { user, profile } = useAuth();
+  const { user, profile, logout } = useAuth();
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
 
   // Lock body scroll when mobile drawer is open to prevent accidental background scrolling
@@ -309,9 +314,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
+        {/* User Account & Logout Section */}
+        <div className="p-3 border-t border-slate-800 bg-slate-950/60 shrink-0 space-y-2">
+          <div className="flex items-center gap-2.5 px-2 py-1">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm border border-indigo-400/30">
+              {profile?.displayName ? profile.displayName.charAt(0).toUpperCase() : user?.email ? user.email.charAt(0).toUpperCase() : 'A'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-white truncate">
+                {profile?.displayName || user?.displayName || 'Administrator'}
+              </p>
+              <p className="text-[10px] text-slate-400 truncate">
+                {user?.email || 'Owner Account'}
+              </p>
+            </div>
+          </div>
+
+          {onBackToCustomerHome && (
+            <button
+              id="sidebar-back-to-customer-btn"
+              type="button"
+              onClick={() => {
+                onCloseMobile();
+                onBackToCustomerHome();
+              }}
+              className="w-full min-h-[44px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-indigo-300 hover:text-indigo-200 bg-indigo-950/40 hover:bg-indigo-950/70 border border-indigo-800/40 active:scale-95 transition-all shadow-xs"
+            >
+              <Home className="w-4 h-4 text-indigo-400 shrink-0" />
+              <span>Back to Customer Home</span>
+            </button>
+          )}
+
+          <button
+            id="sidebar-logout-btn"
+            type="button"
+            onClick={async () => {
+              onCloseMobile();
+              try {
+                await logout();
+              } catch (err) {
+                console.error('Sidebar Logout error:', err);
+              }
+            }}
+            className="w-full min-h-[44px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-950/70 border border-rose-800/40 active:scale-95 transition-all shadow-xs"
+          >
+            <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>Sign Out / Logout</span>
+          </button>
+        </div>
+
         {/* Footer info (Bottom safe area aware) */}
-        <div className="p-3 pb-safe border-t border-slate-800 text-center bg-slate-900 shrink-0">
-          <div className="px-3 py-2 rounded-xl bg-slate-800/50 text-[11px] text-slate-400 flex items-center justify-between">
+        <div className="px-3 py-2 pb-safe border-t border-slate-800/80 text-center bg-slate-900 shrink-0">
+          <div className="px-3 py-1.5 rounded-xl bg-slate-800/50 text-[10px] text-slate-400 flex items-center justify-between">
             <span className="font-mono">v0.1.0</span>
             <span className="inline-flex items-center gap-1 text-indigo-400 font-semibold">
               <Sparkles className="w-3 h-3" />

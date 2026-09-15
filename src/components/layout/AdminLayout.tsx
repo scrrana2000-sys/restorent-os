@@ -14,12 +14,15 @@ interface AdminLayoutProps {
   currentView: AdminView;
   onNavigate: (view: AdminView) => void;
   children: React.ReactNode;
+  onSwitchRestaurant?: () => void;
+  onBackToCustomerHome?: () => void;
 }
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({
   currentView,
   onNavigate,
-  children
+  children,
+  onBackToCustomerHome
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { restaurant, operatingProfile, error, retry, loading: restaurantLoading, isSwitching } = useRestaurant();
@@ -27,6 +30,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
   // Deterministic Back button handling for mobile sidebar menu
   useModalBackHandler(isMobileMenuOpen, () => setIsMobileMenuOpen(false), 'admin-mobile-sidebar');
+
+  React.useEffect(() => {
+    (window as any).openAdminMobileMenu = () => setIsMobileMenuOpen(true);
+    return () => {
+      delete (window as any).openAdminMobileMenu;
+    };
+  }, []);
 
   const isViewOperationallyDisabled =
     (currentView === 'kitchen' && !resolvedProfile.capabilities.kitchenEnabled) ||
@@ -66,6 +76,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         onNavigate={onNavigate}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onBackToCustomerHome={onBackToCustomerHome}
       />
 
       {/* Main Content Area */}
