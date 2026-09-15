@@ -43,6 +43,8 @@ export interface CustomerLocationContextValue {
   setManualLocation: (city: string, state?: string, area?: string) => void;
   /** Set location by IndianCity data object with optional area */
   selectCity: (cityObj: IndianCity, area?: string) => void;
+  /** Set location via resolved Indian 6-digit PIN code */
+  setPincodeLocation: (city: string, state: string, area: string | undefined, postalCode: string) => void;
   /** Clears the current location and resets to idle */
   resetLocation: () => void;
   /** Prepares normalized discovery criteria for M9-B customerDiscoveryService */
@@ -73,7 +75,8 @@ function getStoredLocationPreference(): CustomerLocation | null {
         city: parsed.city.trim(),
         state: typeof parsed.state === 'string' ? parsed.state.trim() : undefined,
         area: typeof parsed.area === 'string' ? parsed.area.trim() : undefined,
-        source: parsed.source === 'gps' ? 'gps' : 'manual',
+        postalCode: typeof parsed.postalCode === 'string' ? parsed.postalCode.trim() : undefined,
+        source: parsed.source === 'gps' ? 'gps' : parsed.source === 'pincode' ? 'pincode' : 'manual',
         isApproximate: true
       };
     }
@@ -84,7 +87,7 @@ function getStoredLocationPreference(): CustomerLocation | null {
 }
 
 /**
- * Persists safe city/state/area preference without raw GPS coordinates.
+ * Persists safe city/state/area/postalCode preference without raw GPS coordinates.
  */
 function storeLocationPreference(loc: CustomerLocation | null) {
   if (typeof window === 'undefined' || !window.localStorage) return;
@@ -96,6 +99,7 @@ function storeLocationPreference(loc: CustomerLocation | null) {
         city: loc.city,
         state: loc.state,
         area: loc.area,
+        postalCode: loc.postalCode,
         source: loc.source
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(safeData));
@@ -182,6 +186,31 @@ export const CustomerLocationProvider: React.FC<CustomerLocationProviderProps> =
     setErrorMessage(null);
     storeLocationPreference(newLoc);
   }, []);
+
+  /**
+   * Selects location via resolved Indian 6-digit PIN code.
+   */
+  const setPincodeLocation = useCallback(
+    (city: string, state: string, area: string | undefined, postalCode: string) => {
+      const trimmedCity = city ? city.trim() : '';
+      if (!trimmedCity) return;
+
+      const newLoc: CustomerLocation = {
+        city: trimmedCity,
+        state: state?.trim() || undefined,
+        area: area?.trim() || undefined,
+        postalCode: postalCode?.trim() || undefined,
+        source: 'pincode',
+        isApproximate: false
+      };
+
+      setLocation(newLoc);
+      setStatus('available');
+      setErrorMessage(null);
+      storeLocationPreference(newLoc);
+    },
+    []
+  );
 
   /**
    * Clears location and removes persisted preference.
@@ -297,6 +326,7 @@ export const CustomerLocationProvider: React.FC<CustomerLocationProviderProps> =
         city: location.city,
         state: location.state,
         area: location.area,
+        postalCode: location.postalCode,
         ...additionalFilters
       };
     },
@@ -309,10 +339,11 @@ export const CustomerLocationProvider: React.FC<CustomerLocationProviderProps> =
     errorMessage,
     isLoading: status === 'requesting',
     isDenied: status === 'denied',
-    isManual: location?.source === 'manual' || location?.source === 'city-selection',
+    isManual: location?.source === 'manual' || location?.source === 'city-selection' || location?.source === 'pincode',
     requestLocation,
     setManualLocation,
     selectCity,
+    setPincodeLocation,
     resetLocation,
     getDiscoveryCriteria
   }), [
@@ -322,6 +353,7 @@ export const CustomerLocationProvider: React.FC<CustomerLocationProviderProps> =
     requestLocation,
     setManualLocation,
     selectCity,
+    setPincodeLocation,
     resetLocation,
     getDiscoveryCriteria
   ]);

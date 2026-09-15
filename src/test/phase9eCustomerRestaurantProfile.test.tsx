@@ -408,14 +408,16 @@ describe('M9-E Customer Restaurant Public Profile', () => {
       expect(handleViewMenu).toHaveBeenCalledWith(mockPublicRestaurant1);
     });
 
-    it('(24b) shows M9-F preview notice modal if onViewMenu prop is not provided', () => {
+    it('(24b) transitions directly to public menu view without showing stale M9-F popup when onViewMenu prop is not provided', async () => {
       render(<CustomerRestaurantPage initialProfile={mockPublicRestaurant1} />);
 
       fireEvent.click(screen.getByText('View Menu'));
-      expect(screen.getByText(/Public menu browsing and customer food ordering will be activated in the upcoming Milestone/i)).toBeInTheDocument();
-
-      fireEvent.click(screen.getByText('Close Preview'));
+      
+      // M9-F coming-soon modal must NOT exist
       expect(screen.queryByText(/Public menu browsing and customer food ordering will be activated in the upcoming Milestone/i)).toBeNull();
+
+      // Menu view transition
+      expect(await screen.findByText(mockPublicRestaurant1.name)).toBeInTheDocument();
     });
   });
 

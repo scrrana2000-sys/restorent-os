@@ -17,6 +17,7 @@ import {
   updateUserProfileRestaurantId
 } from '../services/authService';
 import { staffService } from '../services/staffService';
+import { syncPublicRestaurantProfile } from '../services/customerDiscoveryService';
 import { auth, db } from '../config/firebase';
 import { doc, getDoc, collectionGroup, getDocs, query, where } from 'firebase/firestore';
 import { StaffRole } from '../types/auth';
@@ -522,6 +523,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setRestaurant(resolvedRestaurant);
         setActiveRestaurantId(resolvedRestaurant.restaurantId);
         setError(null);
+
+        // Ensure public discovery profile is synchronized
+        if (resolvedRestaurant) {
+          syncPublicRestaurantProfile(resolvedRestaurant).catch((syncErr) => {
+            console.warn('[RestaurantOS Debug] Public discovery projection sync notice:', syncErr);
+          });
+        }
 
         // Fetch available restaurants in the background
         fetchAvailableRestaurants(user.uid, resolvedRestaurant.restaurantId)

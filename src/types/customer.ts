@@ -40,6 +40,7 @@ export interface RestaurantDiscoveryCriteria {
   city: string;
   state?: string;
   area?: string;
+  postalCode?: string;
   searchQuery?: string;
   cuisine?: string;
   deliveryOnly?: boolean;
@@ -80,9 +81,10 @@ export interface CustomerLocation {
   city: string;
   state?: string;
   area?: string;
+  postalCode?: string;
   latitude?: number;
   longitude?: number;
-  source: 'gps' | 'manual' | 'city-selection' | 'default';
+  source: 'gps' | 'manual' | 'city-selection' | 'pincode' | 'default';
   isApproximate: boolean;
 }
 

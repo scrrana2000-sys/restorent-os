@@ -23,6 +23,7 @@ import {
   generateDeterministicRestaurantSlug,
   toPublicRestaurantProfile
 } from '../utils/publicRestaurantIdentity';
+import { normalizeCityName, getCitySearchTerms } from '../utils/cityNormalization';
 
 const DEFAULT_PAGE_SIZE = 12;
 const MAX_PAGE_SIZE = 30;
@@ -31,8 +32,7 @@ const MAX_PAGE_SIZE = 30;
  * Normalizes a city or area name for consistent matching.
  */
 export function normalizeLocationTerm(term: string | undefined): string {
-  if (!term) return '';
-  return term.trim().toLowerCase();
+  return normalizeCityName(term);
 }
 
 /**
@@ -41,8 +41,15 @@ export function normalizeLocationTerm(term: string | undefined): string {
  * is always fast, indexable, and never touches private `restaurants/{restaurantId}` documents.
  */
 export async function syncPublicRestaurantProfile(restaurant: Restaurant): Promise<PublicRestaurantProfile> {
+  if (!restaurant || !restaurant.restaurantId) {
+    throw new Error('Valid restaurant object with restaurantId is required for public sync');
+  }
+
   const publicProfile = toPublicRestaurantProfile(restaurant);
   const publicDocRef = doc(db, 'publicRestaurants', restaurant.restaurantId);
+
+  const normalizedCity = normalizeCityName(publicProfile.city);
+  const normalizedArea = (publicProfile.area || '').trim().toLowerCase();
 
   const payload: Record<string, any> = {
     restaurantId: publicProfile.restaurantId,
@@ -55,10 +62,10 @@ export async function syncPublicRestaurantProfile(restaurant: Restaurant): Promi
     phone: publicProfile.phone,
     address: publicProfile.address,
     city: publicProfile.city,
-    cityLower: normalizeLocationTerm(publicProfile.city),
+    cityLower: normalizedCity,
     state: publicProfile.state,
     area: publicProfile.area,
-    areaLower: normalizeLocationTerm(publicProfile.area),
+    areaLower: normalizedArea,
     postalCode: publicProfile.postalCode,
     country: publicProfile.country,
     currency: publicProfile.currency,
@@ -85,7 +92,10 @@ export async function discoverRestaurants(
   criteria: RestaurantDiscoveryCriteria
 ): Promise<PaginatedDiscoveryResult> {
   const city = criteria.city ? criteria.city.trim() : '';
-  if (!city) {
+  const trimmedSearchQuery = criteria.searchQuery ? criteria.searchQuery.trim() : '';
+
+  // If no city AND no search query is provided, return empty
+  if (!city && !trimmedSearchQuery) {
     return {
       restaurants: [],
       nextCursor: null,
@@ -96,26 +106,45 @@ export async function discoverRestaurants(
     };
   }
 
-  const normalizedCity = normalizeLocationTerm(city);
-  const normalizedArea = normalizeLocationTerm(criteria.area);
+  const cityTerms = city ? getCitySearchTerms(city) : [];
+  const normalizedArea = (criteria.area || '').trim().toLowerCase();
   const pageSize = Math.min(Math.max(criteria.limit || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
 
   try {
-    // Query publicRestaurants collection by cityLower
     const publicCol = collection(db, 'publicRestaurants');
-    let q = query(
-      publicCol,
-      where('cityLower', '==', normalizedCity),
-      where('publicStatus', '==', 'active'),
-      where('onlineOrderingEnabled', '==', true),
-      firestoreLimit(pageSize + 1)
-    );
+    let snapshot;
 
-    const snapshot = await getDocs(q);
+    if (cityTerms.length > 0) {
+      // Query by city variations using Firestore 'in' query or '==' query
+      const firestoreCityFilter = cityTerms.length === 1
+        ? where('cityLower', '==', cityTerms[0])
+        : where('cityLower', 'in', cityTerms.slice(0, 10));
+
+      const q = query(
+        publicCol,
+        firestoreCityFilter,
+        firestoreLimit(pageSize * 3) // Fetch a slightly larger batch for in-memory status/area/cuisine filtering
+      );
+      snapshot = await getDocs(q);
+    } else {
+      // Fallback if city is not set but an explicit search query was entered by the user
+      const q = query(publicCol, firestoreLimit(MAX_PAGE_SIZE));
+      snapshot = await getDocs(q);
+    }
+
     let items: PublicRestaurantProfile[] = [];
 
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
+
+      // Filter active and online ordering enabled in-memory
+      const publicStatus = (data.publicStatus as 'active' | 'paused' | 'closed') || 'active';
+      const onlineOrderingEnabled = data.onlineOrderingEnabled ?? true;
+
+      if (publicStatus === 'closed' || onlineOrderingEnabled === false) {
+        return;
+      }
+
       items.push({
         restaurantId: data.restaurantId || docSnap.id,
         publicSlug: data.publicSlug,
@@ -134,17 +163,17 @@ export async function discoverRestaurants(
         currency: data.currency || 'INR',
         currencySymbol: data.currencySymbol || '₹',
         cuisine: Array.isArray(data.cuisine) ? data.cuisine : [],
-        publicStatus: data.publicStatus || 'active',
-        onlineOrderingEnabled: data.onlineOrderingEnabled ?? true,
+        publicStatus: publicStatus,
+        onlineOrderingEnabled: onlineOrderingEnabled,
         takeawayEnabled: data.takeawayEnabled ?? true,
         deliveryEnabled: data.deliveryEnabled ?? true,
         isOpenNow: data.isOpenNow ?? true
       });
     });
 
-    // In-memory precision filtering for area, cuisine, and search query within the city
+    // In-memory precision filtering for area, cuisine, and search query
     if (normalizedArea) {
-      items = items.filter((r) => normalizeLocationTerm(r.area).includes(normalizedArea));
+      items = items.filter((r) => (r.area || '').toLowerCase().includes(normalizedArea));
     }
 
     if (criteria.cuisine && criteria.cuisine.trim()) {
@@ -162,27 +191,39 @@ export async function discoverRestaurants(
       items = items.filter((r) => r.takeawayEnabled);
     }
 
-    if (criteria.searchQuery && criteria.searchQuery.trim()) {
-      const queryLower = criteria.searchQuery.trim().toLowerCase();
+    if (trimmedSearchQuery) {
+      const queryLower = trimmedSearchQuery.toLowerCase();
       items = items.filter((r) =>
         r.name.toLowerCase().includes(queryLower) ||
         r.publicRestaurantCode.toLowerCase().includes(queryLower) ||
+        r.publicSlug.toLowerCase().includes(queryLower) ||
         r.area.toLowerCase().includes(queryLower) ||
+        r.city.toLowerCase().includes(queryLower) ||
         r.cuisine.some((c) => c.toLowerCase().includes(queryLower))
       );
     }
 
-    // Sort location relevance: exact area matches first, then alphabetically by name
-    if (normalizedArea) {
-      items.sort((a, b) => {
-        const aExactArea = normalizeLocationTerm(a.area) === normalizedArea ? 1 : 0;
-        const bExactArea = normalizeLocationTerm(b.area) === normalizedArea ? 1 : 0;
+    const targetPostalCode = criteria.postalCode ? criteria.postalCode.trim() : '';
+
+    // Sort location relevance: exact PIN code matches first, then exact area matches, then exact search matches, then alphabetically by name
+    items.sort((a, b) => {
+      if (targetPostalCode) {
+        const aExactPin = (a.postalCode || '').trim() === targetPostalCode ? 1 : 0;
+        const bExactPin = (b.postalCode || '').trim() === targetPostalCode ? 1 : 0;
+        if (aExactPin !== bExactPin) return bExactPin - aExactPin;
+      }
+      if (normalizedArea) {
+        const aExactArea = (a.area || '').toLowerCase() === normalizedArea ? 1 : 0;
+        const bExactArea = (b.area || '').toLowerCase() === normalizedArea ? 1 : 0;
         if (aExactArea !== bExactArea) return bExactArea - aExactArea;
-        return a.name.localeCompare(b.name);
-      });
-    } else {
-      items.sort((a, b) => a.name.localeCompare(b.name));
-    }
+      }
+      if (trimmedSearchQuery) {
+        const aExactCode = a.publicRestaurantCode.toUpperCase() === trimmedSearchQuery.toUpperCase() ? 1 : 0;
+        const bExactCode = b.publicRestaurantCode.toUpperCase() === trimmedSearchQuery.toUpperCase() ? 1 : 0;
+        if (aExactCode !== bExactCode) return bExactCode - aExactCode;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
     const hasMore = items.length > pageSize;
     const finalItems = hasMore ? items.slice(0, pageSize) : items;
@@ -196,16 +237,11 @@ export async function discoverRestaurants(
       queryCity: city,
       queryArea: criteria.area
     };
-  } catch (error) {
-    console.warn('[RestaurantOS Customer Discovery] discoverRestaurants query warning:', error);
-    return {
-      restaurants: [],
-      nextCursor: null,
-      hasMore: false,
-      totalReturned: 0,
-      queryCity: city,
-      queryArea: criteria.area
-    };
+  } catch (error: any) {
+    console.error('[RestaurantOS Customer Discovery] discoverRestaurants query error:', error);
+    throw new Error(
+      error?.message || 'Unable to connect to public discovery service. Please check your network connection.'
+    );
   }
 }
 

@@ -116,7 +116,8 @@ service cloud.firestore {
       // ==========================================================
 
       match /categories/{categoryId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if canAccessRestaurant(restaurantId)
+          || exists(/databases/$(database)/documents/publicRestaurants/$(restaurantId));
         allow write: if isOwnerOfRestaurant(restaurantId)
           || isMemberWithRole(restaurantId, 'manager');
       }
@@ -126,7 +127,8 @@ service cloud.firestore {
       // ==========================================================
 
       match /items/{itemId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if canAccessRestaurant(restaurantId)
+          || exists(/databases/$(database)/documents/publicRestaurants/$(restaurantId));
         allow write: if isOwnerOfRestaurant(restaurantId)
           || isMemberWithRole(restaurantId, 'manager');
       }

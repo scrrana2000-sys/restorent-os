@@ -34,6 +34,7 @@ import { CustomerLocationBar } from '../../components/customer/CustomerLocationB
 import { CustomerCartProvider, useCustomerCart } from '../../context/CustomerCartContext';
 import { CustomerCartDrawer } from '../../components/customer/CustomerCartDrawer';
 import { CartConflictModal } from '../../components/customer/CartConflictModal';
+import { CustomerRestaurantMenuPage } from './CustomerRestaurantMenuPage';
 
 export interface CustomerRestaurantPageProps {
   initialProfile?: PublicRestaurantProfile;
@@ -62,7 +63,7 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(!initialProfile);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState<boolean>(false);
-  const [menuNoticeVisible, setMenuNoticeVisible] = useState<boolean>(false);
+  const [showMenuInline, setShowMenuInline] = useState<boolean>(false);
 
   const { cart, openCartDrawer } = useCustomerCart();
 
@@ -141,10 +142,25 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
       if (onViewMenu) {
         onViewMenu(restaurant);
       } else {
-        setMenuNoticeVisible(true);
+        const target = restaurant.publicSlug || restaurant.publicRestaurantCode;
+        if (typeof window !== 'undefined' && target) {
+          window.location.hash = `r/${target}/menu`;
+        }
+        setShowMenuInline(true);
       }
     }
   };
+
+  if (showMenuInline && restaurant) {
+    return (
+      <CustomerRestaurantMenuPage
+        initialProfile={restaurant}
+        onBack={() => setShowMenuInline(false)}
+        onBackToDiscovery={onBackToDiscovery}
+        onViewProfile={() => setShowMenuInline(false)}
+      />
+    );
+  }
 
   const isOpenForOrders =
     restaurant?.publicStatus === 'active' &&
@@ -576,39 +592,6 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
 
               {/* Cross-Restaurant Conflict Modal */}
               <CartConflictModal />
-
-              {/* Menu Preview Boundary Modal / Notice when onViewMenu is not provided */}
-              {menuNoticeVisible && (
-                <div
-                  id="menu-boundary-modal"
-                  className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
-                  onClick={() => setMenuNoticeVisible(false)}
-                >
-                  <div
-                    className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto">
-                      <Utensils className="w-6 h-6" />
-                    </div>
-                    <div className="text-center space-y-1">
-                      <h3 className="text-base font-bold text-slate-900">
-                        {restaurant.name} Menu
-                      </h3>
-                      <p className="text-xs text-slate-500 leading-relaxed">
-                        Public menu browsing and customer food ordering will be activated in the upcoming Milestone (M9-F).
-                      </p>
-                    </div>
-                    <button
-                      id="close-menu-boundary-btn"
-                      onClick={() => setMenuNoticeVisible(false)}
-                      className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors min-h-[44px]"
-                    >
-                      Close Preview
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </main>

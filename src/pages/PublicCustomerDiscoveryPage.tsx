@@ -3,6 +3,7 @@ import { CustomerLocationProvider } from '../context/CustomerLocationContext';
 import { CustomerCartProvider, useCustomerCart } from '../context/CustomerCartContext';
 import { CustomerRestaurantDiscoveryView } from '../components/customer/CustomerRestaurantDiscoveryView';
 import { CustomerRestaurantPage } from './customer/CustomerRestaurantPage';
+import { CustomerRestaurantMenuPage } from './customer/CustomerRestaurantMenuPage';
 import { CustomerCartDrawer } from '../components/customer/CustomerCartDrawer';
 import { PublicRestaurantProfile } from '../types/customer';
 import { UtensilsCrossed, ShoppingBag, ArrowRight } from 'lucide-react';
@@ -18,7 +19,7 @@ export interface PublicCustomerDiscoveryPageProps {
  * Public Customer Discovery Page (M9-D, M9-E & M9-K Customer Front Door).
  * Hosts the CustomerLocationProvider and CustomerRestaurantDiscoveryView.
  * Provides public, tenant-isolated restaurant search and filtering.
- * Transitions smoothly to CustomerRestaurantPage when a restaurant is selected.
+ * Transitions smoothly to CustomerRestaurantPage and CustomerRestaurantMenuPage when a restaurant is selected.
  */
 const PublicCustomerDiscoveryPageContent: React.FC<PublicCustomerDiscoveryPageProps> = ({
   onBackToApp,
@@ -26,11 +27,13 @@ const PublicCustomerDiscoveryPageContent: React.FC<PublicCustomerDiscoveryPagePr
   onSelectRestaurant
 }) => {
   const [selectedRestaurant, setSelectedRestaurant] = useState<PublicRestaurantProfile | null>(null);
+  const [viewingMenu, setViewingMenu] = useState<boolean>(false);
   const { cart, openCartDrawer } = useCustomerCart();
   const itemCount = cart?.itemCount || 0;
 
   const handleSelect = (restaurant: PublicRestaurantProfile) => {
     setSelectedRestaurant(restaurant);
+    setViewingMenu(false);
     if (onSelectRestaurant) {
       onSelectRestaurant(restaurant);
     }
@@ -38,6 +41,7 @@ const PublicCustomerDiscoveryPageContent: React.FC<PublicCustomerDiscoveryPagePr
 
   const handleBackToDiscovery = () => {
     setSelectedRestaurant(null);
+    setViewingMenu(false);
   };
 
   const handleGoToOwnerCentral = () => {
@@ -50,12 +54,27 @@ const PublicCustomerDiscoveryPageContent: React.FC<PublicCustomerDiscoveryPagePr
     }
   };
 
-  // If a restaurant is selected within the customer discovery flow, show its public profile
+  // If a restaurant is selected within the customer discovery flow, show its menu or public profile
   if (selectedRestaurant) {
+    if (viewingMenu) {
+      return (
+        <CustomerRestaurantMenuPage
+          initialProfile={selectedRestaurant}
+          onBack={() => setViewingMenu(false)}
+          onViewProfile={() => setViewingMenu(false)}
+          onBackToDiscovery={handleBackToDiscovery}
+        />
+      );
+    }
+
     return (
       <CustomerRestaurantPage
         initialProfile={selectedRestaurant}
         onBackToDiscovery={handleBackToDiscovery}
+        onViewMenu={(restaurant) => {
+          setSelectedRestaurant(restaurant);
+          setViewingMenu(true);
+        }}
       />
     );
   }

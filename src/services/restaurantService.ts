@@ -183,12 +183,25 @@ export async function getOrCreateInitialRestaurant(
       return newRestaurant;
     });
 
+    // Best-effort sync to public discovery projection
+    try {
+      await syncPublicRestaurantProfile(result);
+    } catch (syncErr) {
+      console.warn('[RestaurantOS Discovery] Public profile sync warning on initial create/get:', syncErr);
+    }
+
     return result;
   } catch (txErr: any) {
     console.warn('[RestaurantOS Idempotency] Transaction failed or fell back. Re-checking existing documents:', txErr);
     const retrySnap = await getDoc(initRestRef);
     if (retrySnap.exists()) {
-      return { restaurantId: retrySnap.id, ...retrySnap.data() } as Restaurant;
+      const fallbackRest = { restaurantId: retrySnap.id, ...retrySnap.data() } as Restaurant;
+      try {
+        await syncPublicRestaurantProfile(fallbackRest);
+      } catch (syncErr) {
+        console.warn('[RestaurantOS Discovery] Public profile sync warning on retry fallback:', syncErr);
+      }
+      return fallbackRest;
     }
     throw handleFirestoreError(txErr, OperationType.CREATE, `restaurants/${initDocId}`);
   }

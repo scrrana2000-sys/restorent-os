@@ -16,11 +16,17 @@ export const CustomerLocationBar: React.FC<CustomerLocationBarProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const displayTitle = location?.city || 'Select Location';
-  const displaySubtitle = location?.area
+  const displaySubtitle = location?.postalCode
+    ? `${location.city}${location.state ? `, ${location.state}` : ''} (PIN ${location.postalCode})`
+    : location?.area
     ? `${location.area}, ${location.city}`
     : location?.state
     ? `${location.city}, ${location.state}`
     : 'Choose your city to browse food';
+
+  const subText = location?.postalCode
+    ? `PIN ${location.postalCode}${location.area ? ` • ${location.area}` : ''}`
+    : location?.area || location?.state;
 
   if (variant === 'banner') {
     return (
@@ -75,9 +81,9 @@ export const CustomerLocationBar: React.FC<CustomerLocationBarProps> = ({
             </span>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           </div>
-          {location?.area && (
+          {subText && (
             <div className="text-[10px] text-slate-500 truncate max-w-[140px] sm:max-w-[180px]">
-              {location.area}
+              {subText}
             </div>
           )}
         </div>

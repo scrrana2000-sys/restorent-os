@@ -33,7 +33,7 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
   onSelectRestaurant,
   className = ''
 }) => {
-  const { location, status, isDenied, requestLocation } = useCustomerLocation();
+  const { location, status, isDenied, requestLocation, selectCity } = useCustomerLocation();
 
   const {
     restaurants,
@@ -185,17 +185,43 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
         {!location?.city && !isLoading && (
           <div
             id="location-missing-empty-state"
-            className="p-10 bg-slate-50 border border-slate-200/80 rounded-3xl text-center max-w-lg mx-auto my-8 shadow-xs"
+            className="p-6 sm:p-10 bg-slate-50 border border-slate-200/80 rounded-3xl text-center max-w-lg mx-auto my-6 shadow-xs"
           >
-            <div className="w-14 h-14 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto mb-4">
-              <MapPin className="w-7 h-7" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto mb-3">
+              <MapPin className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 mb-1">
+            <h3 className="text-sm sm:text-base font-bold text-slate-900 mb-1">
               Choose your city to discover restaurants
             </h3>
-            <p className="text-xs text-slate-500 mb-6 leading-relaxed max-w-sm mx-auto">
-              Select your city or use device GPS to see available restaurants, delivery options, and food menus in your area.
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed max-w-sm mx-auto">
+              Select your city or tap a popular city below to see available restaurants, menus, and online ordering options.
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-5">
+              {[
+                { name: 'Bengaluru', state: 'Karnataka' },
+                { name: 'Mumbai', state: 'Maharashtra' },
+                { name: 'Delhi', state: 'Delhi' },
+                { name: 'Hyderabad', state: 'Telangana' },
+                { name: 'Chennai', state: 'Tamil Nadu' },
+                { name: 'Pune', state: 'Maharashtra' },
+                { name: 'Kolkata', state: 'West Bengal' },
+                { name: 'Raichur', state: 'Karnataka' }
+              ].map((c) => (
+                <button
+                  key={c.name}
+                  id={`quick-city-${c.name.toLowerCase()}`}
+                  onClick={() => {
+                    const matched = findIndianCityByName(c.name);
+                    if (matched) {
+                      selectCity(matched);
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-white border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-700 hover:text-orange-700 text-xs font-semibold rounded-xl transition-all shadow-2xs min-h-[36px]"
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <CustomerLocationBar variant="pill" />
             </div>

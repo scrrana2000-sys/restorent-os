@@ -80,8 +80,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
   // Item customization modal
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
 
-  // Cart Notice Modal state (for milestone boundary compatibility)
-  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState<boolean>(false);
+  // Checkout Modal state
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState<boolean>(false);
 
   // Local fallback cart counters if context is bypassed
@@ -283,7 +282,6 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
       onViewCart();
     } else {
       openCartDrawer();
-      setIsNoticeModalOpen(true);
     }
   };
 
@@ -950,39 +948,6 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
 
             {/* Cart Conflict Modal (Cross-Restaurant Guard) */}
             <CartConflictModal />
-
-            {/* Boundary Notice Modal */}
-            {isNoticeModalOpen && (
-              <div
-                id="cart-boundary-modal"
-                className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
-                onClick={() => setIsNoticeModalOpen(false)}
-              >
-                <div
-                  className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto">
-                    <ShoppingBag className="w-6 h-6" />
-                  </div>
-                  <div className="text-center space-y-2">
-                    <h3 className="text-base font-bold text-slate-900">
-                      Cart Preview
-                    </h3>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Cart management, delivery address selection, and instant online checkout are active for {restaurant?.name || 'this restaurant'}.
-                    </p>
-                  </div>
-                  <button
-                    id="continue-browsing-notice-btn"
-                    onClick={() => setIsNoticeModalOpen(false)}
-                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors min-h-[44px]"
-                  >
-                    Continue Browsing
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </main>
