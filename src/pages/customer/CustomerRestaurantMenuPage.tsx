@@ -328,15 +328,15 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
     restaurant?.isOpenNow !== false;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col pb-24">
+    <div className="min-h-screen glass-neu-canvas text-slate-900 flex flex-col pb-28">
       {/* Sticky Top Bar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+      <header className="sticky top-0 z-40 glass-neu-header">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
               id="menu-back-btn"
               onClick={handleBack}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors shrink-0 min-h-[44px]"
+              className="glass-neu-btn px-3 py-2 text-xs font-bold text-slate-800 rounded-xl shrink-0 min-h-[44px] flex items-center gap-1.5"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">Back</span>
@@ -362,14 +362,14 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
           <button
             id="menu-header-cart-btn"
             onClick={handleCartClick}
-            className="relative px-3.5 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 min-h-[44px]"
+            className="relative px-3.5 py-2 glass-neu-btn text-orange-700 rounded-xl text-xs font-bold flex items-center gap-2 min-h-[44px]"
           >
-            <ShoppingBag className="w-4 h-4" />
+            <ShoppingBag className="w-4 h-4 text-orange-600" />
             <span className="hidden sm:inline">Cart</span>
             {displayCartCount > 0 && (
               <span
                 id="menu-header-cart-count"
-                className="w-5 h-5 rounded-full bg-orange-600 text-white text-[10px] font-bold flex items-center justify-center font-mono shadow-xs"
+                className="w-5 h-5 rounded-full bg-gradient-to-r from-orange-500 to-amber-600 text-white text-[10px] font-bold flex items-center justify-center font-mono shadow-[2px_2px_6px_rgba(234,88,12,0.3)] border border-white"
               >
                 {displayCartCount}
               </span>
@@ -468,9 +468,9 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
         {!isLoading && !error && !notFound && restaurant && menuData && (
           <div id={`restaurant-public-menu-${restaurant.restaurantId}`} className="space-y-6">
             {/* Restaurant Summary Card */}
-            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="glass-neu-card rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center overflow-hidden shrink-0">
+                <div className="w-14 h-14 rounded-2xl bg-orange-100/80 border border-white flex items-center justify-center overflow-hidden shrink-0 shadow-[3px_3px_8px_rgba(234,88,12,0.2)]">
                   {restaurant.logoUrl ? (
                     <img
                       src={restaurant.logoUrl}
@@ -479,7 +479,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <Utensils className="w-6 h-6 text-orange-500" />
+                    <Utensils className="w-6 h-6 text-orange-600" />
                   )}
                 </div>
                 <div>
@@ -490,7 +490,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                     >
                       {restaurant.name}
                     </h2>
-                    <span className="font-mono text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                    <span className="font-mono text-[10px] font-bold px-2 py-0.5 bg-slate-200/80 text-slate-700 rounded-md border border-white">
                       {restaurant.publicRestaurantCode}
                     </span>
                   </div>
@@ -505,28 +505,28 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
               </div>
 
               {/* Status and Profile Info Link */}
-              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60">
                 <div>
                   {isOpenForOrders ? (
                     <span
                       id="menu-status-open"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/90 text-white shadow-[2px_2px_6px_rgba(16,185,129,0.3)] border border-white/50"
                     >
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
                       Open for Orders
                     </span>
                   ) : restaurant.publicStatus === 'paused' ? (
                     <span
                       id="menu-status-paused"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/90 text-white shadow-[2px_2px_6px_rgba(245,158,11,0.3)] border border-white/50"
                     >
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                      <AlertTriangle className="w-3.5 h-3.5" />
                       Paused
                     </span>
                   ) : restaurant.publicStatus === 'closed' ? (
                     <span
                       id="menu-status-closed"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-700/90 text-slate-100 shadow-xs border border-white/20"
                     >
                       <Clock className="w-3.5 h-3.5" />
                       Closed
@@ -534,7 +534,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                   ) : (
                     <span
                       id="menu-status-ordering-off"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-600/90 text-white shadow-xs border border-white/30"
                     >
                       <Info className="w-3.5 h-3.5" />
                       Dine-in Only
@@ -600,7 +600,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
             )}
 
             {/* Search & Dietary Filters Bar */}
-            <div className="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-xs space-y-3">
+            <div className="glass-neu-card rounded-3xl p-4 space-y-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -609,7 +609,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search for dishes, items, categories..."
-                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+                  className="w-full pl-10 pr-10 py-2.5 glass-neu-inset text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none transition-all"
                 />
                 {searchQuery && (
                   <button
@@ -627,10 +627,10 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                 <button
                   id="diet-filter-all"
                   onClick={() => setSelectedDiet('all')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0 ${
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 min-h-[36px] ${
                     selectedDiet === 'all'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      ? 'glass-neu-pill-active'
+                      : 'glass-neu-pill'
                   }`}
                 >
                   All Items
@@ -638,10 +638,10 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                 <button
                   id="diet-filter-veg"
                   onClick={() => setSelectedDiet('veg')}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0 ${
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 min-h-[36px] ${
                     selectedDiet === 'veg'
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-[3px_3px_10px_rgba(16,185,129,0.35)] border border-white/50'
+                      : 'glass-neu-pill'
                   }`}
                 >
                   <FoodTypeBadge foodType="veg" size="sm" />
@@ -650,10 +650,10 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                 <button
                   id="diet-filter-nonveg"
                   onClick={() => setSelectedDiet('nonveg')}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0 ${
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 min-h-[36px] ${
                     selectedDiet === 'nonveg'
-                      ? 'bg-red-600 text-white shadow-2xs'
-                      : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                      ? 'bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-[3px_3px_10px_rgba(239,68,68,0.35)] border border-white/50'
+                      : 'glass-neu-pill'
                   }`}
                 >
                   <FoodTypeBadge foodType="nonVeg" size="sm" />
@@ -710,7 +710,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
 
             {/* Sticky Category Navigation Bar */}
             {filteredCategoriesWithItems.length > 1 && (
-              <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-md py-3 -mx-4 sm:-mx-6 px-4 sm:px-6 border-b border-slate-200/80 shadow-2xs">
+              <div className="sticky top-16 z-30 glass-neu-header py-3 -mx-4 sm:-mx-6 px-4 sm:px-6">
                 <div className="max-w-5xl mx-auto flex items-center gap-2 overflow-x-auto scrollbar-none">
                   {filteredCategoriesWithItems.map((category) => {
                     const isSelected = activeCategoryId === category.categoryId;
@@ -719,16 +719,16 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                         key={category.categoryId}
                         id={`cat-nav-${category.categoryId}`}
                         onClick={() => handleScrollToCategory(category.categoryId)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 flex items-center gap-1.5 ${
+                        className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 flex items-center gap-1.5 min-h-[38px] ${
                           isSelected
-                            ? 'bg-orange-600 text-white shadow-xs'
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                            ? 'glass-neu-pill-active'
+                            : 'glass-neu-pill'
                         }`}
                       >
                         <span>{category.name}</span>
                         <span
                           className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                            isSelected ? 'bg-orange-700 text-white' : 'bg-slate-200 text-slate-600'
+                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                           }`}
                         >
                           {category.filteredItems.length}
@@ -776,10 +776,10 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                       <div
                         key={item.itemId}
                         id={`menu-item-${item.itemId}`}
-                        className={`bg-white rounded-3xl p-4 sm:p-5 border transition-all flex flex-col justify-between gap-4 shadow-xs ${
+                        className={`glass-neu-card rounded-3xl p-4 sm:p-5 flex flex-col justify-between gap-4 ${
                           isOutOfStock
-                            ? 'border-slate-200/60 bg-slate-50/50 opacity-70'
-                            : 'border-slate-200/80 hover:border-slate-300'
+                            ? 'opacity-65'
+                            : ''
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -889,7 +889,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                               <button
                                 id={`customize-item-btn-${item.itemId}`}
                                 onClick={() => handleAddItem(item)}
-                                className="px-4 py-2 bg-orange-50 hover:bg-orange-100 active:bg-orange-200 text-orange-700 border border-orange-300 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-2xs min-h-[38px]"
+                                className="glass-neu-btn px-4 py-2 text-orange-700 font-bold text-xs rounded-xl inline-flex items-center gap-1.5 min-h-[38px]"
                               >
                                 <Plus className="w-3.5 h-3.5 text-orange-600" />
                                 <span>Customize</span>
@@ -898,9 +898,9 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                               <button
                                 id={`add-item-btn-${item.itemId}`}
                                 onClick={() => handleAddItem(item)}
-                                className="px-5 py-2 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1.5 min-h-[38px]"
+                                className="glass-neu-btn-primary px-5 py-2 text-xs font-bold rounded-xl inline-flex items-center gap-1.5 min-h-[38px]"
                               >
-                                <Plus className="w-3.5 h-3.5" />
+                                <Plus className="w-3.5 h-3.5 text-white" />
                                 <span>Add</span>
                               </button>
                             )}
@@ -954,14 +954,14 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
 
       {/* Floating Bottom Cart Bar */}
       {displayCartCount > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 z-40 max-w-lg mx-auto animate-in slide-in-from-bottom duration-200">
+        <div className="fixed bottom-5 left-4 right-4 z-40 max-w-lg mx-auto animate-in slide-in-from-bottom duration-300">
           <div
             id="floating-cart-bar"
             onClick={handleCartClick}
-            className="bg-slate-900 text-white rounded-2xl p-4 shadow-xl border border-slate-800 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-800 transition-all"
+            className="bg-slate-900/90 backdrop-blur-xl text-white rounded-2xl p-4 shadow-[0_12px_32px_rgba(0,0,0,0.35)] border border-white/20 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-900 transition-all"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-orange-600 flex items-center justify-center text-white font-mono font-bold text-xs shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white font-mono font-bold text-sm shadow-[2px_2px_8px_rgba(234,88,12,0.4)] border border-white/30">
                 {displayCartCount}
               </div>
               <div>

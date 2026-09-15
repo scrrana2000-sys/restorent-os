@@ -46,8 +46,8 @@ export const PublicRestaurantCard: React.FC<PublicRestaurantCardProps> = ({
     <div
       id={`public-restaurant-card-${restaurant.restaurantId}`}
       onClick={handleCardClick}
-      className={`group bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer ${
-        featured ? 'ring-2 ring-orange-400/50' : ''
+      className={`group glass-neu-card rounded-2xl overflow-hidden flex flex-col justify-between cursor-pointer ${
+        featured ? 'ring-2 ring-orange-400/80 shadow-[0_0_20px_rgba(249,115,22,0.3)]' : ''
       } ${className}`}
     >
       {/* Cover / Header Section */}

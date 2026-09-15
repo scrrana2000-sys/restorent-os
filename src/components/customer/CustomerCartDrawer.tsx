@@ -90,13 +90,13 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
     >
       <div
         id="customer-cart-drawer"
-        className="w-full max-w-md bg-white h-full flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-right duration-200"
+        className="w-full max-w-md glass-neu-modal h-full flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}
-        <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between gap-4">
+        <div className="p-5 border-b border-white/60 bg-white/40 backdrop-blur-md flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-orange-600/20">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center shrink-0 shadow-[2px_2px_8px_rgba(234,88,12,0.3)] border border-white">
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div className="min-w-0">
@@ -119,7 +119,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
                 id="clear-cart-btn"
                 onClick={() => setConfirmClearOpen(true)}
                 title="Clear Cart"
-                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                className="glass-neu-btn p-2 text-slate-500 hover:text-red-600 rounded-xl"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -127,7 +127,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
             <button
               id="close-cart-drawer-btn"
               onClick={handleClose}
-              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors"
+              className="glass-neu-btn p-2 text-slate-600 hover:text-slate-900 rounded-xl"
               aria-label="Close cart"
             >
               <X className="w-5 h-5" />
@@ -212,10 +212,8 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
                   <div
                     key={item.cartItemId}
                     id={`cart-item-card-${item.cartItemId}`}
-                    className={`p-4 rounded-2xl border transition-all ${
-                      isStale
-                        ? 'bg-amber-50/50 border-amber-200'
-                        : 'bg-white border-slate-200/80 shadow-2xs hover:border-slate-300'
+                    className={`p-4 rounded-2xl glass-neu-card transition-all ${
+                      isStale ? 'border-amber-300 bg-amber-50/50' : ''
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -351,7 +349,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
               id="proceed-to-checkout-btn"
               onClick={handleProceedToCheckout}
               disabled={validationResult.isRestaurantUnavailable || validationResult.isOrderingDisabled}
-              className="w-full py-3.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-2xl shadow-md shadow-orange-600/20 transition-all flex items-center justify-between px-5 min-h-[44px]"
+              className="w-full py-3.5 glass-neu-btn-primary disabled:opacity-50 text-xs font-extrabold rounded-2xl flex items-center justify-between px-5 min-h-[44px]"
             >
               <div className="flex items-center gap-2">
                 <span>Proceed to Checkout</span>

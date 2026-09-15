@@ -81,10 +81,10 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
         </div>
       </div>
 
-      {/* Search Input Box */}
+      {/* Search Input Box with Glass-Neumorphic Inset Depth */}
       <div className="relative">
-        <div className="relative flex items-center">
-          <div className="absolute left-4 text-slate-400 pointer-events-none">
+        <div className="relative flex items-center glass-neu-inset rounded-2xl transition-all">
+          <div className="absolute left-4 text-orange-600/80 pointer-events-none">
             <Search className="w-5 h-5" />
           </div>
           <input
@@ -94,16 +94,16 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={
               location?.city
-                ? `Search restaurants, cuisines, dishes in ${location.city}... (or enter code like R-0YG9I)`
+                ? `Search restaurants, cuisines, dishes in ${location.city}... (e.g. R-0YG9I)`
                 : 'Select your city to search restaurants...'
             }
-            className="w-full pl-12 pr-10 py-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+            className="w-full pl-12 pr-10 py-3.5 bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
           />
           {filters.searchQuery && (
             <button
               id="clear-search-query-btn"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3.5 p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              className="absolute right-3.5 p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-white/60 transition-colors"
               title="Clear search"
             >
               <X className="w-4 h-4" />
@@ -124,14 +124,14 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
         onResetFilters={resetFilters}
       />
 
-      {/* Exact Match Highlight Box (if user searched exact public code or slug) */}
+      {/* Exact Match Highlight Box */}
       {exactMatch && (
         <div
           id="exact-match-banner"
-          className="p-4 bg-orange-50/80 border border-orange-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs"
+          className="p-4 glass-neu-card rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-orange-300/60"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-orange-100/90 text-orange-600 flex items-center justify-center shrink-0 shadow-[2px_2px_6px_rgba(234,88,12,0.25)] border border-white">
               <Sparkles className="w-5 h-5" />
             </div>
             <div className="min-w-0">
@@ -149,7 +149,7 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
           <button
             id="view-exact-match-btn"
             onClick={() => onSelectRestaurant?.(exactMatch)}
-            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+            className="glass-neu-btn-primary px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 shrink-0"
           >
             <span>Open Menu</span>
             <ArrowRight className="w-3.5 h-3.5" />
@@ -185,9 +185,9 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
         {!location?.city && !isLoading && (
           <div
             id="location-missing-empty-state"
-            className="p-6 sm:p-10 bg-slate-50 border border-slate-200/80 rounded-3xl text-center max-w-lg mx-auto my-6 shadow-xs"
+            className="p-6 sm:p-10 glass-neu-card rounded-3xl text-center max-w-lg mx-auto my-6"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto mb-3">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-orange-100/90 text-orange-600 flex items-center justify-center mx-auto mb-3 border border-white shadow-[3px_3px_8px_rgba(234,88,12,0.2)]">
               <MapPin className="w-6 h-6 sm:w-7 sm:h-7" />
             </div>
             <h3 className="text-sm sm:text-base font-bold text-slate-900 mb-1">
@@ -216,7 +216,7 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
                       selectCity(matched);
                     }
                   }}
-                  className="px-3 py-1.5 bg-white border border-slate-200 hover:border-orange-300 hover:bg-orange-50 text-slate-700 hover:text-orange-700 text-xs font-semibold rounded-xl transition-all shadow-2xs min-h-[36px]"
+                  className="glass-neu-pill px-3 py-1.5 text-xs font-semibold rounded-xl min-h-[36px]"
                 >
                   {c.name}
                 </button>
@@ -306,7 +306,7 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
                   id="load-more-restaurants-btn"
                   onClick={loadMore}
                   disabled={isLoadingMore}
-                  className="px-6 py-2.5 bg-white border border-slate-300 hover:border-slate-400 text-slate-800 text-xs font-bold rounded-xl shadow-xs hover:bg-slate-50 transition-all inline-flex items-center gap-2 min-h-[44px] disabled:opacity-50"
+                  className="glass-neu-btn px-6 py-2.5 text-slate-800 text-xs font-bold rounded-xl inline-flex items-center gap-2 min-h-[44px] disabled:opacity-50"
                 >
                   {isLoadingMore ? (
                     <>

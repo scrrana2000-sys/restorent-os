@@ -68,10 +68,10 @@ export const CustomerLocationBar: React.FC<CustomerLocationBarProps> = ({
       <button
         id="customer-location-trigger-btn"
         onClick={() => setIsModalOpen(true)}
-        className={`flex items-center gap-2 px-3 py-2 bg-white/90 hover:bg-white text-slate-800 border border-slate-200/90 rounded-full shadow-xs hover:shadow-sm transition-all text-left min-h-[44px] ${className}`}
+        className={`flex items-center gap-2 px-3 py-2 glass-neu-btn text-slate-800 rounded-full text-left min-h-[44px] cursor-pointer ${className}`}
         aria-label={`Current location: ${displayTitle}. Click to change.`}
       >
-        <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+        <div className="w-6 h-6 rounded-full bg-orange-100/90 text-orange-600 flex items-center justify-center shrink-0 border border-white shadow-[2px_2px_5px_rgba(234,88,12,0.2)]">
           <MapPin className="w-3.5 h-3.5" />
         </div>
         <div className="min-w-0">

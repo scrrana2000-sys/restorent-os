@@ -81,20 +81,20 @@ const PublicCustomerDiscoveryPageContent: React.FC<PublicCustomerDiscoveryPagePr
 
   return (
     <CustomerLocationProvider autoDetectOnMount={true}>
-      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
-        {/* Navigation Bar */}
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+      <div className="min-h-screen glass-neu-canvas text-slate-900 flex flex-col">
+        {/* Glass-Neumorphic Navigation Bar */}
+        <header className="sticky top-0 z-40 glass-neu-header">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-13 sm:h-16 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-orange-600 text-white flex items-center justify-center shadow-xs sm:shadow-sm shadow-orange-600/30 shrink-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white flex items-center justify-center shadow-[4px_4px_10px_rgba(234,88,12,0.35),-2px_-2px_8px_rgba(255,255,255,0.8)] border border-white/40 shrink-0">
                 <UtensilsCrossed className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight block leading-tight">
                   RestaurantOS
                 </span>
-                <span className="text-[9px] sm:text-[10px] font-semibold text-orange-600 uppercase tracking-wider block truncate">
-                  Online Food Discovery
+                <span className="text-[9px] sm:text-[10px] font-bold text-orange-600 uppercase tracking-wider block truncate">
+                  Glass-Neumorphic Customer Experience
                 </span>
               </div>
             </div>
@@ -102,12 +102,12 @@ const PublicCustomerDiscoveryPageContent: React.FC<PublicCustomerDiscoveryPagePr
             <button
               id="customer-cart-btn"
               onClick={openCartDrawer}
-              className="px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-lg sm:rounded-xl transition-all shadow-xs sm:shadow-sm flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0"
+              className="glass-neu-btn-primary px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0"
             >
               <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Cart</span>
               {itemCount > 0 && (
-                <span className="px-1.5 py-0.5 bg-white text-orange-600 text-[10px] sm:text-[11px] font-extrabold rounded-full min-w-[18px] sm:min-w-[20px] text-center">
+                <span className="px-1.5 py-0.5 bg-white text-orange-600 text-[10px] sm:text-[11px] font-extrabold rounded-full min-w-[18px] sm:min-w-[20px] text-center shadow-xs">
                   {itemCount}
                 </span>
               )}
@@ -121,12 +121,12 @@ const PublicCustomerDiscoveryPageContent: React.FC<PublicCustomerDiscoveryPagePr
         </main>
 
         {/* Footer */}
-        <footer className="border-t border-slate-200/80 bg-white py-6 text-center text-xs text-slate-500">
+        <footer className="border-t border-white/80 bg-white/60 backdrop-blur-md py-6 text-center text-xs text-slate-500">
           <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p>© {new Date().getFullYear()} RestaurantOS. Secure, tenant-isolated cloud food ordering.</p>
+            <p>© {new Date().getFullYear()} RestaurantOS. Glassmorphism + Neumorphism Customer Flow.</p>
             <button
               onClick={handleGoToOwnerCentral}
-              className="text-slate-600 hover:text-orange-600 font-medium inline-flex items-center gap-1 transition-colors cursor-pointer"
+              className="glass-neu-pill px-3 py-1.5 text-slate-700 hover:text-orange-600 font-medium inline-flex items-center gap-1 transition-colors cursor-pointer text-xs"
             >
               For Restaurant Owners: Owner Central <ArrowRight className="w-3 h-3" />
             </button>

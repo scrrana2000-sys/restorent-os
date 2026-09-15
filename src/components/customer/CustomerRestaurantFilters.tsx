@@ -72,8 +72,8 @@ export const CustomerRestaurantFilters: React.FC<CustomerRestaurantFiltersProps>
           }}
           className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[36px] flex items-center gap-1.5 ${
             !isAnyFilterActive
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              ? 'glass-neu-pill-active'
+              : 'glass-neu-pill'
           }`}
         >
           All
@@ -83,10 +83,10 @@ export const CustomerRestaurantFilters: React.FC<CustomerRestaurantFiltersProps>
                 e.stopPropagation();
                 onResetFilters();
               }}
-              className="p-0.5 rounded-full hover:bg-slate-200"
+              className="p-0.5 rounded-full hover:bg-white/40"
               title="Reset all filters"
             >
-              <RotateCcw className="w-3 h-3 text-slate-500" />
+              <RotateCcw className="w-3 h-3 text-white" />
             </span>
           )}
         </button>
@@ -97,8 +97,8 @@ export const CustomerRestaurantFilters: React.FC<CustomerRestaurantFiltersProps>
           onClick={() => onDeliveryToggle(!filters.deliveryOnly)}
           className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[36px] flex items-center gap-1.5 ${
             filters.deliveryOnly
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-[4px_4px_12px_rgba(16,185,129,0.35),-3px_-3px_10px_rgba(255,255,255,0.8)] border border-white/50'
+              : 'glass-neu-pill'
           }`}
         >
           <Bike className="w-3.5 h-3.5" />
@@ -112,8 +112,8 @@ export const CustomerRestaurantFilters: React.FC<CustomerRestaurantFiltersProps>
           onClick={() => onTakeawayToggle(!filters.takeawayOnly)}
           className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[36px] flex items-center gap-1.5 ${
             filters.takeawayOnly
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-[4px_4px_12px_rgba(59,130,246,0.35),-3px_-3px_10px_rgba(255,255,255,0.8)] border border-white/50'
+              : 'glass-neu-pill'
           }`}
         >
           <ShoppingBag className="w-3.5 h-3.5" />
@@ -127,8 +127,8 @@ export const CustomerRestaurantFilters: React.FC<CustomerRestaurantFiltersProps>
           onClick={() => onOnlineOrderingToggle(!filters.onlineOrderingOnly)}
           className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[36px] flex items-center gap-1.5 ${
             filters.onlineOrderingOnly
-              ? 'bg-orange-600 text-white shadow-xs'
-              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              ? 'glass-neu-pill-active'
+              : 'glass-neu-pill'
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
@@ -169,14 +169,14 @@ export const CustomerRestaurantFilters: React.FC<CustomerRestaurantFiltersProps>
             <button
               key={cuisine}
               onClick={() => onCuisineChange(cuisine)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 whitespace-nowrap min-h-[32px] ${
                 isSelected
-                  ? 'bg-orange-100 text-orange-800 font-bold border border-orange-300 shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 hover:text-slate-800'
+                  ? 'glass-neu-pill-active font-bold'
+                  : 'glass-neu-pill hover:text-slate-900'
               }`}
             >
               {cuisine}
-              {isSelected && <span className="ml-1 text-orange-600">✓</span>}
+              {isSelected && <span className="ml-1 text-white">✓</span>}
             </button>
           );
         })}
