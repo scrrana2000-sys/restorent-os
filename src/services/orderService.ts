@@ -70,6 +70,66 @@ export interface OrderHistoryFilterOptions {
 }
 
 /**
+ * Server/Service level validation to verify public customer ordering eligibility and menu item integrity.
+ */
+async function validatePublicCustomerOrderingEligibility(
+  restaurantId: string,
+  cartState: CartState,
+  orderType: string
+): Promise<void> {
+  const cleanRestaurantId = restaurantId.trim();
+
+  // 1. Verify restaurant exists & permits public ordering
+  const publicProfileRef = doc(db, 'publicRestaurants', cleanRestaurantId);
+  const publicProfileSnap = await getDoc(publicProfileRef);
+  if (!publicProfileSnap.exists()) {
+    throw new Error('Online ordering is temporarily unavailable for this restaurant.');
+  }
+
+  const profile = publicProfileSnap.data();
+  if (profile.publicStatus === 'closed' || profile.publicStatus === 'paused') {
+    throw new Error('Restaurant is currently not accepting orders.');
+  }
+
+  if (!profile.onlineOrderingEnabled) {
+    throw new Error('Online ordering is currently disabled for this restaurant.');
+  }
+
+  // 2. Validate Order Type
+  if (orderType === 'delivery' && profile.deliveryEnabled === false) {
+    throw new Error('Delivery is not available for this restaurant.');
+  }
+  if (orderType === 'takeaway' && profile.takeawayEnabled === false) {
+    throw new Error('Takeaway is not available for this restaurant.');
+  }
+  if (orderType === 'dineIn') {
+    throw new Error('Dine-in ordering is not available via online customer checkout.');
+  }
+
+  // 3. Verify Cart Menu Items availability and check for price tampering
+  if (cartState && Array.isArray(cartState.items)) {
+    for (const item of cartState.items) {
+      const itemRef = doc(db, 'restaurants', cleanRestaurantId, 'items', item.itemId);
+      const itemSnap = await getDoc(itemRef);
+      if (!itemSnap.exists()) {
+        throw new Error(`"${item.nameSnapshot || 'An item'}" is no longer available.`);
+      }
+
+      const itemData = itemSnap.data();
+      if (itemData.isActive === false || itemData.isAvailable === false) {
+        throw new Error(`"${itemData.name || item.nameSnapshot}" is no longer available.`);
+      }
+
+      // Check for price tampering (minor unit match)
+      const expectedPriceMinor = Math.round(Number(itemData.price) * 100);
+      if (item.unitPriceMinor !== expectedPriceMinor) {
+        throw new Error(`Price verification failed for "${itemData.name}".`);
+      }
+    }
+  }
+}
+
+/**
  * OrderService
  * 
  * Centralized Order Creation & Lifecycle Management for RestaurantOS POS.
@@ -207,7 +267,11 @@ export class OrderService implements IOrderService {
 
     const cleanRestaurantId = restaurantId.trim();
 
-    await enforcePermission(cleanRestaurantId, 'create_orders');
+    if (source === 'online') {
+      await validatePublicCustomerOrderingEligibility(cleanRestaurantId, cartState, orderType);
+    } else {
+      await enforcePermission(cleanRestaurantId, 'create_orders');
+    }
 
     // 1. Validate Dine-In Pre-conditions
     if (orderType === 'dineIn' && !input.skipTableSessionValidation) {
@@ -465,7 +529,11 @@ export class OrderService implements IOrderService {
     }
 
     const cleanRestaurantId = restaurantId.trim();
-    await enforcePermission(cleanRestaurantId, 'create_orders');
+    if (source === 'online') {
+      await validatePublicCustomerOrderingEligibility(cleanRestaurantId, cartState, orderType);
+    } else {
+      await enforcePermission(cleanRestaurantId, 'create_orders');
+    }
 
     // 1. Validate Dine-In Pre-conditions
     if (orderType === 'dineIn' && !input.skipTableSessionValidation) {

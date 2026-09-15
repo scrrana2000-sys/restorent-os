@@ -2,6 +2,9 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
+import { auth } from './src/config/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { submitCustomerOnlineOrder } from './src/services/customerCheckoutService';
 import {
   verifyFirebaseToken,
   verifyRestaurantStaffAuthorization,
@@ -11,7 +14,7 @@ import {
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '50kb' }));
 
 // Permissive CORS middleware with support for GitHub Pages and Cloud Run previews
 app.use((req, res, next) => {
@@ -40,7 +43,131 @@ app.use((req, res, next) => {
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', environment: process.env.NODE_ENV || 'development' });
+  res.json({
+    ok: true,
+    service: 'restaurantos-api'
+  });
+});
+
+let isServerAuthenticated = false;
+let isServerAuthenticating = false;
+
+async function ensureServerAuthenticated() {
+  if (isServerAuthenticated && auth.currentUser) return;
+  if (isServerAuthenticating) {
+    while (isServerAuthenticating) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (isServerAuthenticated && auth.currentUser) return;
+  }
+
+  isServerAuthenticating = true;
+  const email = 'system-server@restaurantos.app';
+  const password = process.env.SYSTEM_SERVER_PASSWORD || 'SystemSecurePassword123!';
+
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    isServerAuthenticated = true;
+    console.log('[RestaurantOS Server] System server authenticated successfully.');
+  } catch (err: any) {
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-email') {
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        isServerAuthenticated = true;
+        console.log('[RestaurantOS Server] System server account created and authenticated.');
+      } catch (createErr) {
+        console.error('[RestaurantOS Server] Failed to create system server account:', createErr);
+        throw createErr;
+      }
+    } else {
+      console.error('[RestaurantOS Server] Failed to authenticate system server:', err);
+      throw err;
+    }
+  } finally {
+    isServerAuthenticating = false;
+  }
+}
+
+const onlineOrderIpLimits = new Map<string, number[]>();
+
+function checkOnlineOrderIpLimit(ip: string): { allowed: boolean; retryAfterSeconds?: number } {
+  const now = Date.now();
+  const windowMs = 60 * 1000; // 1 minute
+  const maxRequests = 10; // Max 10 submissions per minute per IP
+
+  let timestamps = onlineOrderIpLimits.get(ip) || [];
+  timestamps = timestamps.filter(t => now - t < windowMs);
+  onlineOrderIpLimits.set(ip, timestamps);
+
+  if (timestamps.length >= maxRequests) {
+    const oldest = timestamps[0];
+    const retryAfter = Math.ceil((windowMs - (now - oldest)) / 1000);
+    return { allowed: false, retryAfterSeconds: Math.max(1, retryAfter) };
+  }
+
+  timestamps.push(now);
+  return { allowed: true };
+}
+
+/**
+ * Trusted server-side online order submission boundary.
+ * Authoritatively validates order inputs and processes the submission securely.
+ */
+app.post('/api/submit-online-order', async (req, res) => {
+  try {
+    const rawIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown-ip';
+    const clientIp = rawIp.split(',')[0].trim();
+
+    const rateCheck = checkOnlineOrderIpLimit(clientIp);
+    if (!rateCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: 'RATE_LIMITED',
+        message: `Too many order submissions. Please wait ${rateCheck.retryAfterSeconds} seconds before trying again.`
+      });
+    }
+
+    await ensureServerAuthenticated();
+
+    const {
+      intent,
+      cart,
+      restaurantProfile,
+      menuItems,
+      orderType,
+      customerDetails,
+      deliveryDetails,
+      paymentMethod,
+      idempotencyKey,
+      operatingProfile
+    } = req.body;
+
+    const result = await submitCustomerOnlineOrder({
+      intent,
+      cart,
+      restaurantProfile,
+      menuItems,
+      orderType,
+      customerDetails,
+      deliveryDetails,
+      paymentMethod,
+      idempotencyKey,
+      operatingProfile
+    });
+
+    return res.json({
+      success: true,
+      order: result.order,
+      kot: result.kot
+    });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Online order submission failed:', err);
+    return res.status(400).json({
+      success: false,
+      error: 'ORDER_SUBMISSION_FAILED',
+      message: err?.message || 'Failed to submit online order.'
+    });
+  }
 });
 
 /**

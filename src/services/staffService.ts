@@ -17,6 +17,7 @@ import QRCode from 'qrcode';
 import { db, auth, firebaseConfig } from '../config/firebase';
 import { RestaurantMember, StaffRole, UserProfile } from '../types/auth';
 import { getPublicAppOrigin, buildInvitationUrl, buildPublicUrl } from '../utils/urlUtils';
+import { getApiUrl } from '../utils/apiConfig';
 import { enforcePermission } from '../utils/permissions';
 import { auditService } from './auditService';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
@@ -287,7 +288,7 @@ export class StaffService {
           headers['Authorization'] = `Bearer ${idToken}`;
         }
 
-        const apiRes = await fetch('/api/send-invitation-email', {
+        const apiRes = await fetch(getApiUrl('/api/send-invitation-email'), {
           method: 'POST',
           headers,
           body: JSON.stringify({
@@ -429,7 +430,7 @@ export class StaffService {
         headers['Authorization'] = `Bearer ${idToken}`;
       }
 
-      const apiRes = await fetch('/api/send-invitation-email', {
+      const apiRes = await fetch(getApiUrl('/api/send-invitation-email'), {
         method: 'POST',
         headers,
         body: JSON.stringify({

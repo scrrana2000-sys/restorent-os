@@ -36,6 +36,7 @@ jobs:
         run: npm run build
         env:
           VITE_BASE_PATH: /restorent-os/
+          VITE_API_BASE_URL: https://ais-dev-4ft674ruzfz7tdktvsq66r-706536036747.asia-east1.run.app
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5

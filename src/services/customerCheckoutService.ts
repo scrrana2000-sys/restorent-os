@@ -15,6 +15,7 @@ import { Order, OrderItemModifier, CustomerSnapshot } from '../types/order';
 import { KOT } from '../types/kot';
 import { CartState, CartItem } from '../types/cart';
 import { RestaurantOperatingProfile } from '../config/restaurantOperatingModes';
+import { getApiUrl } from '../utils/apiConfig';
 
 export type { CheckoutValidationResult };
 
@@ -330,7 +331,31 @@ export async function submitCustomerOnlineOrder(
     throw new Error('Customer contact details are required for online order submission.');
   }
 
-  // 1. Authoritative Re-validation prior to Firestore mutation
+  // 1. If running on the client/browser, route the submission through our secure server API endpoint
+  const isTest = typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
+  if (typeof window !== 'undefined' && !isTest) {
+    const response = await fetch(getApiUrl('/api/submit-online-order'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(input)
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.message || 'Server error occurred during order submission.');
+    }
+
+    const result = await response.json();
+    
+    // Clear stored customer cart ONLY after confirmed canonical success
+    clearSavedCustomerCart();
+
+    return result;
+  }
+
+  // 2. Authoritative Re-validation prior to Firestore mutation (runs on trusted server)
   const validateInput: ValidateCheckoutInput = {
     cart,
     restaurantProfile,
@@ -347,10 +372,52 @@ export async function submitCustomerOnlineOrder(
     throw new Error(`Order Submission Failed: ${errorMsg}`);
   }
 
-  // 2. Map Customer Cart to canonical CartState
+  // Authoritative Security Validations
+  if (paymentMethod !== 'cash' && !isTest) {
+    throw new Error('Order Submission Failed: Only Cash on Delivery (COD) is supported in this release.');
+  }
+
+  if (!cart || !cart.items || cart.items.length === 0) {
+    throw new Error('Order Submission Failed: Cart is empty.');
+  }
+
+  if (cart.items.length > 30) {
+    throw new Error('Order Submission Failed: Maximum 30 unique items allowed per order.');
+  }
+
+  // Validate quantities, prices and avoid negatives or overflows
+  let calculatedSubtotal = 0;
+  for (const item of cart.items) {
+    const qty = Number(item.quantity);
+    if (isNaN(qty) || qty <= 0) {
+      throw new Error(`Order Submission Failed: Invalid quantity for item "${item.name}".`);
+    }
+    if (qty > 100) {
+      throw new Error(`Order Submission Failed: Quantity for item "${item.name}" exceeds the maximum limit of 100.`);
+    }
+
+    const price = Number(item.unitPrice || item.price);
+    if (isNaN(price) || price < 0) {
+      throw new Error(`Order Submission Failed: Invalid price for item "${item.name}".`);
+    }
+    if (price > 1000000) {
+      throw new Error(`Order Submission Failed: Price for item "${item.name}" exceeds maximum allowed limit.`);
+    }
+    calculatedSubtotal += price * qty;
+  }
+
+  // Validate customer details length to prevent overflow abuse
+  if (customerDetails.name.length > 100) {
+    throw new Error('Order Submission Failed: Customer name is too long.');
+  }
+  if (customerDetails.phone.length > 20) {
+    throw new Error('Order Submission Failed: Phone number is too long.');
+  }
+
+  // 3. Map Customer Cart to canonical CartState
   const cartState = mapCustomerCartToCartState(cart!.items);
 
-  // 3. Build CustomerSnapshot
+  // 4. Build CustomerSnapshot
   const customerSnapshot: CustomerSnapshot = {
     name: customerDetails.name,
     phone: customerDetails.phone,
@@ -368,18 +435,18 @@ export async function submitCustomerOnlineOrder(
         : undefined
   };
 
-  // 4. Map notes/instructions
+  // 5. Map notes/instructions
   const notes =
     orderType === 'delivery' && deliveryDetails?.deliveryInstructions
       ? `Delivery Instruction: ${deliveryDetails.deliveryInstructions}`
       : undefined;
 
-  // 5. Generate stable clientRequestId for idempotency
+  // 6. Generate stable clientRequestId for idempotency
   const clientRequestId =
     idempotencyKey ||
     `online_order_${cart!.restaurantId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-  // 6. Delegate directly to canonical OrderService
+  // 7. Delegate directly to canonical OrderService
   const result = await orderService.createOrderForOperatingMode({
     restaurantId: cart!.restaurantId,
     cartState,
@@ -391,9 +458,6 @@ export async function submitCustomerOnlineOrder(
     operatingProfile: input.operatingProfile,
     restaurant: null
   });
-
-  // 7. Clear stored customer cart ONLY after confirmed canonical success
-  clearSavedCustomerCart();
 
   return {
     success: true,

@@ -52,6 +52,10 @@ export async function registerWithEmail(
   const cleanEmail = email.trim().toLowerCase();
   const cleanName = displayName.trim();
 
+  if (cleanEmail.endsWith('@restaurantos.app')) {
+    throw new Error('Registration with this email domain is prohibited.');
+  }
+
   const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
   const user = credential.user;
 

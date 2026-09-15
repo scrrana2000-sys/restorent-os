@@ -11,6 +11,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isServer() {
+      return isSignedIn() && request.auth.token.email == 'system-server@restaurantos.app';
+    }
+
     function isOwnerOfRestaurant(restaurantId) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/restaurants/$(restaurantId))
@@ -171,10 +175,12 @@ service cloud.firestore {
       // ==========================================================
 
       match /orders/{orderId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if canAccessRestaurant(restaurantId)
+          || (resource != null && resource.data.source == 'online');
 
         allow create: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain']);
+          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
+          || isServer();
 
         allow update: if isOwnerOfRestaurant(restaurantId)
           || (
@@ -200,10 +206,12 @@ service cloud.firestore {
       // ==========================================================
 
       match /kots/{kotId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if canAccessRestaurant(restaurantId)
+          || (resource != null && resource.data.orderType in ['takeaway', 'delivery']);
 
         allow create: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain']);
+          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
+          || isServer();
 
         allow update: if isOwnerOfRestaurant(restaurantId)
           || isMemberWithRoles(restaurantId, ['manager', 'kitchen', 'captain']);
@@ -234,9 +242,11 @@ service cloud.firestore {
       // ==========================================================
 
       match /auditLogs/{auditId} {
-        allow create: if canAccessRestaurant(restaurantId)
-          && request.resource.data.restaurantId == restaurantId
-          && request.resource.data.actorUid == request.auth.uid;
+        allow create: if (canAccessRestaurant(restaurantId)
+            && request.resource.data.restaurantId == restaurantId
+            && request.auth != null
+            && request.resource.data.actorUid == request.auth.uid)
+          || isServer();
 
         allow read: if isOwnerOfRestaurant(restaurantId)
           || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
@@ -256,17 +266,19 @@ service cloud.firestore {
           || isMemberWithRole(restaurantId, 'manager');
       }
 
-      // ==========================================================
+       // ==========================================================
       // IDEMPOTENCY
       // ==========================================================
-
-      match /idempotency/{key} {
-        allow read, write: if canAccessRestaurant(restaurantId);
-      }
-
-      match /idempotencyKeys/{key} {
-        allow read, write: if canAccessRestaurant(restaurantId);
-      }
+ 
+       match /idempotency/{key} {
+         allow read, write: if canAccessRestaurant(restaurantId)
+           || isServer();
+       }
+ 
+       match /idempotencyKeys/{key} {
+         allow read, write: if canAccessRestaurant(restaurantId)
+           || isServer();
+       }
 
       // ==========================================================
       // INVENTORY ITEMS

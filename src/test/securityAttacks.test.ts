@@ -444,4 +444,61 @@ describe('Security Attack, Audit Integrity & Table Session Locking Scenarios', (
       expect(evaluateRestaurantGet(authActive, 'REST_A', true)).toBe(true);
     });
   });
+
+  // --- 4. M9-M ZERO-TRUST PUBLIC CUSTOMER ONLINE ORDER BOUNDARY VERIFICATION ---
+  describe('M9-M: Zero-Trust Customer Order Submission Rules', () => {
+    // Simulated Firestore evaluation matching our new hardened firestore.rules
+    function evaluateOrderCreate(auth: { uid: string, email?: string } | null, data: any): boolean {
+      if (!auth) return false;
+      
+      // isServer() check
+      const isServer = auth.email === 'system-server@restaurantos.app';
+      if (isServer) return true;
+
+      // Rest of the rules (owner or specific staff role, but NO anonymous bypass)
+      const staffRoles = ['manager', 'cashier', 'captain'];
+      const isStaff = data.restaurantId === 'REST_A' && auth.uid === 'STAFF_USER' && staffRoles.includes(data.userRole || '');
+      const isOwner = data.restaurantId === 'REST_A' && auth.uid === 'OWNER_999';
+
+      return isOwner || isStaff;
+    }
+
+    it('Scenario 1: Unauthenticated or guest customer attempting to directly write to orders is strictly blocked', () => {
+      const guestAuth = null;
+      const orderData = {
+        restaurantId: 'REST_A',
+        source: 'online',
+        status: 'confirmed',
+        paymentMethod: 'cash',
+        grandTotalMinor: 500,
+        dueAmountMinor: 500
+      };
+
+      const allowed = evaluateOrderCreate(guestAuth, orderData);
+      expect(allowed).toBe(false); // MUST BE BLOCKED
+    });
+
+    it('Scenario 2: Authenticated staff member or owner can create orders directly', () => {
+      const ownerAuth = { uid: 'OWNER_999' };
+      const orderData = { restaurantId: 'REST_A', source: 'dineIn' };
+
+      const allowed = evaluateOrderCreate(ownerAuth, orderData);
+      expect(allowed).toBe(true); // Owner can create
+    });
+
+    it('Scenario 3: Secure Server Boundary (system-server@restaurantos.app) is authorized to write validated orders', () => {
+      const serverAuth = { uid: 'SERVER_SYS_UID', email: 'system-server@restaurantos.app' };
+      const orderData = {
+        restaurantId: 'REST_A',
+        source: 'online',
+        status: 'confirmed',
+        paymentMethod: 'cash',
+        grandTotalMinor: 1200,
+        dueAmountMinor: 1200
+      };
+
+      const allowed = evaluateOrderCreate(serverAuth, orderData);
+      expect(allowed).toBe(true); // Auth system-server is allowed!
+    });
+  });
 });
