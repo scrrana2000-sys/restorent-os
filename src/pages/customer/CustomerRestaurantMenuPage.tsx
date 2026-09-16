@@ -527,7 +527,20 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
         {!isLoading && !error && !notFound && restaurant && menuData && (
           <div id={`restaurant-public-menu-${restaurant.restaurantId}`} className="space-y-6">
             {/* Restaurant Summary Card */}
-            <div className="glass-neu-card rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="glass-neu-card rounded-3xl overflow-hidden p-0">
+              {(restaurant.bannerImageUrl || restaurant.coverImageUrl) && (
+                <div className="relative h-32 sm:h-44 w-full bg-slate-800 overflow-hidden">
+                  <img
+                    id="menu-banner-image"
+                    src={restaurant.bannerImageUrl || restaurant.coverImageUrl!}
+                    alt={`${restaurant.name} banner`}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent" />
+                </div>
+              )}
+              <div className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-orange-100/80 border border-white flex items-center justify-center overflow-hidden shrink-0 shadow-[3px_3px_8px_rgba(234,88,12,0.2)]">
                   {restaurant.logoUrl ? (
@@ -611,6 +624,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                 </button>
               </div>
             </div>
+          </div>
 
             {/* Operating Notice Banners */}
             {restaurant.publicStatus === 'paused' && (

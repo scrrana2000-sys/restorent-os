@@ -8,19 +8,26 @@ interface ImageUploaderProps {
   onChange: (url: string | null) => void;
   folderPath?: string;
   label?: string;
+  description?: string;
+  aspectRatio?: 'square' | 'banner';
 }
 
 export const ImageUploader: React.FC<ImageUploaderProps> = ({
   value,
   onChange,
   folderPath = 'menu-items',
-  label = 'Item Photo'
+  label = 'Item Photo',
+  description,
+  aspectRatio = 'square'
 }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const containerHeightClass = aspectRatio === 'banner' ? 'h-48 sm:h-56' : 'h-44';
+  const dropzoneHeightClass = aspectRatio === 'banner' ? 'h-44 sm:h-52' : 'h-40';
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -71,9 +78,14 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
           {label}
         </label>
+      )}
+      {description && (
+        <p className="text-xs text-slate-500 mb-2">
+          {description}
+        </p>
       )}
 
       <input
@@ -86,7 +98,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
       {value ? (
         <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 group shadow-xs">
-          <div className="h-44 w-full bg-slate-100 flex items-center justify-center overflow-hidden">
+          <div className={`${containerHeightClass} w-full bg-slate-100 flex items-center justify-center overflow-hidden`}>
             <img
               src={value}
               alt="Uploaded photo"
@@ -138,7 +150,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => !isUploading && fileInputRef.current?.click()}
-          className={`h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center p-4 text-center cursor-pointer transition-colors duration-150 ${
+          className={`${dropzoneHeightClass} rounded-2xl border-2 border-dashed flex flex-col items-center justify-center p-4 text-center cursor-pointer transition-colors duration-150 ${
             isDragging
               ? 'border-indigo-500 bg-indigo-50/50'
               : 'border-slate-300 hover:border-indigo-400 bg-slate-50/70 hover:bg-white'

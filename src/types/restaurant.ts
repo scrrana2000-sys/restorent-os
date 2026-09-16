@@ -25,6 +25,7 @@ export interface Restaurant {
   name: string;
   legalName: string;
   logoUrl: string | null;
+  bannerImageUrl?: string | null;
   coverImageUrl?: string | null;
   phone: string;
   email: string;

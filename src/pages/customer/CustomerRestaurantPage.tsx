@@ -294,10 +294,10 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
               {/* Cover Banner & Quick Badges */}
               <div className="relative rounded-3xl overflow-hidden glass-neu-card p-0 bg-slate-900">
                 <div className="relative h-48 sm:h-64 bg-gradient-to-br from-slate-800 to-slate-950 overflow-hidden">
-                  {restaurant.coverImageUrl ? (
+                  {(restaurant.bannerImageUrl || restaurant.coverImageUrl) ? (
                     <img
                       id="profile-cover-image"
-                      src={restaurant.coverImageUrl}
+                      src={restaurant.bannerImageUrl || restaurant.coverImageUrl!}
                       alt={restaurant.name}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover opacity-85"

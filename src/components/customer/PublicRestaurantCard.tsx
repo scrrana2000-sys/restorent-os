@@ -52,9 +52,9 @@ export const PublicRestaurantCard: React.FC<PublicRestaurantCardProps> = ({
     >
       {/* Cover / Header Section */}
       <div className="relative h-36 sm:h-40 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden shrink-0">
-        {restaurant.coverImageUrl ? (
+        {(restaurant.bannerImageUrl || restaurant.coverImageUrl) ? (
           <img
-            src={restaurant.coverImageUrl}
+            src={restaurant.bannerImageUrl || restaurant.coverImageUrl!}
             alt={restaurant.name}
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

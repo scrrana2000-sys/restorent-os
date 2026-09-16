@@ -22,7 +22,8 @@ import {
   Truck,
   ShoppingBag,
   Eye,
-  EyeOff
+  EyeOff,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useAuth } from '../context/AuthContext';
@@ -61,6 +62,7 @@ export const RestaurantSetupPage: React.FC = () => {
     name: '',
     legalName: '',
     logoUrl: null,
+    bannerImageUrl: null,
     phone: '',
     email: '',
     address: '',
@@ -114,6 +116,7 @@ export const RestaurantSetupPage: React.FC = () => {
         name: restaurant.name || '',
         legalName: restaurant.legalName || '',
         logoUrl: restaurant.logoUrl || null,
+        bannerImageUrl: restaurant.bannerImageUrl || restaurant.coverImageUrl || null,
         phone: restaurant.phone || '',
         email: restaurant.email || '',
         address: restaurant.address || '',
@@ -305,6 +308,30 @@ export const RestaurantSetupPage: React.FC = () => {
                 folderPath={restaurant ? `restaurants/${restaurant.restaurantId}/logo` : 'restaurants/default/logo'}
               />
             </div>
+          </div>
+        </div>
+
+        {/* Restaurant Banner Image */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+            <ImageIcon className="w-5 h-5 text-indigo-600" />
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Restaurant Banner</h3>
+              <p className="text-xs text-slate-500">
+                Upload a banner image that customers will see on the restaurant card and restaurant menu.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <ImageUploader
+              label=""
+              description="PNG, JPG or WebP up to 5MB. Recommended resolution: 1200 x 450 px."
+              aspectRatio="banner"
+              value={formData.bannerImageUrl || (formData as any).coverImageUrl || null}
+              onChange={(url) => setFormData({ ...formData, bannerImageUrl: url, coverImageUrl: url } as any)}
+              folderPath={restaurant ? `restaurants/${restaurant.restaurantId}/branding/banner` : 'restaurants/default/branding/banner'}
+            />
           </div>
         </div>
 

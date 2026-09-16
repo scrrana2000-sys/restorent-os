@@ -14,6 +14,7 @@ export interface PublicRestaurantProfile {
   name: string;
   legalName?: string;
   logoUrl: string | null;
+  bannerImageUrl?: string | null;
   coverImageUrl: string | null;
   phone: string;
   address: string;
