@@ -291,6 +291,7 @@ export class StaffService {
         const apiRes = await fetch(getApiUrl('/api/send-invitation-email'), {
           method: 'POST',
           headers,
+          credentials: 'include',
           body: JSON.stringify({
             restaurantId: cleanRestaurantId,
             invitationId,
@@ -433,6 +434,7 @@ export class StaffService {
       const apiRes = await fetch(getApiUrl('/api/send-invitation-email'), {
         method: 'POST',
         headers,
+        credentials: 'include',
         body: JSON.stringify({
           restaurantId: cleanRestaurantId,
           invitationId: cleanMemberId,

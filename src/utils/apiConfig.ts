@@ -11,7 +11,7 @@ export function getApiUrl(endpoint: string): string {
   // Safe environment-independent base URL selection
   let baseUrl = '';
   if (isBrowser) {
-    baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || window.location.origin;
+    baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
   } else {
     baseUrl = (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL) || 'http://localhost:3000';
   }
