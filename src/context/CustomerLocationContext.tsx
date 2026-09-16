@@ -365,10 +365,25 @@ export const CustomerLocationProvider: React.FC<CustomerLocationProviderProps> =
   );
 };
 
+const fallbackLocationContext: CustomerLocationContextValue = {
+  location: null,
+  status: 'idle',
+  errorMessage: null,
+  isLoading: false,
+  isDenied: false,
+  isManual: false,
+  requestLocation: async () => null,
+  setManualLocation: () => {},
+  selectCity: () => {},
+  setPincodeLocation: () => {},
+  resetLocation: () => {},
+  getDiscoveryCriteria: () => null
+};
+
 export function useCustomerLocation(): CustomerLocationContextValue {
   const context = useContext(CustomerLocationContext);
   if (!context) {
-    throw new Error('useCustomerLocation must be used within a CustomerLocationProvider');
+    return fallbackLocationContext;
   }
   return context;
 }

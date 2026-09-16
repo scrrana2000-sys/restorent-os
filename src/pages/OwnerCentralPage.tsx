@@ -36,6 +36,7 @@ const OrdersPage = lazy(() => import('./OrdersPage').then(m => ({ default: m.Ord
 const StaffPage = lazy(() => import('./StaffPage').then(m => ({ default: m.StaffPage })));
 const InventoryPage = lazy(() => import('./InventoryPage').then(m => ({ default: m.InventoryPage })));
 const PaymentsPage = lazy(() => import('./PaymentsPage').then(m => ({ default: m.PaymentsPage })));
+const CustomersPage = lazy(() => import('./CustomersPage').then(m => ({ default: m.CustomersPage })));
 
 const ViewFallback = () => (
   <div className="flex flex-col items-center justify-center p-12 min-h-[400px]">
@@ -50,15 +51,46 @@ interface OwnerCentralPageProps {
 
 const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => void }> = ({ onBackToCustomerHome }) => {
   const { user, profile, logout } = useAuth();
-  const { restaurant, loading, error, availableRestaurants, switchRestaurant, isSwitching, retry } = useRestaurant();
+  const {
+    restaurant,
+    loading,
+    error,
+    hasNoRestaurant,
+    isCreatingRestaurant,
+    createOwnerRestaurant,
+    availableRestaurants,
+    switchRestaurant,
+    isSwitching,
+    retry
+  } = useRestaurant();
   const [currentView, setCurrentView] = useState<AdminView>('pos');
   const [showMultiSelector, setShowMultiSelector] = useState<boolean>(false);
+
+  // Onboarding form state
+  const cleanOwnerFirstName = user?.displayName ? user.displayName.split(' ')[0] : user?.email ? user.email.split('@')[0] : 'Owner';
+  const [newRestName, setNewRestName] = useState<string>(`${cleanOwnerFirstName}'s Restaurant`);
+  const [newRestCity, setNewRestCity] = useState<string>('Bengaluru');
+  const [creationError, setCreationError] = useState<string | null>(null);
 
   const handleBackToCustomer = () => {
     if (onBackToCustomerHome) {
       onBackToCustomerHome();
     } else {
       window.location.hash = 'discover';
+    }
+  };
+
+  const handleConfirmCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRestName.trim()) {
+      setCreationError('Please enter a valid restaurant name.');
+      return;
+    }
+    setCreationError(null);
+    try {
+      await createOwnerRestaurant(newRestName.trim(), newRestCity.trim());
+    } catch (err: any) {
+      setCreationError(err?.message || 'Failed to create restaurant. Please try again.');
     }
   };
 
@@ -79,23 +111,21 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
     );
   }
 
-  // Handle case where user has no restaurant access found
-  if (!restaurant && availableRestaurants.length === 0) {
+  // Handle case where user is an authorized staff/user with an explicit access error
+  if (!restaurant && availableRestaurants.length === 0 && error) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
             <ShieldAlert className="w-6 h-6" />
           </div>
-          <h2 className="text-lg font-extrabold text-white mb-2">No Restaurant Access Found</h2>
-          <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-            Your account <span className="text-indigo-300 font-semibold">{user?.email}</span> is authenticated, but no active restaurant ownership or staff membership was found.
+          <h2 className="text-lg font-extrabold text-white mb-2">Access Denied</h2>
+          <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+            Your account <span className="text-indigo-300 font-semibold">{user?.email}</span> is authenticated, but could not access the restaurant console.
           </p>
-          {error && (
-            <div className="mb-6 p-3 bg-red-950/40 border border-red-800/40 rounded-xl text-xs text-red-300 text-left">
-              {error}
-            </div>
-          )}
+          <div className="mb-6 p-3 bg-red-950/40 border border-red-800/40 rounded-xl text-xs text-red-300 text-left">
+            {error}
+          </div>
           <div className="space-y-2.5">
             <button
               onClick={retry}
@@ -119,6 +149,123 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
               Sign Out
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle Explicit Owner Onboarding flow when user has no existing restaurant
+  if (!restaurant && availableRestaurants.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
+        <div className="max-w-lg w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shadow-inner">
+              <Store className="w-6 h-6" />
+            </div>
+            <div>
+              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-1">
+                Owner Onboarding
+              </span>
+              <h2 className="text-xl font-extrabold text-white tracking-tight">Create Your Restaurant</h2>
+            </div>
+          </div>
+
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 mb-6">
+            <div className="flex items-center gap-2 text-xs text-slate-300 font-medium mb-1.5">
+              <UserCheck className="w-4 h-4 text-indigo-400" />
+              <span>Signed in as: <strong className="text-white">{user?.displayName || user?.email}</strong></span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Customer accounts are completely separate from Restaurant Owner accounts on RestaurantOS. No restaurant is currently registered under this account.
+            </p>
+          </div>
+
+          {(creationError || error) && (
+            <div className="mb-5 p-3.5 bg-red-950/40 border border-red-800/40 rounded-xl text-xs text-red-300">
+              {creationError || error}
+            </div>
+          )}
+
+          <form onSubmit={handleConfirmCreate} className="space-y-4">
+            <div>
+              <label htmlFor="onboarding-restaurant-name" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Restaurant Name
+              </label>
+              <input
+                id="onboarding-restaurant-name"
+                type="text"
+                required
+                disabled={isCreatingRestaurant}
+                value={newRestName}
+                onChange={(e) => setNewRestName(e.target.value)}
+                placeholder="e.g. Royal Spice Bistro"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl text-xs text-white placeholder-slate-500 outline-none transition-all disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="onboarding-city" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                City / Location
+              </label>
+              <div className="relative">
+                <MapPin className="w-3.5 h-3.5 text-slate-500 absolute left-3.5 top-3" />
+                <input
+                  id="onboarding-city"
+                  type="text"
+                  required
+                  disabled={isCreatingRestaurant}
+                  value={newRestCity}
+                  onChange={(e) => setNewRestCity(e.target.value)}
+                  placeholder="e.g. Bengaluru, Raichur, Mumbai"
+                  className="w-full pl-9 pr-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl text-xs text-white placeholder-slate-500 outline-none transition-all disabled:opacity-60"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 space-y-2.5">
+              <button
+                type="submit"
+                id="confirm-create-restaurant-btn"
+                disabled={isCreatingRestaurant || !newRestName.trim()}
+                className="w-full py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:from-indigo-900/50 disabled:to-indigo-800/50 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2"
+              >
+                {isCreatingRestaurant ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Provisioning Restaurant...</span>
+                  </>
+                ) : (
+                  <>
+                    <Store className="w-4 h-4" />
+                    <span>Yes, Create My Restaurant</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                id="cancel-create-restaurant-btn"
+                disabled={isCreatingRestaurant}
+                onClick={handleBackToCustomer}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Cancel & Back to Customer Front Door
+              </button>
+
+              <button
+                type="button"
+                id="owner-onboarding-signout-btn"
+                disabled={isCreatingRestaurant}
+                onClick={() => logout()}
+                className="w-full py-2 bg-transparent hover:bg-slate-800/50 text-slate-400 hover:text-white text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign Out & Switch Account
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     );
@@ -228,6 +375,9 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
           {currentView === 'captain' && <CaptainPage onNavigate={setCurrentView} />}
           {currentView === 'kitchen' && <KitchenPage />}
           {currentView === 'orders' && <OrdersPage />}
+          {currentView === 'customers' && (
+            <CustomersPage onNavigateToOrders={() => setCurrentView('orders')} />
+          )}
           {currentView === 'payments' && <PaymentsPage />}
           {currentView === 'inventory' && <InventoryPage />}
           {currentView === 'dashboard' && <DashboardPage onNavigate={setCurrentView} />}

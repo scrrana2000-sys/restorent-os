@@ -16,6 +16,7 @@ import { KOT } from '../types/kot';
 import { CartState, CartItem } from '../types/cart';
 import { RestaurantOperatingProfile } from '../config/restaurantOperatingModes';
 import { getApiUrl } from '../utils/apiConfig';
+import { auth } from '../config/firebase';
 
 export type { CheckoutValidationResult };
 
@@ -27,6 +28,8 @@ export interface ValidateCheckoutInput {
   customerDetails: CustomerCheckoutDetails;
   deliveryDetails?: CustomerDeliveryDetails;
   paymentMethod: PaymentMethod;
+  customerId?: string | null;
+  customerEmail?: string | null;
 }
 
 export interface SubmitCustomerOnlineOrderInput {
@@ -40,6 +43,9 @@ export interface SubmitCustomerOnlineOrderInput {
   paymentMethod?: PaymentMethod;
   idempotencyKey?: string;
   operatingProfile?: RestaurantOperatingProfile;
+  customerId?: string | null;
+  customerEmail?: string | null;
+  idToken?: string;
 }
 
 export interface CustomerOrderSubmissionResult {
@@ -266,7 +272,8 @@ export function createCustomerCheckoutIntent(
     orderType,
     customerDetails: {
       name: customerDetails.name.trim(),
-      phone: customerDetails.phone.trim()
+      phone: customerDetails.phone.trim(),
+      email: customerDetails.email ? customerDetails.email.trim() : (input.customerEmail?.trim() || undefined)
     },
     deliveryDetails:
       orderType === 'delivery' && deliveryDetails
@@ -283,6 +290,8 @@ export function createCustomerCheckoutIntent(
               : undefined
           }
         : undefined,
+    customerId: input.customerId ? input.customerId.trim() : null,
+    customerEmail: input.customerEmail ? input.customerEmail.trim() : (customerDetails.email?.trim() || null),
     items: [...cart!.items],
     subtotal: cart!.subtotal,
     paymentMethod,
@@ -307,6 +316,8 @@ export async function submitCustomerOnlineOrder(
   let deliveryDetails = input.deliveryDetails;
   let paymentMethod = input.paymentMethod || 'cash';
   let idempotencyKey = input.idempotencyKey;
+  let customerId = input.customerId !== undefined ? input.customerId : (input.intent?.customerId ?? null);
+  let customerEmail = input.customerEmail || input.intent?.customerEmail || customerDetails?.email || undefined;
 
   if (input.intent) {
     const intent = input.intent;
@@ -325,6 +336,12 @@ export async function submitCustomerOnlineOrder(
     deliveryDetails = intent.deliveryDetails;
     paymentMethod = intent.paymentMethod;
     idempotencyKey = intent.idempotencyKey || idempotencyKey;
+    if (customerId === undefined && intent.customerId !== undefined) {
+      customerId = intent.customerId;
+    }
+    if (!customerEmail && intent.customerEmail) {
+      customerEmail = intent.customerEmail;
+    }
   }
 
   if (!customerDetails) {
@@ -334,13 +351,31 @@ export async function submitCustomerOnlineOrder(
   // 1. If running on the client/browser, route the submission through our secure server API endpoint
   const isTest = typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
   if (typeof window !== 'undefined' && !isTest) {
+    let idToken = input.idToken;
+    if (!idToken && typeof auth !== 'undefined' && auth.currentUser) {
+      try {
+        idToken = await auth.currentUser.getIdToken();
+      } catch (tokenErr) {
+        console.warn('[RestaurantOS] Failed to fetch customer auth token for checkout:', tokenErr);
+      }
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (idToken) {
+      headers['Authorization'] = `Bearer ${idToken}`;
+    }
+
     const response = await fetch(getApiUrl('/api/submit-online-order'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers,
       credentials: 'include',
-      body: JSON.stringify(input)
+      body: JSON.stringify({
+        ...input,
+        customerId: customerId || (auth.currentUser ? auth.currentUser.uid : null),
+        customerEmail
+      })
     });
 
     if (!response.ok) {
@@ -356,6 +391,13 @@ export async function submitCustomerOnlineOrder(
     return result;
   }
 
+  // Enforce customerId integrity if running directly with auth context
+  if (typeof auth !== 'undefined' && auth?.currentUser && customerId) {
+    if (auth.currentUser.uid !== customerId && auth.currentUser.email !== 'system-server@restaurantos.app') {
+      throw new Error('Security Violation: customerId does not match current authenticated user.');
+    }
+  }
+
   // 2. Authoritative Re-validation prior to Firestore mutation (runs on trusted server)
   const validateInput: ValidateCheckoutInput = {
     cart,
@@ -364,7 +406,9 @@ export async function submitCustomerOnlineOrder(
     orderType,
     customerDetails,
     deliveryDetails,
-    paymentMethod
+    paymentMethod,
+    customerId,
+    customerEmail
   };
 
   const validation = validateCustomerCheckout(validateInput);
@@ -418,10 +462,11 @@ export async function submitCustomerOnlineOrder(
   // 3. Map Customer Cart to canonical CartState
   const cartState = mapCustomerCartToCartState(cart!.items);
 
-  // 4. Build CustomerSnapshot
+  // 4. Build CustomerSnapshot (historical checkout snapshot at order time)
   const customerSnapshot: CustomerSnapshot = {
     name: customerDetails.name,
     phone: customerDetails.phone,
+    email: customerEmail || undefined,
     address:
       orderType === 'delivery' && deliveryDetails
         ? [
@@ -453,6 +498,7 @@ export async function submitCustomerOnlineOrder(
     cartState,
     orderType: orderType === 'delivery' ? 'delivery' : 'takeaway',
     source: 'online', // MANDATE: Must strictly set source = 'online'
+    customerId: customerId || null,
     customerSnapshot,
     notes,
     clientRequestId,

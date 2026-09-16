@@ -127,6 +127,27 @@ app.post('/api/submit-online-order', async (req, res) => {
       });
     }
 
+    // 1. Resolve & Verify Customer Identity if token provided
+    const authHeader = req.headers.authorization;
+    let verifiedCustomerId: string | null = null;
+    let verifiedCustomerEmail: string | undefined = undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const idToken = authHeader.substring(7).trim();
+      if (idToken) {
+        const verifiedUser = await verifyFirebaseToken(idToken);
+        if (!verifiedUser || !verifiedUser.uid) {
+          return res.status(401).json({
+            success: false,
+            error: 'INVALID_AUTH_TOKEN',
+            message: 'Customer authentication token could not be verified.'
+          });
+        }
+        verifiedCustomerId = verifiedUser.uid;
+        verifiedCustomerEmail = verifiedUser.email;
+      }
+    }
+
     await ensureServerAuthenticated();
 
     const {
@@ -139,8 +160,36 @@ app.post('/api/submit-online-order', async (req, res) => {
       deliveryDetails,
       paymentMethod,
       idempotencyKey,
-      operatingProfile
+      operatingProfile,
+      customerId: bodyCustomerId,
+      customerEmail: bodyCustomerEmail
     } = req.body;
+
+    const requestedCustomerId = bodyCustomerId || intent?.customerId;
+
+    // SECURITY CHECK:
+    // A customer MUST NOT be able to submit customerId = another customer's UID.
+    // Never allow request body customerId != authenticated Firebase UID.
+    if (requestedCustomerId) {
+      if (!verifiedCustomerId) {
+        return res.status(403).json({
+          success: false,
+          error: 'UNAUTHORIZED_CUSTOMER_ID',
+          message: 'Security Violation: Cannot submit order with customerId without verified authentication credentials.'
+        });
+      }
+      if (requestedCustomerId !== verifiedCustomerId) {
+        return res.status(403).json({
+          success: false,
+          error: 'FORBIDDEN_CUSTOMER_SPOOFING',
+          message: 'Security Violation: Provided customerId does not match authenticated user identity.'
+        });
+      }
+    }
+
+    // Authoritative customerId derived strictly from authenticated context (or null for guests)
+    const effectiveCustomerId = verifiedCustomerId || null;
+    const effectiveCustomerEmail = verifiedCustomerEmail || bodyCustomerEmail || intent?.customerEmail || customerDetails?.email;
 
     const result = await submitCustomerOnlineOrder({
       intent,
@@ -152,7 +201,9 @@ app.post('/api/submit-online-order', async (req, res) => {
       deliveryDetails,
       paymentMethod,
       idempotencyKey,
-      operatingProfile
+      operatingProfile,
+      customerId: effectiveCustomerId,
+      customerEmail: effectiveCustomerEmail
     });
 
     return res.json({

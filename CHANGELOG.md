@@ -2,6 +2,138 @@
 
 All notable changes to RestaurantOS will be documented in this file.
 
+## [Milestone 9 — Phase 5: Restaurant Customer Management / CRM Foundation] - 2026-09-16
+
+### Added & Verified
+- **Restaurant Customers & CRM Module (`CustomersPage.tsx`)**:
+  - Integrated into the RestaurantOS admin console navigation sidebar (`Sidebar.tsx`) with the `UserCheck` icon.
+  - Enabled across all operating profiles via `isCustomersVisible` property.
+  - RBAC protection: allows `owner`, `manager`, and `cashier` (`access_customers` / `view_customers` permissions) while strictly denying `kitchen`, `captain`, and `accountant`.
+- **Tenant Isolation & Aggregation Engine (`restaurantCustomerService.ts`)**:
+  - Aggregates customer data purely from tenant orders (`/restaurants/{restaurantId}/orders`), guaranteeing strict isolation between restaurants.
+  - Registered customer deduplication: multiple orders by the same authenticated customer UID are consolidated into a single profile.
+  - Guest order handling: guest orders (`customerId: null`) are kept distinct with `guest_` prefix IDs and never converted to fake registered UIDs or auto-merged.
+- **Operational Metrics & KPIs**:
+  - Executive overview cards: Unique Customers (with registered/guest counts), Total Orders, Total Revenue, and Average Order Value (AOV).
+- **Search & Filter Controls**:
+  - Multi-attribute real-time search: customer name, email, phone number, and UID.
+  - Category filter tabs: All Customers, Registered Accounts, Guest Activity, 2+ Orders (Frequent), and Last 30 Days (Recent).
+- **Customer Detail Modal (`CustomerDetailModal.tsx`)**:
+  - Complete contact card and identity badge.
+  - Order history table displaying order IDs, status badges, item summaries, totals, and timestamps.
+  - Direct "View Order" navigation integration into the Orders view.
+- **Verification Test Suite**:
+  - Unit test suite: `src/test/milestone9Phase5RestaurantCustomerManagement.test.tsx` (13/13 tests passing).
+  - Strict anti-regression checks: verified zero phone OTP, SMS, email marketing, or AI scoring features.
+
+## [Milestone 9 — Phase 4: Customer Order Tracking & Online Orders Queue] - 2026-09-16
+
+### Added & Verified
+- **Customer Online Order Tracking & Real-Time Timeline**:
+  - Live Firestore subscription (`subscribeToOrderTracking`) for `/restaurants/{restaurantId}/orders/{orderId}`.
+  - Read-only observation with strict isolation: customer tracking cannot mutate order status or trigger lifecycle transitions.
+  - Data sanitization (`sanitizeCustomerOrder`): strips internal kitchen, captain, and server notes or private metadata before displaying to customer.
+  - Lifecycle step mapper (`getCustomerStatusDetails`): seamlessly maps backend `OrderStatus` (`draft`, `confirmed`, `sentToKitchen`, `preparing`, `ready`, `served`, `completed`, `cancelled`) into 4 customer-friendly timeline stages with adaptive labels for takeaway vs. delivery.
+  - Local tracking persistence (`saveTrackedOrder`, `getSavedTrackedOrders`, `getActiveOrdersCount`): preserves order references in `localStorage` for both signed-in customers and guest diners across browser sessions.
+  - Visual Order Tracking Timeline Component (`OrderStatusTimeline.tsx`) with active animations, estimated time remaining countdown, acceptedAt, estimatedPrepMinutes, and readyAt synchronizations.
+  - Customer Order Tracking Modal (`CustomerOrderTrackingModal.tsx`) and "My Orders" Modal (`CustomerMyOrdersModal.tsx`).
+- **Online Orders Queue Management & POS Integration**:
+  - Unified tabbed queue navigation (`All`, `Pending Action / New`, `In Kitchen`, `Ready for Handover`, `Online History`).
+  - Order Acceptance workflow with 5 preset preparation times (`15m`, `20m`, `30m`, `45m`, `60m`) and custom preparation time input.
+  - Sets `estimatedPrepMinutes`, `acceptedAt`, and `estimatedReadyAt` timestamps on the order and automatically updates customer live timeline.
+  - Order Rejection modal with standard preset rejection reasons (`Items out of stock`, `Kitchen at maximum capacity`, `Outside delivery radius`, `Closing soon / Kitchen closed`) and custom explanation.
+  - Reserved inventory restitution on rejection: automatically restores reserved stock items to available inventory.
+  - Idempotent double-rejection and double-completion safeguards.
+  - Bill printing integration and sound alert toggle controls.
+- **Verification & Audit Suite**:
+  - `src/test/milestone9Phase4FinalVerification.test.tsx`: 23/23 audit tests passing.
+  - `src/test/milestone9Phase4CustomerOrderTracking.test.tsx`: 15/15 customer tracking tests passing.
+  - Total Milestone 9 test suite passing: 77/77 tests (Phases 1, 2, 3, 4).
+- **Strict Boundary Confirmation**:
+  - Phone OTP / SMS verification was NOT implemented (uses direct PIN and Google Auth).
+  - Phase 5 (Customer CRM / Management) was NOT started and remains protected for future scope.
+
+## [Milestone 9 — Phase 3: Restaurant New Online Order Notification] - 2026-09-16
+
+### Added & Verified
+- **Realtime Online Order Detection (`onlineOrderNotificationService.ts`)**:
+  - Subscribes to `/restaurants/{restaurantId}/orders` where `source == 'online'` for authorized staff.
+  - Initial page load suppression: historical orders existing prior to listener initialization are indexed into `seenOrderIds` without alerting.
+  - Deterministic deduplication engine prevents duplicate notifications across repeated snapshots, metadata modifications, or order status transitions.
+  - Reconnect resilience: retains seen order cache across network disconnects and reconnects, preventing old orders from re-announcing upon offline-to-online transitions.
+  - Non-online order filtering: ignores POS dine-in, captain, and admin orders.
+  - Burst support: cleanly processes batches of incoming online orders and queues them without race conditions.
+- **Web Audio API Sound Alert (`soundAlert.ts`)**:
+  - Synthesizes a clean two-tone chime (587.33 Hz / 880 Hz) using native `AudioContext` without external audio file requests.
+  - Handles browser autoplay policy restrictions gracefully with try/catch and Promise rejection recovery, ensuring visual notifications are never blocked.
+  - Provides a mute/unmute control for kitchen/POS staff.
+- **Visual Notification Card (`NewOnlineOrderNotification.tsx`)**:
+  - Displays high-contrast alert card with order number, customer name, order type badge (Takeaway/Delivery), amount in ₹, and relative timestamp.
+  - Features a multi-order indicator when multiple orders arrive close together.
+  - Primary "[VIEW ORDER]" action navigates directly to Kitchen Display or Orders view based on restaurant operating mode.
+  - Dismiss / "Dismiss All" actions clear notifications locally without mutating the order document or changing `order.status` in Firestore.
+- **Global Mounting in `AdminLayout.tsx`**:
+  - Mounted directly in `AdminLayout` so authorized staff on KDS, POS, Orders, or Dashboard views receive immediate real-time alerts.
+- **Automated Verification Suite**:
+  - Created `src/test/milestone9Phase3OnlineOrderNotification.test.tsx` verifying all 15 required functional and edge-case scenarios (100% pass rate).
+  - Regression tested with Milestone 9 Phase 1 and Phase 2 test suites (100% pass rate).
+  - Full TypeScript check (`npm run lint`) and production build (`npm run build`) succeeded with zero errors.
+
+## [Milestone 9 — Phase 2: Customer ↔ Order Linking Foundation] - 2026-09-16
+
+### Added & Verified
+- **Customer ↔ Order Linking Architecture**:
+  - Attached optional `customerId` (`string | null`) to the authoritative `Order` domain model (`src/types/order.ts`).
+  - Set `customerId` strictly to the authenticated customer's Firebase UID (`auth.currentUser.uid`) when signed in.
+  - Retained `customerSnapshot` on orders containing name, phone, email, and delivery address to maintain immutable historical records at the moment of order placement.
+  - Preserved decoupling between historical order snapshots and the customer profile at `/customers/{customerId}` (profile edits do not rewrite past order snapshots; past order snapshots do not corrupt the customer profile).
+- **Guest Checkout Preservation**:
+  - Full guest checkout remains supported: when guest submits an order without signing in, `customerId` defaults to `null` or is omitted.
+  - Zero disruption to guest online ordering or guest checkout modal flows.
+- **Spoofing Prevention & Identity Hardening**:
+  - Hardened `/api/submit-online-order` in `server.ts` and `customerCheckoutService.ts`.
+  - When an order request provides `customerId`, it must strictly match the authenticated user token decoded via `verifyFirebaseToken` (`auth.currentUser.uid === customerId`).
+  - Direct spoofing attempts (submitting Customer B's UID while authenticated as Customer A) are rejected with HTTP 403 / Security Violation error.
+- **Firestore Security Rules**:
+  - Updated `/orders/{orderId}` rules in `firestore.rules`:
+    - Owning customers can read their own orders (`resource.data.customerId == request.auth.uid`).
+    - Guest online orders (`resource.data.source == 'online'`) remain accessible for guest tracking.
+    - Restaurant staff (`staff` or `admin`) continue to read/write all tenant orders as governed by operational RBAC.
+    - Arbitrary public reads (`allow read: if true;`) remain strictly prohibited.
+- **KDS, POS, and Operational Invariants Preserved**:
+  - Zero regression in KDS kitchen queue and KOT creation (`OrderService.createOrderAndKOTFromCart`).
+  - KOT generation receives online customer-linked orders seamlessly with strict separation of operational concerns (KOT carries kitchen preparation items without financial amounts).
+  - Indian GST calculations (CGST/SGST minor units), tax calculations, discounts, and payment status lifecycle flow without modification.
+- **Automated Verification Suite**:
+  - Created `src/test/milestone9Phase2CustomerOrderLinking.test.tsx` covering all 12 required verification scenarios (100% pass rate).
+  - Verified 99 tests across all customer discovery, cart, checkout, profile, and order linking suites.
+  - Production build and TypeScript lint checks passing with zero errors.
+
+## [Milestone 9 — Phase 1: Customer Account & Profile Foundation] - 2026-09-16
+
+### Added & Verified
+- **Customer Authentication via Google Sign-In**:
+  - Implemented `customerAuthService.ts` and `CustomerAuthContext.tsx` providing Google Sign-In (`signInWithPopup`), auto-provisioning customer profiles upon first login, real-time profile listener, and sign-out.
+  - Strictly coupled `customerId` with Firebase Auth UID (`auth.currentUser.uid`).
+  - Separated customer authentication from restaurant staff and owner back-office authentication.
+- **Customer Profile Entity & Management**:
+  - Schema defined in `/customers/{customerId}` storing name, email, phone, default delivery address, saved addresses, preferences, and timestamps.
+  - Implemented `CustomerProfileModal.tsx` allowing customers to view, update contact info, manage delivery addresses, and sign out with responsive mobile/desktop drawer presentation.
+  - Added account trigger button in `CustomerRestaurantMenuPage.tsx` and `PublicCustomerDiscoveryPage.tsx` showing customer avatar and quick access to profile or Google sign-in.
+- **Customer Checkout Integration & Guest Compatibility**:
+  - `CustomerCheckoutModal.tsx` seamlessly auto-fills customer details (name, phone, saved address) when signed in while retaining full guest checkout capability for non-authenticated users.
+  - Embedded one-click "Sign in with Google" prompt inside checkout modal for guests wishing to pre-fill their profile.
+- **Firestore Security Rules Isolation**:
+  - Configured `/customers/{customerId}` security rules in `firestore.rules` allowing read/write strictly when `request.auth != null && request.auth.uid == customerId`.
+  - Customer A cannot read or write Customer B's profile.
+  - Unauthenticated access is rejected.
+  - Existing restaurant tenant security rules, admin access, POS, and KDS rules remain unmodified and intact.
+- **Explicit Prohibition of Phone OTP**:
+  - Phone OTP / SMS authentication is intentionally omitted; phone number is treated strictly as an informational contact field.
+- **Automated Verification Suite**:
+  - Created `src/test/milestone9Phase1CustomerProfile.test.tsx` containing 12 comprehensive unit and integration tests (100% pass rate).
+  - Verified zero regressions across customer checkout, online order submission, and firestore security audit test suites.
+
 ## [Phase 4.6 / Phase 4.5 / M8 — Performance Optimization, Payment Due Center, Table Label Resolution & Firebase Migration] - 2026-09-12
 
 ### Added & Optimized

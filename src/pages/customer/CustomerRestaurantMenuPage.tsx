@@ -13,7 +13,10 @@ import {
   X,
   Building,
   AlertCircle,
-  Plus
+  Plus,
+  User,
+  Compass,
+  Menu
 } from 'lucide-react';
 import { PublicRestaurantProfile, CustomerCartItem } from '../../types/customer';
 import { Category, MenuItem } from '../../types/menu';
@@ -35,9 +38,16 @@ import {
 import { FoodTypeBadge } from '../../components/customer/FoodTypeBadge';
 import { CustomerItemCustomizerModal } from '../../components/customer/CustomerItemCustomizerModal';
 import { CustomerCartProvider, useCustomerCart } from '../../context/CustomerCartContext';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { CustomerCartDrawer } from '../../components/customer/CustomerCartDrawer';
+import { CustomerSidebarDrawer } from '../../components/customer/CustomerSidebarDrawer';
+import { CustomerLocationBar } from '../../components/customer/CustomerLocationBar';
 import { CartConflictModal } from '../../components/customer/CartConflictModal';
 import { CustomerCheckoutModal } from '../../components/customer/CustomerCheckoutModal';
+import { CustomerProfileModal } from '../../components/customer/CustomerProfileModal';
+import { CustomerOrderTrackingModal } from '../../components/customer/CustomerOrderTrackingModal';
+import { CustomerMyOrdersModal } from '../../components/customer/CustomerMyOrdersModal';
+import { getActiveOrdersCount } from '../../services/customerOrderTrackingService';
 
 export interface CustomerRestaurantMenuPageProps {
   initialProfile?: PublicRestaurantProfile;
@@ -80,9 +90,45 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
   // Item customization modal
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
 
-  // Checkout Modal state
+  // Checkout & Tracking Modal states
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isMyOrdersOpen, setIsMyOrdersOpen] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState<boolean>(false);
+  const [trackingOrderParams, setTrackingOrderParams] = useState<{ restaurantId: string; orderId: string } | null>(null);
+  const [activeOrdersCount, setActiveOrdersCount] = useState<number>(0);
   const orderJustSubmittedRef = useRef(false);
+
+  // Customer Auth
+  const { customer, firebaseUser } = useCustomerAuth();
+  const currentUid = customer?.customerId || firebaseUser?.uid || null;
+
+  // Refresh active orders count
+  const refreshActiveOrders = useCallback(() => {
+    const count = getActiveOrdersCount(currentUid);
+    setActiveOrdersCount(count);
+  }, [currentUid]);
+
+  useEffect(() => {
+    refreshActiveOrders();
+    const handleOrderTracked = () => refreshActiveOrders();
+    window.addEventListener('restaurantos_order_tracked', handleOrderTracked);
+    return () => window.removeEventListener('restaurantos_order_tracked', handleOrderTracked);
+  }, [refreshActiveOrders]);
+
+  // Deep-linking: check URL params for ?track=orderId or #track?orderId=...
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const trackOrderId = urlParams.get('track') || urlParams.get('trackOrderId');
+    const trackRestId = urlParams.get('rest') || urlParams.get('restaurantId') || propRestaurantId || propSlug;
+
+    if (trackOrderId && trackRestId) {
+      setTrackingOrderParams({ restaurantId: trackRestId, orderId: trackOrderId });
+      setIsTrackingModalOpen(true);
+    }
+  }, [propRestaurantId, propSlug]);
 
   // Local fallback cart counters if context is bypassed
   const [localCartCount, setLocalCartCount] = useState<number>(cartItemCount);
@@ -281,9 +327,9 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
   const handleCartClick = () => {
     if (onViewCart) {
       onViewCart();
-    } else {
-      openCartDrawer();
+      return;
     }
+    openCartDrawer();
   };
 
   // Filter items based on search and dietary filter
@@ -333,11 +379,22 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
       {/* Sticky Top Bar */}
       <header className="sticky top-0 z-40 glass-neu-header">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Sidebar Drawer Toggle Button (Left Side) */}
+            <button
+              id="menu-header-sidebar-trigger-btn"
+              onClick={() => setIsSidebarOpen(true)}
+              className="relative glass-neu-btn-primary p-2 sm:p-2.5 text-xs font-bold rounded-xl flex items-center justify-center cursor-pointer shrink-0 min-h-[38px] min-w-[38px] sm:min-h-[42px] sm:min-w-[42px]"
+              title="Open Sidebar Menu"
+              aria-label="Open Sidebar Menu"
+            >
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
             <button
               id="menu-back-btn"
               onClick={handleBack}
-              className="glass-neu-btn px-3 py-2 text-xs font-bold text-slate-800 rounded-xl shrink-0 min-h-[44px] flex items-center gap-1.5"
+              className="glass-neu-btn px-3 py-2 text-xs font-bold text-slate-800 rounded-xl shrink-0 min-h-[38px] sm:min-h-[42px] flex items-center gap-1.5"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">Back</span>
@@ -359,23 +416,24 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
             )}
           </div>
 
-          {/* Cart Counter Button in Header */}
-          <button
-            id="menu-header-cart-btn"
-            onClick={handleCartClick}
-            className="relative px-3.5 py-2 glass-neu-btn text-orange-700 rounded-xl text-xs font-bold flex items-center gap-2 min-h-[44px]"
-          >
-            <ShoppingBag className="w-4 h-4 text-orange-600" />
-            <span className="hidden sm:inline">Cart</span>
-            {displayCartCount > 0 && (
+          {/* Header Action Buttons - Cart Button */}
+          <div className="flex items-center gap-2">
+            <button
+              id="menu-header-cart-trigger-btn"
+              onClick={openCartDrawer}
+              className="relative p-2.5 sm:p-3 bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 rounded-xl sm:rounded-2xl shadow-xs flex items-center justify-center cursor-pointer shrink-0 min-h-[38px] min-w-[38px] sm:min-h-[42px] sm:min-w-[42px] transition-all"
+              title="View Cart"
+              aria-label="View Cart"
+            >
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-slate-800" />
               <span
                 id="menu-header-cart-count"
-                className="w-5 h-5 rounded-full bg-gradient-to-r from-orange-500 to-amber-600 text-white text-[10px] font-bold flex items-center justify-center font-mono shadow-[2px_2px_6px_rgba(234,88,12,0.3)] border border-white"
+                className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-orange-600 text-white text-[10px] font-black rounded-full shadow-[0_2px_5px_rgba(234,88,12,0.4)] min-w-[18px] text-center"
               >
                 {displayCartCount}
               </span>
-            )}
-          </button>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -948,6 +1006,11 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
               }}
               onOrderSubmitted={() => {
                 orderJustSubmittedRef.current = true;
+                refreshActiveOrders();
+              }}
+              onTrackOrder={(restId, ordId) => {
+                setTrackingOrderParams({ restaurantId: restId, orderId: ordId });
+                setIsTrackingModalOpen(true);
               }}
               restaurantProfile={restaurant}
               menuItems={menuData ? menuData.allItems : undefined}
@@ -959,6 +1022,64 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
 
             {/* Cart Conflict Modal (Cross-Restaurant Guard) */}
             <CartConflictModal />
+
+            {/* Customer Sidebar Drawer */}
+            <CustomerSidebarDrawer
+              isOpen={isSidebarOpen}
+              onClose={() => setIsSidebarOpen(false)}
+              onOpenProfile={() => {
+                setIsSidebarOpen(false);
+                setIsProfileModalOpen(true);
+              }}
+              onOpenMyOrders={() => {
+                setIsSidebarOpen(false);
+                setIsMyOrdersOpen(true);
+              }}
+              restaurantProfile={restaurant || undefined}
+              menuItems={menuData ? menuData.allItems : undefined}
+              onCheckout={() => {
+                setIsSidebarOpen(false);
+                setIsCheckoutModalOpen(true);
+              }}
+            />
+
+            {/* Customer Profile & Sign In Modal */}
+            <CustomerProfileModal
+              isOpen={isProfileModalOpen}
+              onClose={() => setIsProfileModalOpen(false)}
+              onTrackOrder={(restId, ordId) => {
+                setTrackingOrderParams({ restaurantId: restId, orderId: ordId });
+                setIsTrackingModalOpen(true);
+              }}
+            />
+
+            {/* Customer Order Tracking Modal */}
+            <CustomerOrderTrackingModal
+              isOpen={isTrackingModalOpen}
+              onClose={() => {
+                setIsTrackingModalOpen(false);
+                refreshActiveOrders();
+              }}
+              restaurantId={trackingOrderParams?.restaurantId || restaurant?.restaurantId}
+              orderId={trackingOrderParams?.orderId}
+              onBackToMenu={() => {
+                setIsTrackingModalOpen(false);
+                refreshActiveOrders();
+              }}
+            />
+
+            {/* Customer My Orders Modal */}
+            <CustomerMyOrdersModal
+              isOpen={isMyOrdersOpen}
+              onClose={() => {
+                setIsMyOrdersOpen(false);
+                refreshActiveOrders();
+              }}
+              onSelectOrderToTrack={(restId, ordId) => {
+                setTrackingOrderParams({ restaurantId: restId, orderId: ordId });
+                setIsTrackingModalOpen(true);
+              }}
+            />
           </div>
         )}
       </main>

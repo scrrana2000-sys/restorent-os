@@ -15,6 +15,7 @@ import {
   Receipt,
   CreditCard,
   Users,
+  UserCheck,
   X,
   ChevronDown,
   Check,
@@ -27,7 +28,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getRestaurantOperatingProfile } from '../../config/restaurantOperatingModes';
 import { isViewAllowed } from '../../utils/permissions';
 
-export type AdminView = 'pos' | 'kitchen' | 'captain' | 'dashboard' | 'restaurant' | 'categories' | 'items' | 'settings' | 'reports' | 'audit' | 'orders' | 'payments' | 'staff' | 'inventory';
+export type AdminView = 'pos' | 'kitchen' | 'captain' | 'dashboard' | 'restaurant' | 'categories' | 'items' | 'settings' | 'reports' | 'audit' | 'orders' | 'payments' | 'staff' | 'inventory' | 'customers';
 
 interface SidebarProps {
   currentView: AdminView;
@@ -67,7 +68,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'pos', label: 'POS Terminal', icon: MonitorCheck },
     { id: 'captain', label: 'Captain / Staff', icon: Layers },
     { id: 'kitchen', label: 'Kitchen / KOT', icon: CookingPot },
-    { id: 'orders', label: 'Order History & Bills', icon: Receipt },
+    { id: 'orders', label: 'Orders & Online Queue', icon: Receipt },
+    { id: 'customers', label: 'Customers & CRM', icon: UserCheck },
     { id: 'payments', label: 'Payment History', icon: CreditCard },
     { id: 'inventory', label: 'Inventory & Stock', icon: Boxes },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -93,6 +95,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return nav.isKitchenVisible;
       case 'orders':
         return nav.isOrdersVisible;
+      case 'customers':
+        return nav.isCustomersVisible !== false;
       case 'payments':
         return nav.isPaymentsVisible;
       case 'inventory':

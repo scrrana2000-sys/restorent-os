@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar, AdminView } from './Sidebar';
 import { Header } from './Header';
 import { MobileBottomNav } from './MobileBottomNav';
@@ -9,6 +9,10 @@ import { SecurityRulesNotice } from '../common/SecurityRulesNotice';
 import { firebaseConfig } from '../../config/firebase';
 import { useModalBackHandler } from '../../hooks/useModalBackHandler';
 import { VoiceAssistantWidget } from '../voice/VoiceAssistantWidget';
+import { Order } from '../../types/order';
+import { subscribeToNewOnlineOrders } from '../../services/onlineOrderNotificationService';
+import { playNewOrderSoundAlert, isSoundAlertEnabled, setSoundAlertEnabled } from '../../utils/soundAlert';
+import { NewOnlineOrderNotification } from '../notifications/NewOnlineOrderNotification';
 
 interface AdminLayoutProps {
   currentView: AdminView;
@@ -27,6 +31,64 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { restaurant, operatingProfile, error, retry, loading: restaurantLoading, isSwitching } = useRestaurant();
   const resolvedProfile = operatingProfile || getRestaurantOperatingProfile(restaurant);
+
+  // Milestone 9 — Phase 3: Incoming Online Order Notifications
+  const [pendingOnlineOrders, setPendingOnlineOrders] = useState<Order[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(isSoundAlertEnabled());
+
+  useEffect(() => {
+    const restaurantId = restaurant?.restaurantId;
+    if (!restaurantId) {
+      setPendingOnlineOrders([]);
+      return;
+    }
+
+    const unsubscribe = subscribeToNewOnlineOrders(restaurantId, {
+      onNewOrder: (newOrder) => {
+        // Attempt sound alert (catches autoplay errors gracefully internally)
+        playNewOrderSoundAlert().catch(() => {});
+
+        // Add new order to stack if not already present
+        setPendingOnlineOrders((prev) => {
+          if (prev.some((o) => o.id === newOrder.id)) return prev;
+          return [newOrder, ...prev];
+        });
+      },
+      onError: (err) => {
+        console.warn('[AdminLayout] Online order notification subscription notice:', err);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [restaurant?.restaurantId]);
+
+  const handleDismissOnlineOrder = (orderId: string) => {
+    setPendingOnlineOrders((prev) => prev.filter((o) => o.id !== orderId));
+  };
+
+  const handleDismissAllOnlineOrders = () => {
+    setPendingOnlineOrders([]);
+  };
+
+  const handleViewOnlineOrder = (order: Order) => {
+    // Dismiss the visual card without mutating the order
+    handleDismissOnlineOrder(order.id);
+
+    // Navigate to Kitchen or Orders view based on operating capabilities
+    if (resolvedProfile.capabilities.kitchenEnabled) {
+      onNavigate('kitchen');
+    } else {
+      onNavigate('orders');
+    }
+  };
+
+  const handleToggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    setSoundAlertEnabled(next);
+  };
 
   // Deterministic Back button handling for mobile sidebar menu
   useModalBackHandler(isMobileMenuOpen, () => setIsMobileMenuOpen(false), 'admin-mobile-sidebar');
@@ -223,6 +285,17 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         <VoiceAssistantWidget
           currentView={currentView}
           onNavigate={onNavigate}
+        />
+
+        {/* Milestone 9 — Phase 3: Realtime New Online Order Notifications */}
+        <NewOnlineOrderNotification
+          orders={pendingOnlineOrders}
+          onDismiss={handleDismissOnlineOrder}
+          onDismissAll={handleDismissAllOnlineOrders}
+          onViewOrder={handleViewOnlineOrder}
+          currencySymbol={restaurant?.currencySymbol || '₹'}
+          isSoundEnabled={soundEnabled}
+          onToggleSound={handleToggleSound}
         />
       </div>
     </div>

@@ -962,15 +962,48 @@ A feature is done only when:
 
 ---
 
+# 33B. MILESTONE 9 — CUSTOMER APP & ONLINE ORDERING
+
+## Phase 1: Customer Account & Profile Foundation (COMPLETE & VERIFIED)
+
+### 1. Architectural Invariants
+- **Authentication Method**: Google Sign-In ONLY (`signInWithPopup(auth, googleProvider)`).
+- **No Phone OTP**: Phone OTP, SMS authentication, and OTP reCAPTCHA flows are strictly prohibited and intentionally excluded. Phone numbers are stored solely as user-provided contact strings.
+- **Identity Decoupling**: Customer accounts are completely decoupled from restaurant staff, managers, and owners. A customer signing in does NOT gain access to the `/admin` back-office, nor does a staff account become a customer profile unless signed in via customer auth.
+- **Customer ID Contract**: `customerId` is strictly equal to the Firebase Auth UID (`auth.currentUser.uid`).
+- **Data Model**: Stored in root collection `/customers/{customerId}`:
+  - `id`: string (Firebase Auth UID)
+  - `email`: string
+  - `name`: string
+  - `phone`: string (optional/contact)
+  - `photoURL`: string | null (optional)
+  - `defaultDeliveryAddress`: CustomerAddress | null (optional)
+  - `savedAddresses`: CustomerAddress[] (optional)
+  - `preferences`: CustomerPreferences (optional)
+  - `createdAt`: ISO 8601 string
+  - `updatedAt`: ISO 8601 string
+- **Firestore Security Rules**:
+  - `/customers/{customerId}`: `allow read, write: if request.auth != null && request.auth.uid == customerId;`
+  - Cross-customer access is completely blocked (Customer A cannot read or write Customer B's profile).
+  - Unauthenticated access is completely blocked.
+  - Restaurant staff and owners have no direct access to customer profile documents.
+- **Guest Checkout Compatibility**:
+  - Guest checkout remains fully operational without forcing Google Sign-In.
+  - Guest customers enter their name, phone number, and delivery address directly.
+  - Logged-in customers have their saved details pre-filled with an option to sign in directly from the checkout modal.
+- **Next Phase**: Milestone 9 — Phase 2: Customer ↔ Order Linking Foundation *(NOT STARTED)*.
+
+---
+
 # 34. CURRENT TASK
 
 Build ONLY the currently activated milestone.
 
-CURRENT MILESTONE STATUS: M8 COMPLETE / CONDITIONAL — STOPPED BEFORE M9
+CURRENT MILESTONE STATUS: MILESTONE 9 — PHASE 1 COMPLETE & VERIFIED
 
-M1 through M8, Phase 3, Phase 4, Phase 4.5, and Phase 4.6 are fully implemented and verified in software.
-M9 (Customer App & Online Ordering) remains strictly NOT STARTED.
-Future milestones (M9, M10, M11, M12) MUST NOT be started until explicitly activated.
+M1 through M8.5, M11, Phase 3, Phase 4, Phase 4.5, Phase 4.6, and Milestone 9 Phase 1 are fully implemented and verified in software.
+Milestone 9 Phase 1 (Customer Account & Profile Foundation) is COMPLETE & VERIFIED.
+Milestone 9 Phase 2 (Customer ↔ Order Linking Foundation) is the next phase and MUST NOT be started until explicitly activated.
 
 After implementation, execute the LOOPING DEVELOPMENT PROTOCOL and do not stop while known current-change errors remain unless the environment itself blocks execution.
 

@@ -88,13 +88,17 @@ export async function getRestaurantsForUser(userId: string): Promise<Restaurant[
 export async function getOrCreateInitialRestaurant(
   userId: string,
   userEmail: string,
-  ownerName: string
+  ownerName: string,
+  restaurantName?: string,
+  city?: string
 ): Promise<Restaurant> {
   if (!userId) {
     throw new Error('User ID is required for initial restaurant provisioning');
   }
 
   const cleanOwnerFirstName = ownerName ? ownerName.split(' ')[0] : 'Owner';
+  const customRestaurantName = restaurantName?.trim() || `${cleanOwnerFirstName}'s Restaurant`;
+  const customCity = city?.trim() || 'Bengaluru';
   const sanitizeId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
   const initDocId = `rest_init_${sanitizeId}`;
   const initRestRef = doc(db, 'restaurants', initDocId);
@@ -151,13 +155,13 @@ export async function getOrCreateInitialRestaurant(
       console.log('[RestaurantOS Idempotency] Transaction creating initial owner restaurant document:', initDocId);
       const newRestaurant: Restaurant = {
         restaurantId: initDocId,
-        name: `${cleanOwnerFirstName}'s Restaurant`,
-        legalName: `${ownerName || 'Owner'} Hospitality LLP`,
+        name: customRestaurantName,
+        legalName: `${restaurantName?.trim() || ownerName || 'Owner'} Hospitality LLP`,
         logoUrl: null,
         phone: '+91 98765 43210',
         email: userEmail || 'admin@restaurantos.io',
         address: '124 Prime Market Square, MG Road',
-        city: 'Bengaluru',
+        city: customCity,
         state: 'Karnataka',
         postalCode: '560001',
         country: 'India',
@@ -207,8 +211,14 @@ export async function getOrCreateInitialRestaurant(
   }
 }
 
-export async function createDefaultRestaurant(userId: string, userEmail: string, ownerName: string): Promise<Restaurant> {
-  return getOrCreateInitialRestaurant(userId, userEmail, ownerName);
+export async function createDefaultRestaurant(
+  userId: string,
+  userEmail: string,
+  ownerName: string,
+  restaurantName?: string,
+  city?: string
+): Promise<Restaurant> {
+  return getOrCreateInitialRestaurant(userId, userEmail, ownerName, restaurantName, city);
 }
 
 export async function updateRestaurantProfile(

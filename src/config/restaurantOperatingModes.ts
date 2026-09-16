@@ -84,6 +84,7 @@ export interface RestaurantOperatingProfile {
     isRestaurantVisible: boolean;
     isCategoriesVisible: boolean;
     isItemsVisible: boolean;
+    isCustomersVisible: boolean;
   };
   workflow: {
     hasKitchenFlow: boolean;
@@ -174,7 +175,8 @@ export function getRestaurantOperatingProfile(
     isStaffVisible: mode !== 'single_person', // Hide staff management for purely single-person operations
     isRestaurantVisible: true,
     isCategoriesVisible: true,
-    isItemsVisible: true
+    isItemsVisible: true,
+    isCustomersVisible: true
   };
 
   // 5. Derive workflow parameters

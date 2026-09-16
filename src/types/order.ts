@@ -56,6 +56,7 @@ export interface Order {
   id: string;
   restaurantId: string;
   orderNumber: string;
+  customerId?: string | null; // Milestone 9: Authenticated customer identity (Firebase Auth UID). Null for guest orders.
   tableId?: string | null;
   tableSessionId?: string | null;
   orderType: OrderType;
@@ -87,6 +88,12 @@ export interface Order {
   completedBy?: string | null;
   stockConsumptionStatus?: 'consumed' | 'failed' | 'reversed' | 'reversal_failed' | 'not_applicable' | null;
   stockConsumptionError?: string | null;
+  acceptedAt?: any | null;
+  acceptedBy?: string | null;
+  estimatedPrepMinutes?: number | null;
+  rejectionReason?: string | null;
+  readyAt?: any | null;
+  readyBy?: string | null;
   createdAt: any;
   updatedAt: any;
   createdBy: string;

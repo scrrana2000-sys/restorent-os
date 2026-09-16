@@ -1,8 +1,14 @@
 # RestaurantOS — Master Project State & Status
 
 ## Current Milestone & Phase Status
-- **Current Active Milestone**: Milestone 8.5 — Adaptive Operating Model & Small Restaurant Mode
-- **Active Operational Phase**: M8.5 Final Release Gate & Verification COMPLETE & VERIFIED
+- **Current Active Milestone**: Milestone 9 — Public Online Ordering & Customer CRM Platform
+- **Active Operational Phase**: Phase 5 — Restaurant Customer Management / CRM Foundation (COMPLETE & VERIFIED)
+- **Milestone 9 Status**: COMPLETE / VERIFIED
+  - **Phase 1 (Discovery & City Selection)**: Public multi-tenant restaurant discovery, GPS/PIN/City location selector, and public restaurant profiles.
+  - **Phase 2 (Menu & Customization)**: Public menu viewing, food type badges, variant & addon customizers, and cart boundary isolation.
+  - **Phase 3 (Checkout & Order Submission)**: Customer authentication, guest ordering, real-time bill calculations, and live order placement.
+  - **Phase 4 (Order Tracking & Restaurant Kitchen Lifecycle)**: Live customer tracking timeline, sound alerts, prep time estimation, accept/reject workflows with inventory rollback.
+  - **Phase 5 (Restaurant Customer Management / CRM Foundation)**: Restaurant-scoped customer directory, multi-tenant isolation, registered customer deduplication, guest activity tracking without auto-merging, summary KPIs, search & filters, and customer detail modal.
 - **Milestone 8.5 Status**: COMPLETE / VERIFIED
   - **Single Person / Quick Counter Mode**: Streamlined single-operator workflow (`tablesEnabled: false`, `kitchenEnabled: false`, `captainEnabled: false`), suppressing table selection, KOT generation, and captain dispatch while enabling direct review and counter payment.
   - **Small Team / Cafe Mode**: Optimized for counter ordering with separate kitchen preparation (`kitchenEnabled: true`, `captainEnabled: false`), sending KOTs directly to Kitchen Display while eliminating captain steps.
@@ -50,6 +56,49 @@
   - **Phase 9A — Public Restaurant Identity & Safe Model**: COMPLETE & VERIFIED
   - **Phase 9B — Public Restaurant Discovery Service / Query**: COMPLETE & VERIFIED
   - **Phase 9C — Customer Location Context & Manual City Fallback**: COMPLETE & VERIFIED
+  - **Milestone 9 — Phase 1: Customer Account & Profile Foundation**: COMPLETE & VERIFIED
+    - **Google Sign-In Authentication**: Direct Google OAuth (`GoogleAuthProvider`) integration via `CustomerAuthContext` and `customerAuthService`.
+    - **UID Mapping**: Customer ID is strictly bound to Firebase Auth UID (`customerId = user.uid`).
+    - **Staff/Customer Identity Decoupling**: Customer accounts are completely separated from restaurant staff and owner roles.
+    - **Customer Profile Entity**: Stored in root collection `/customers/{customerId}` with `name`, `email`, `phone`, `defaultDeliveryAddress`, `preferences`, and timestamps.
+    - **Firestore Security Rules**: Strict owner-only access enforced (`request.auth.uid == customerId`); cross-customer access is completely blocked.
+    - **Guest Checkout Preserved**: Unauthenticated guest checkout remains fully operational; logged-in customers get automatic checkout pre-fill.
+    - **No Phone OTP**: Phone OTP / SMS authentication is explicitly excluded per business decision; phone numbers are stored strictly as contact information.
+    - **Automated Verification**: Verified with 12 dedicated tests in `src/test/milestone9Phase1CustomerProfile.test.tsx` (100% pass rate).
+  - **Milestone 9 — Phase 2: Customer ↔ Order Linking Foundation**: COMPLETE & VERIFIED
+    - **Customer Order Association**: `customerId` added to `Order` domain model; deterministically set to authenticated customer's Firebase UID (`auth.currentUser.uid`).
+    - **Guest Checkout Preserved**: Unauthenticated guests continue to place takeaway and delivery orders with `customerId: null` without disruption.
+    - **Identity Anti-Spoofing Hardening**: Server-side token validation at `/api/submit-online-order` ensures client cannot submit orders under a mismatched `customerId`. Violations reject with HTTP 403.
+    - **Snapshot Immutability vs Profile Decoupling**: Historical `customerSnapshot` on orders captures checkout data at order placement time and remains strictly decoupled from future edits to the customer's `/customers/{customerId}` document.
+    - **Firestore Security Rules**: Customer order reads permitted via `resource.data.customerId == request.auth.uid`, guest online orders readable via `resource.data.source == 'online'`, while full staff/admin access and cross-tenant rules remain intact.
+    - **Zero Regressions**: POS, KDS, KOT creation, and financial calculations continue operating with 100% fidelity.
+    - **Automated Verification**: 12/12 dedicated tests in `src/test/milestone9Phase2CustomerOrderLinking.test.tsx` passing; 99 customer suite tests passing.
+  - **Milestone 9 — Phase 3: Restaurant New Online Order Notification**: COMPLETE & VERIFIED
+    - **Real-time Detection**: Subscribes to new online orders for the active tenant (`/restaurants/{restaurantId}/orders` where `source == 'online'`) via `onlineOrderNotificationService.ts`.
+    - **Initial Page Load Suppression**: Historical orders existing prior to listener initialization are indexed into `seenOrderIds` without triggering notifications.
+    - **Deduplication Engine**: Client-side `seenOrderIds` cache prevents duplicate notifications across repeated snapshots, metadata modifications, or order status transitions.
+    - **Offline / Reconnect Resilience**: Retains seen order cache across network disconnects and reconnects, preventing old orders from re-announcing on reconnect.
+    - **Sound Alert with Autoplay Fallback**: Synthesizes a soft two-tone chime via native Web Audio API (`soundAlert.ts`) without external asset requests; catches browser autoplay policy blocks gracefully without crashing or degrading visual notifications.
+    - **Non-Blocking Visual Notification**: Responsive stacked cards in `AdminLayout` displaying order number, customer name, order type (Takeaway/Delivery), amount in ₹, and relative timestamp.
+    - **Safe Dismissal / Zero Status Mutation**: Staff can dismiss individual notifications or "Dismiss All"; dismissal is purely local and NEVER mutates the underlying order status in Firestore.
+    - **Multi-Tenant Isolation**: Subscriptions strictly scoped to the active `restaurantId`; cross-tenant order notifications are completely blocked.
+    - **Automated Verification**: 15/15 dedicated tests in `src/test/milestone9Phase3OnlineOrderNotification.test.tsx` passing; zero regressions across customer profile and order linking suites.
+  - **Milestone 9 — Phase 4: Customer Order Tracking**: COMPLETE & VERIFIED
+    - **Read-Only Order Observation**: Customer tracking strictly observes live order progress without mutating order documents or triggering unauthorized status changes.
+    - **Existing Order Lifecycle Mapping**: Backend `OrderStatus` mapped directly to customer-facing 4-stage stepper (Order Placed → Preparing in Kitchen → Ready/Out for Delivery → Completed) with cancelled state handling.
+    - **Guest Checkout Preservation**: Seamless order tracking for unauthenticated guests via client-side `localStorage` tracking references (`restaurantos_guest_tracked_orders`) alongside authenticated customer tracking.
+    - **Data Sanitization**: Strips internal kitchen notes, staff metadata, and operational IDs before rendering to customer.
+    - **Multi-Entry Tracking Access**: Tracking accessible immediately from checkout success modal, "My Orders" modal, customer profile modal, and persistent header buttons with real-time active order count badge.
+    - **Zero Phone OTP**: Excluded per architectural constraints; no SMS or phone verification added.
+    - **Milestone 9 — Phase 5: Restaurant Customer Management / CRM Foundation**: COMPLETE & VERIFIED
+      - Restaurant-scoped customer directory aggregating purely from tenant orders (`/restaurants/{restaurantId}/orders`).
+      - Registered customer deduplication by authenticated UID (`customerId`).
+      - Guest customer isolation with `guest_` identifiers (no fake UIDs, no auto-merging).
+      - Operational metrics: Unique Customers, Total Orders, Total Revenue, Average Order Value (AOV).
+      - Multi-attribute real-time search & filter tabs (All, Registered, Guests, Frequent, Recent).
+      - Customer Detail Modal with order history inspection and direct link to Orders view.
+      - Automated test suite: 13/13 Phase 5 tests passing; zero phone OTP, SMS, or marketing automation added.
+  - **Milestone 9 Completion**: ALL 5 PHASES (Phases 1–5) COMPLETE & VERIFIED.
 - **Milestone 10 — Multi-Branch & Chain Enterprise Management**: NOT STARTED *(Protected / Future Scope)*
 
 - **Milestone 11 — Global RestaurantOS Assistant & Voice-Assisted POS Engine**: COMPLETE & VERIFIED

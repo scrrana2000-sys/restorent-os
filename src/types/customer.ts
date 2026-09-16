@@ -136,6 +136,7 @@ export interface CustomerCart {
 export interface CustomerCheckoutDetails {
   name: string;
   phone: string;
+  email?: string;
 }
 
 /**
@@ -162,6 +163,8 @@ export interface CustomerCheckoutIntent {
   orderType: 'takeaway' | 'delivery' | 'dineIn';
   customerDetails: CustomerCheckoutDetails;
   deliveryDetails?: CustomerDeliveryDetails;
+  customerId?: string | null;
+  customerEmail?: string | null;
   items: CustomerCartItem[];
   subtotal: number; // in paise (client estimate)
   paymentMethod: PaymentMethod;
@@ -170,8 +173,8 @@ export interface CustomerCheckoutIntent {
 }
 
 /**
-  * Customer Checkout Validation Result.
-  */
+ * Customer Checkout Validation Result.
+ */
 export interface CheckoutValidationResult {
   isValid: boolean;
   errors: {
@@ -187,5 +190,35 @@ export interface CheckoutValidationResult {
     general?: string;
   };
   issues: string[];
+}
+
+/**
+ * Saved Customer Address foundation.
+ */
+export interface CustomerAddress {
+  id: string;
+  label: 'home' | 'work' | 'other' | string;
+  addressLine: string;
+  area: string;
+  city: string;
+  state?: string;
+  postalCode: string;
+  isDefault?: boolean;
+}
+
+/**
+ * Customer Profile Foundation (Milestone 9 - Phase 1).
+ * Uses Firebase Auth UID as customerId.
+ */
+export interface CustomerProfile {
+  customerId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  photoURL?: string | null;
+  authProvider: string;
+  addresses?: CustomerAddress[];
+  createdAt: string;
+  updatedAt: string;
 }
 

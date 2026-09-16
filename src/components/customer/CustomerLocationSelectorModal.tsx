@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   MapPin,
   Search,
@@ -65,6 +65,18 @@ export const CustomerLocationSelectorModal: React.FC<CustomerLocationSelectorMod
     return searchIndianCities(searchQuery);
   }, [searchQuery]);
 
+  // Handle ESC key press to close modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleUseGps = async () => {
@@ -129,10 +141,11 @@ export const CustomerLocationSelectorModal: React.FC<CustomerLocationSelectorMod
 
   const handleConfirmPinLocation = () => {
     if (!resolvedPinLocation) return;
+    // Always set area to undefined for PIN locations so the customer gets full city coverage
     setPincodeLocation(
       resolvedPinLocation.city,
       resolvedPinLocation.state,
-      resolvedPinLocation.area,
+      undefined,
       resolvedPinLocation.postalCode
     );
     onClose();
@@ -141,13 +154,20 @@ export const CustomerLocationSelectorModal: React.FC<CustomerLocationSelectorMod
   return (
     <div
       id="customer-location-selector-modal"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="location-modal-title"
     >
+      {/* Subdued Dark Backdrop */}
       <div
-        className="w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in slide-in-from-bottom duration-200"
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        className="relative z-10 w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/50">
@@ -393,12 +413,10 @@ export const CustomerLocationSelectorModal: React.FC<CustomerLocationSelectorMod
                         <div className="text-base font-extrabold text-slate-900 mt-0.5">
                           → {resolvedPinLocation.city}, {resolvedPinLocation.state}
                         </div>
-                        {resolvedPinLocation.area && (
-                          <div className="text-xs text-slate-600 font-medium">
-                            Area: {resolvedPinLocation.area}
-                          </div>
-                        )}
-                        <div className="text-xs font-mono font-bold text-orange-800 mt-0.5">
+                        <div className="text-xs text-emerald-700 font-semibold mt-1 flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                          <span>✓ Full {resolvedPinLocation.city} (City-Wide • All Areas)</span>
+                        </div>
+                        <div className="text-xs font-mono font-bold text-orange-800 mt-1">
                           Postal PIN: {resolvedPinLocation.postalCode}
                         </div>
                       </div>
@@ -412,7 +430,7 @@ export const CustomerLocationSelectorModal: React.FC<CustomerLocationSelectorMod
                       className="flex-1 py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 min-h-[42px]"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Use This Location</span>
+                      <span>Use Full {resolvedPinLocation.city} Location</span>
                     </button>
 
                     <button
@@ -437,12 +455,12 @@ export const CustomerLocationSelectorModal: React.FC<CustomerLocationSelectorMod
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {[
-                      { pin: '560001', label: 'Bengaluru MG Rd' },
-                      { pin: '584101', label: 'Raichur Station' },
-                      { pin: '400001', label: 'Mumbai Fort' },
-                      { pin: '110001', label: 'Delhi Connaught' },
-                      { pin: '500001', label: 'Hyderabad Abids' },
-                      { pin: '600001', label: 'Chennai Town' }
+                      { pin: '560001', label: 'Bengaluru' },
+                      { pin: '584101', label: 'Raichur (Full City)' },
+                      { pin: '400001', label: 'Mumbai' },
+                      { pin: '110001', label: 'Delhi' },
+                      { pin: '500001', label: 'Hyderabad' },
+                      { pin: '600001', label: 'Chennai' }
                     ].map((sample) => (
                       <button
                         key={sample.pin}

@@ -14,18 +14,24 @@ const dbId =
     ? firebaseConfig.firestoreDatabaseId
     : undefined;
 
+const isBrowser = typeof window !== 'undefined';
+
 let firestoreInstance: Firestore;
 try {
-  firestoreInstance = initializeFirestore(
-    app,
-    {
-      experimentalForceLongPolling: true,
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager()
-      })
-    },
-    dbId
-  );
+  if (isBrowser) {
+    firestoreInstance = initializeFirestore(
+      app,
+      {
+        experimentalForceLongPolling: true,
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      },
+      dbId
+    );
+  } else {
+    throw new Error('Server environment');
+  }
 } catch {
   try {
     firestoreInstance = initializeFirestore(

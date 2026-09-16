@@ -18,59 +18,61 @@ export interface PinResolutionResult {
 
 /**
  * Known specific 6-digit PIN Code Mappings for precision resolution.
+ * PIN codes map to City and State for complete city-wide restaurant discovery.
+ * Sub-areas are intentionally omitted so customers are not restricted to an isolated locality.
  */
-const SPECIFIC_PIN_MAPPINGS: Record<string, { city: string; state: string; area: string }> = {
+const SPECIFIC_PIN_MAPPINGS: Record<string, { city: string; state: string; area?: string }> = {
   // Bengaluru / Bangalore (560xxx)
-  '560001': { city: 'Bengaluru', state: 'Karnataka', area: 'MG Road / Residency Road / GPO' },
-  '560002': { city: 'Bengaluru', state: 'Karnataka', area: 'City Market / Chickpet' },
-  '560004': { city: 'Bengaluru', state: 'Karnataka', area: 'Basavanagudi' },
-  '560008': { city: 'Bengaluru', state: 'Karnataka', area: 'Halasuru / Ulsoor' },
-  '560011': { city: 'Bengaluru', state: 'Karnataka', area: 'Jayanagar' },
-  '560025': { city: 'Bengaluru', state: 'Karnataka', area: 'Richmond Town' },
-  '560034': { city: 'Bengaluru', state: 'Karnataka', area: 'Koramangala' },
-  '560037': { city: 'Bengaluru', state: 'Karnataka', area: 'Marathahalli' },
-  '560038': { city: 'Bengaluru', state: 'Karnataka', area: 'Indiranagar' },
-  '560066': { city: 'Bengaluru', state: 'Karnataka', area: 'Whitefield' },
-  '560076': { city: 'Bengaluru', state: 'Karnataka', area: 'BTM Layout / Bannerghatta Road' },
-  '560078': { city: 'Bengaluru', state: 'Karnataka', area: 'JP Nagar' },
-  '560100': { city: 'Bengaluru', state: 'Karnataka', area: 'Electronic City' },
-  '560102': { city: 'Bengaluru', state: 'Karnataka', area: 'HSR Layout' },
+  '560001': { city: 'Bengaluru', state: 'Karnataka' },
+  '560002': { city: 'Bengaluru', state: 'Karnataka' },
+  '560004': { city: 'Bengaluru', state: 'Karnataka' },
+  '560008': { city: 'Bengaluru', state: 'Karnataka' },
+  '560011': { city: 'Bengaluru', state: 'Karnataka' },
+  '560025': { city: 'Bengaluru', state: 'Karnataka' },
+  '560034': { city: 'Bengaluru', state: 'Karnataka' },
+  '560037': { city: 'Bengaluru', state: 'Karnataka' },
+  '560038': { city: 'Bengaluru', state: 'Karnataka' },
+  '560066': { city: 'Bengaluru', state: 'Karnataka' },
+  '560076': { city: 'Bengaluru', state: 'Karnataka' },
+  '560078': { city: 'Bengaluru', state: 'Karnataka' },
+  '560100': { city: 'Bengaluru', state: 'Karnataka' },
+  '560102': { city: 'Bengaluru', state: 'Karnataka' },
 
-  // Raichur (584xxx)
-  '584101': { city: 'Raichur', state: 'Karnataka', area: 'Station Road / City Center' },
-  '584102': { city: 'Raichur', state: 'Karnataka', area: 'Nijalingappa Colony' },
-  '584103': { city: 'Raichur', state: 'Karnataka', area: 'Gunj Road' },
+  // Raichur (584xxx) - Covers full Raichur city-wide
+  '584101': { city: 'Raichur', state: 'Karnataka' },
+  '584102': { city: 'Raichur', state: 'Karnataka' },
+  '584103': { city: 'Raichur', state: 'Karnataka' },
 
   // Mysuru (570xxx)
-  '570001': { city: 'Mysuru', state: 'Karnataka', area: 'Mysore Palace / City Center' },
-  '570002': { city: 'Mysuru', state: 'Karnataka', area: 'Gokulam' },
+  '570001': { city: 'Mysuru', state: 'Karnataka' },
+  '570002': { city: 'Mysuru', state: 'Karnataka' },
 
   // Hubballi (580xxx)
-  '580020': { city: 'Hubballi-Dharwad', state: 'Karnataka', area: 'Vidyanagar' },
+  '580020': { city: 'Hubballi-Dharwad', state: 'Karnataka' },
 
   // Mumbai (400xxx)
-  '400001': { city: 'Mumbai', state: 'Maharashtra', area: 'Fort / Nariman Point' },
-  '400050': { city: 'Mumbai', state: 'Maharashtra', area: 'Bandra West' },
+  '400001': { city: 'Mumbai', state: 'Maharashtra' },
+  '400050': { city: 'Mumbai', state: 'Maharashtra' },
 
   // Delhi (110xxx)
-  '110001': { city: 'Delhi', state: 'Delhi', area: 'Connaught Place' },
-  '110016': { city: 'Delhi', state: 'Delhi', area: 'Hauz Khas' },
+  '110001': { city: 'Delhi', state: 'Delhi' },
+  '110016': { city: 'Delhi', state: 'Delhi' },
 
   // Hyderabad (500xxx)
-  '500001': { city: 'Hyderabad', state: 'Telangana', area: 'Abids' },
-  '500081': { city: 'Hyderabad', state: 'Telangana', area: 'HITEC City' },
+  '500001': { city: 'Hyderabad', state: 'Telangana' },
+  '500081': { city: 'Hyderabad', state: 'Telangana' },
 
   // Chennai (600xxx)
-  '600001': { city: 'Chennai', state: 'Tamil Nadu', area: 'George Town' },
-  '600017': { city: 'Chennai', state: 'Tamil Nadu', area: 'T. Nagar' },
+  '600001': { city: 'Chennai', state: 'Tamil Nadu' },
+  '600017': { city: 'Chennai', state: 'Tamil Nadu' },
 
   // Pune (411xxx)
-  '411001': { city: 'Pune', state: 'Maharashtra', area: 'Camp / Pune Station' },
-  '411004': { city: 'Pune', state: 'Maharashtra', area: 'Deccan Gymkhana' },
+  '411001': { city: 'Pune', state: 'Maharashtra' },
+  '411004': { city: 'Pune', state: 'Maharashtra' },
 
   // Kolkata (700xxx)
-  '700001': { city: 'Kolkata', state: 'West Bengal', area: 'BBD Bagh' },
-  '700016': { city: 'Kolkata', state: 'West Bengal', area: 'Park Street' }
+  '700001': { city: 'Kolkata', state: 'West Bengal' },
+  '700016': { city: 'Kolkata', state: 'West Bengal' }
 };
 
 /**
@@ -242,7 +244,7 @@ export async function resolveIndianPinCode(pinCode: string): Promise<PinResoluti
             postalCode: cleanPin,
             city: resolvedCityName,
             state: resolvedStateName,
-            area: rawName !== resolvedCityName ? rawName : undefined,
+            area: undefined,
             district: rawDistrict,
             source: 'postal_api'
           }

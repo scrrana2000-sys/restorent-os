@@ -20,6 +20,7 @@ vi.mock('firebase/firestore', () => {
     query: vi.fn((colRef, ..._clauses) => ({ type: 'query', colRef })),
     where: vi.fn((field, op, val) => ({ type: 'where', field, op, val })),
     orderBy: vi.fn((field, dir) => ({ type: 'orderBy', field, dir })),
+    limit: vi.fn((count) => ({ type: 'limit', count })),
     onSnapshot: vi.fn(),
     serverTimestamp: vi.fn(() => new Date('2026-09-08T12:00:00Z'))
   };
@@ -259,6 +260,28 @@ describe('Order Creation & POS Engine (Phase 2D)', () => {
 
   describe('Delivery & Online Order Compatibility', () => {
     it('creates delivery order with customer snapshot', async () => {
+      vi.mocked(firestore.getDoc)
+        .mockResolvedValueOnce({
+          exists: () => true,
+          data: () => ({
+            restaurantId: 'REST_ABC_999',
+            publicStatus: 'open',
+            onlineOrderingEnabled: true,
+            deliveryEnabled: true,
+            takeawayEnabled: true,
+            dineInEnabled: true
+          })
+        } as any)
+        .mockResolvedValueOnce({
+          exists: () => true,
+          data: () => ({
+            itemId: sampleItem1.itemId,
+            name: sampleItem1.name,
+            isAvailable: true,
+            price: sampleItem1.price
+          })
+        } as any);
+
       const cart = new Cart();
       cart.addItem(createMenuItemSnapshot(sampleItem1), 1);
 

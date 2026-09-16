@@ -12,6 +12,7 @@ import { hasPermission } from '../utils/permissions';
 import { BillReceiptModal } from '../components/pos/BillReceiptModal';
 import { ReceivePaymentModal } from '../components/pos/ReceivePaymentModal';
 import { WhatsAppBillModal } from '../components/pos/WhatsAppBillModal';
+import { OnlineOrdersQueue } from '../components/orders/OnlineOrdersQueue';
 import {
   History,
   Search,
@@ -36,15 +37,29 @@ import {
   ChevronDown,
   Trash2,
   Ban,
-  MessageSquare
+  MessageSquare,
+  Globe
 } from 'lucide-react';
 
-export const OrdersPage: React.FC = () => {
+export interface OrdersPageProps {
+  initialTab?: 'online_queue' | 'history';
+  focusedOrderId?: string | null;
+}
+
+export const OrdersPage: React.FC<OrdersPageProps> = ({
+  initialTab = 'history',
+  focusedOrderId
+}) => {
   const { restaurant } = useRestaurant();
   const { user, profile } = useAuth();
   const symbol = restaurant?.currencySymbol || '₹';
   const role = profile?.role || 'owner';
   const restaurantId = restaurant?.restaurantId || (restaurant as any)?.id;
+
+  // Top level view mode: Online Queue vs Full Order History
+  const [activeViewMode, setActiveViewMode] = useState<'online_queue' | 'history'>(
+    focusedOrderId ? 'online_queue' : initialTab
+  );
 
   // Filters State
   const [dateRangePreset, setDateRangePreset] = useState<'today' | 'yesterday' | 'week' | 'month' | 'all' | 'custom'>('all');
@@ -305,33 +320,83 @@ export const OrdersPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center">
-              <History className="w-5 h-5 text-indigo-500" />
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600/10 text-indigo-600 border border-indigo-500/20 flex items-center justify-center">
+              {activeViewMode === 'online_queue' ? (
+                <Globe className="w-5 h-5 text-indigo-600" />
+              ) : (
+                <History className="w-5 h-5 text-indigo-600" />
+              )}
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
-                Order History & Previous Bills
+                {activeViewMode === 'online_queue'
+                  ? 'Customer Online Orders'
+                  : 'Order History & Previous Bills'}
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Authoritative transaction archive, GST invoices, and historical bill retrieval.
+                {activeViewMode === 'online_queue'
+                  ? 'Live operations queue: accept/reject incoming orders, send to kitchen, track prep, and fulfill.'
+                  : 'Authoritative transaction archive, GST invoices, and historical bill retrieval.'}
               </p>
             </div>
           </div>
         </div>
 
-        <button
-          type="button"
-          data-testid="btn-refresh-orders"
-          onClick={() => fetchOrderHistory(true)}
-          disabled={loading || refreshing}
-          className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50 self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
-          <span>Refresh</span>
-        </button>
+        {/* View Switcher & Refresh Button */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold">
+            <button
+              type="button"
+              data-testid="switch-view-online-queue"
+              onClick={() => setActiveViewMode('online_queue')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                activeViewMode === 'online_queue'
+                  ? 'bg-white text-indigo-600 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>Online Orders</span>
+            </button>
+            <button
+              type="button"
+              data-testid="switch-view-order-history"
+              onClick={() => setActiveViewMode('history')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                activeViewMode === 'history'
+                  ? 'bg-white text-indigo-600 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              <span>All History</span>
+            </button>
+          </div>
+
+          {activeViewMode === 'history' && (
+            <button
+              type="button"
+              data-testid="btn-refresh-orders"
+              onClick={() => fetchOrderHistory(true)}
+              disabled={loading || refreshing}
+              className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+              <span>Refresh</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Action Success Banner */}
+      {/* Render Online Orders Queue if in Online Queue View Mode */}
+      {activeViewMode === 'online_queue' ? (
+        <OnlineOrdersQueue
+          focusedOrderId={focusedOrderId}
+          onViewBillModal={(order) => setSelectedBillOrder(order)}
+        />
+      ) : (
+        <>
+          {/* Action Success Banner */}
       {actionSuccess && (
         <div
           data-testid="order-action-success-banner"
@@ -1158,6 +1223,8 @@ export const OrdersPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {/* Bill Receipt Modal */}

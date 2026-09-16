@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { MapPin, ChevronDown } from 'lucide-react';
+import { MapPin, ChevronDown, Compass } from 'lucide-react';
 import { useCustomerLocation } from '../../context/CustomerLocationContext';
 import { CustomerLocationSelectorModal } from './CustomerLocationSelectorModal';
 
 export interface CustomerLocationBarProps {
   className?: string;
-  variant?: 'compact' | 'pill' | 'banner';
+  variant?: 'compact' | 'pill' | 'banner' | 'icon';
 }
 
 export const CustomerLocationBar: React.FC<CustomerLocationBarProps> = ({
@@ -25,8 +25,29 @@ export const CustomerLocationBar: React.FC<CustomerLocationBarProps> = ({
     : 'Choose your city to browse food';
 
   const subText = location?.postalCode
-    ? `PIN ${location.postalCode}${location.area ? ` • ${location.area}` : ''}`
+    ? `PIN ${location.postalCode}${location.area ? ` • ${location.area}` : ' • Full City'}`
     : location?.area || location?.state;
+
+  if (variant === 'icon') {
+    return (
+      <>
+        <button
+          id="customer-location-trigger-btn"
+          onClick={() => setIsModalOpen(true)}
+          className={`p-2.5 sm:p-3 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl sm:rounded-2xl shadow-xs flex items-center justify-center cursor-pointer shrink-0 transition-all min-w-[38px] min-h-[38px] sm:min-w-[44px] sm:min-h-[44px] ${className}`}
+          title={`Location: ${displayTitle}. Click to change.`}
+          aria-label={`Location: ${displayTitle}. Click to change.`}
+        >
+          <Compass className="w-4 h-4 sm:w-5 sm:h-5 text-slate-800" />
+        </button>
+
+        <CustomerLocationSelectorModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+        />
+      </>
+    );
+  }
 
   if (variant === 'banner') {
     return (

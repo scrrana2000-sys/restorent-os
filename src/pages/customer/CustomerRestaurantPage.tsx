@@ -183,7 +183,21 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
             </button>
 
             <div className="flex items-center gap-2">
-              <CustomerLocationBar variant="pill" />
+              <button
+                id="profile-header-cart-trigger-btn"
+                onClick={openCartDrawer}
+                className="relative p-2.5 sm:p-3 bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 rounded-xl sm:rounded-2xl shadow-xs flex items-center justify-center cursor-pointer shrink-0 min-h-[38px] min-w-[38px] sm:min-h-[42px] sm:min-w-[42px] transition-all"
+                title="View Cart"
+                aria-label="View Cart"
+              >
+                <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-slate-800" />
+                <span
+                  id="profile-header-cart-count"
+                  className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-orange-600 text-white text-[10px] font-black rounded-full shadow-[0_2px_5px_rgba(234,88,12,0.4)] min-w-[18px] text-center"
+                >
+                  {cart?.itemCount || 0}
+                </span>
+              </button>
             </div>
           </div>
         </header>

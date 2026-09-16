@@ -60,6 +60,16 @@ service cloud.firestore {
     }
 
     // ============================================================
+    // CUSTOMERS (Milestone 9 - Phase 1)
+    // Customer profile document at /customers/{customerId}.
+    // Strictly owner-only access: only the authenticated customer can read/write their own profile.
+    // ============================================================
+
+    match /customers/{customerId} {
+      allow read, write: if isSignedIn() && request.auth.uid == customerId;
+    }
+
+    // ============================================================
     // COLLECTION-GROUP MEMBERSHIP DISCOVERY
     // ============================================================
     // Allows a signed-in user to discover their own active or pending
@@ -176,7 +186,22 @@ service cloud.firestore {
 
       match /orders/{orderId} {
         allow read: if canAccessRestaurant(restaurantId)
-          || (resource != null && resource.data.source == 'online');
+          || (
+            resource != null && (
+              // Authenticated customer reading their own order
+              (
+                isSignedIn()
+                && ('customerId' in resource.data)
+                && resource.data.customerId != null
+                && resource.data.customerId == request.auth.uid
+              )
+              // Guest online order
+              || (
+                resource.data.source == 'online'
+                && (!('customerId' in resource.data) || resource.data.customerId == null)
+              )
+            )
+          );
 
         allow create: if isOwnerOfRestaurant(restaurantId)
           || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])

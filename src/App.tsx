@@ -1,5 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { CustomerAuthProvider } from './context/CustomerAuthContext';
 import { RestaurantProvider } from './context/RestaurantContext';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { AdminView } from './components/layout/Sidebar';
@@ -166,7 +167,9 @@ const AdminApp: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <AdminApp />
+      <CustomerAuthProvider>
+        <AdminApp />
+      </CustomerAuthProvider>
     </AuthProvider>
   );
 }

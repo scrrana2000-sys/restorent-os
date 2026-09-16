@@ -40,7 +40,9 @@ export type PermissionAction =
   | 'access_printers'
   | 'manage_printers'
   | 'print_bill'
-  | 'print_kot';
+  | 'print_kot'
+  | 'access_customers'
+  | 'view_customers';
 
 export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boolean>> = {
   owner: {
@@ -82,6 +84,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     manage_printers: true,
     print_bill: true,
     print_kot: true,
+    access_customers: true,
+    view_customers: true,
   },
   manager: {
     access_pos: true,
@@ -122,6 +126,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     manage_printers: true,
     print_bill: true,
     print_kot: true,
+    access_customers: true,
+    view_customers: true,
   },
   cashier: {
     access_pos: true,
@@ -162,6 +168,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     manage_printers: false,
     print_bill: true,
     print_kot: false,
+    access_customers: true,
+    view_customers: true,
   },
   kitchen: {
     access_pos: false,
@@ -202,6 +210,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     manage_printers: false,
     print_bill: false,
     print_kot: true,
+    access_customers: false,
+    view_customers: false,
   },
   captain: {
     access_pos: false,
@@ -242,6 +252,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     manage_printers: false,
     print_bill: true,
     print_kot: true,
+    access_customers: false,
+    view_customers: false,
   },
   accountant: {
     access_pos: false,
@@ -282,6 +294,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     manage_printers: false,
     print_bill: false,
     print_kot: false,
+    access_customers: false,
+    view_customers: false,
   },
 };
 
@@ -308,6 +322,7 @@ export function isViewAllowed(role: StaffRole | undefined, view: string): boolea
   if (view === 'suppliers') return hasPermission(role, 'access_suppliers');
   if (view === 'purchases') return hasPermission(role, 'access_purchases');
   if (view === 'printers') return hasPermission(role, 'access_printers') || hasPermission(role, 'manage_printers');
+  if (view === 'customers') return hasPermission(role, 'access_customers') || hasPermission(role, 'view_customers');
   return false;
 }
 

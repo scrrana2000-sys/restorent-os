@@ -27,6 +27,9 @@ interface RestaurantContextType {
   operatingProfile: RestaurantOperatingProfile;
   loading: boolean;
   error: string | null;
+  hasNoRestaurant: boolean;
+  isCreatingRestaurant: boolean;
+  createOwnerRestaurant: (restaurantName?: string, city?: string) => Promise<Restaurant>;
   updateSettings: (data: Partial<RestaurantFormData>) => Promise<void>;
   formatPrice: (amount: number) => string;
   retry: () => void;
@@ -42,7 +45,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasNoRestaurant, setHasNoRestaurant] = useState<boolean>(false);
+  const [isCreatingRestaurant, setIsCreatingRestaurant] = useState<boolean>(false);
   const [retryTrigger, setRetryTrigger] = useState<number>(0);
+  const createPromiseRef = React.useRef<Promise<Restaurant> | null>(null);
 
   // Phase 5C States
   const [availableRestaurants, setAvailableRestaurants] = useState<Restaurant[]>([]);
@@ -438,7 +444,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         // -------------------------------------------------------------
         // DUPLICATE RESTAURANT PROTECTION & STRICT PROOF CHECK:
-        // A staff member must NEVER fall into createDefaultRestaurant()!
+        // A customer or staff member must NEVER automatically create a restaurant!
         // -------------------------------------------------------------
         if (!resolvedRestaurant) {
           if (readErrorEncountered) {
@@ -466,13 +472,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             );
           }
 
-          console.log('[RestaurantOS Debug] Strategy 5: Proved clean absence of existing restaurant for verified owner. Creating default restaurant for user:', user.uid);
-          resolvedRestaurant = await createDefaultRestaurant(user.uid, user.email || '', ownerName);
-          console.log('[RestaurantOS Debug] Provisioned new default restaurant:', {
-            restaurantId: resolvedRestaurant.restaurantId,
-            docPath: `restaurants/${resolvedRestaurant.restaurantId}`
+          // Strict Security Invariant:
+          // A customer authentication must NEVER automatically become a restaurant owner.
+          // Clean absence of restaurant -> Await explicit owner onboarding action in UI.
+          console.log('[RestaurantOS Security] User has no existing restaurant ownership or staff membership. Strict Security Invariant: Customer accounts NEVER auto-create restaurants.', {
+            authUid: user.uid,
+            userEmail: user.email
           });
+
+          if (isCancelled) return;
+          setRestaurant(null);
+          setActiveRestaurantId(null);
+          setHasNoRestaurant(true);
+          setAvailableRestaurants([]);
+          setError(null);
+          setLoading(false);
+          return;
         }
+
+        setHasNoRestaurant(false);
 
         // Persist the resolved restaurant ID to both localStorage and Firestore profile
         if (resolvedRestaurant) {
@@ -574,6 +592,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         console.error('[RestaurantOS Debug] Failed to resolve restaurant from Firestore:', err);
         setRestaurant(null);
         setActiveRestaurantId(null);
+        setHasNoRestaurant(false);
 
         let rawMsg = err?.message || 'Failed to load restaurant profile from Firestore';
         const jsonMatch = rawMsg.match(/\{[\s\S]*\}/);
@@ -603,6 +622,103 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [user, profile?.restaurantId, profile?.role, retryTrigger]);
 
+  /**
+   * Explicit Owner Onboarding Action.
+   * MUST only be called when the authenticated user explicitly clicks "Create Restaurant" in the UI.
+   * Fully protected against race conditions, duplicate calls, and existing restaurant collisions.
+   */
+  const createOwnerRestaurant = React.useCallback(
+    async (restaurantName?: string, city?: string): Promise<Restaurant> => {
+      if (!user) throw new Error('You must be signed in to create a restaurant.');
+
+      // In-flight mutex / promise deduplication
+      if (createPromiseRef.current) {
+        return createPromiseRef.current;
+      }
+
+      setIsCreatingRestaurant(true);
+      setError(null);
+
+      const promise = (async () => {
+        try {
+          console.log('[RestaurantOS Security] Explicit owner onboarding requested by user:', user.uid);
+          const ownerName = user.displayName || user.email?.split('@')[0] || 'Restaurant Owner';
+
+          // Transaction-level idempotency & duplicate protection in service layer
+          const newRest = await createDefaultRestaurant(
+            user.uid,
+            user.email || '',
+            ownerName,
+            restaurantName,
+            city
+          );
+
+          setRestaurant(newRest);
+          setActiveRestaurantId(newRest.restaurantId);
+          setHasNoRestaurant(false);
+          setError(null);
+
+          // Update AuthContext profile with owner role and restaurantId
+          setProfile((prev) => {
+            if (prev) {
+              return { ...prev, role: 'owner', restaurantId: newRest.restaurantId };
+            }
+            return {
+              userId: user.uid,
+              displayName: ownerName,
+              email: user.email || '',
+              photoUrl: user.photoURL || null,
+              role: 'owner',
+              restaurantId: newRest.restaurantId
+            };
+          });
+
+          // Sync public discovery projection
+          syncPublicRestaurantProfile(newRest).catch((syncErr) => {
+            console.warn('[RestaurantOS Discovery] Public profile sync notice on manual create:', syncErr);
+          });
+
+          // Refresh available restaurants list
+          fetchAvailableRestaurants(user.uid, newRest.restaurantId)
+            .then((list) => setAvailableRestaurants(list))
+            .catch((listErr) => console.warn('[RestaurantOS Debug] Failed to refresh available restaurants:', listErr));
+
+          // Real-time Firestore subscription
+          if (unsubscribeRef.current) {
+            unsubscribeRef.current();
+            unsubscribeRef.current = undefined;
+          }
+          unsubscribeRef.current = subscribeToRestaurant(
+            newRest.restaurantId,
+            (updated) => {
+              if (updated) {
+                setRestaurant(updated);
+              }
+            },
+            (subErr) => {
+              if (!auth.currentUser) return;
+              console.error('[RestaurantOS Debug] Restaurant subscription error:', subErr);
+            }
+          );
+
+          return newRest;
+        } catch (createErr: any) {
+          console.error('[RestaurantOS Security] Failed to create owner restaurant:', createErr);
+          const msg = createErr?.message || 'Failed to create restaurant. Please try again.';
+          setError(msg);
+          throw createErr;
+        } finally {
+          setIsCreatingRestaurant(false);
+          createPromiseRef.current = null;
+        }
+      })();
+
+      createPromiseRef.current = promise;
+      return promise;
+    },
+    [user, setProfile]
+  );
+
   const updateSettings = React.useCallback(async (data: Partial<RestaurantFormData>) => {
     if (!restaurant) throw new Error('No active restaurant');
     try {
@@ -631,6 +747,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     operatingProfile,
     loading,
     error,
+    hasNoRestaurant,
+    isCreatingRestaurant,
+    createOwnerRestaurant,
     updateSettings,
     formatPrice,
     retry,
@@ -642,9 +761,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     operatingProfile,
     loading,
     error,
+    hasNoRestaurant,
+    isCreatingRestaurant,
+    createOwnerRestaurant,
     updateSettings,
     formatPrice,
     availableRestaurants,
+    switchRestaurant,
     isSwitching
   ]);
 
@@ -663,6 +786,9 @@ export function useRestaurant() {
       operatingProfile: getRestaurantOperatingProfile(null),
       loading: false,
       error: null,
+      hasNoRestaurant: false,
+      isCreatingRestaurant: false,
+      createOwnerRestaurant: async () => { throw new Error('RestaurantProvider missing'); },
       retry: () => {},
       categories: [],
       menuItems: [],

@@ -23,6 +23,7 @@ import {
   Lock
 } from 'lucide-react';
 import { useCustomerCart } from '../../context/CustomerCartContext';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
   PublicRestaurantProfile,
   CustomerCheckoutDetails,
@@ -41,6 +42,8 @@ import { FoodTypeBadge } from './FoodTypeBadge';
 import { useModalBackHandler } from '../../hooks/useModalBackHandler';
 import { Order } from '../../types/order';
 import { KOT } from '../../types/kot';
+import { saveTrackedOrder } from '../../services/customerOrderTrackingService';
+import { Compass } from 'lucide-react';
 
 export interface CustomerCheckoutModalProps {
   isOpen: boolean;
@@ -49,6 +52,7 @@ export interface CustomerCheckoutModalProps {
   menuItems?: MenuItem[];
   onProceedToSubmitIntent?: (intent: CustomerCheckoutIntent) => void;
   onOrderSubmitted?: (order: Order, kot: KOT | null) => void;
+  onTrackOrder?: (restaurantId: string, orderId: string) => void;
   onEditCart?: () => void;
   initialCustomerDetails?: Partial<CustomerCheckoutDetails>;
   initialDeliveryDetails?: Partial<CustomerDeliveryDetails>;
@@ -61,11 +65,13 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
   menuItems,
   onProceedToSubmitIntent,
   onOrderSubmitted,
+  onTrackOrder,
   onEditCart,
   initialCustomerDetails,
   initialDeliveryDetails
 }) => {
   const { cart, clearCart } = useCustomerCart();
+  const { customer, firebaseUser, signInWithGoogle, isSigningIn } = useCustomerAuth();
 
   // Mode state: 'form' | 'review' | 'intent_created' | 'order_submitted'
   const [currentStep, setCurrentStep] = useState<'form' | 'review' | 'intent_created' | 'order_submitted'>('form');
@@ -74,20 +80,49 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
   const [orderType, setOrderType] = useState<'takeaway' | 'delivery' | 'dineIn'>('takeaway');
 
   const [customerDetails, setCustomerDetails] = useState<CustomerCheckoutDetails>({
-    name: initialCustomerDetails?.name || '',
-    phone: initialCustomerDetails?.phone || ''
+    name: initialCustomerDetails?.name || customer?.name || '',
+    phone: initialCustomerDetails?.phone || customer?.phone || '',
+    email: initialCustomerDetails?.email || customer?.email || firebaseUser?.email || ''
   });
 
-  const [deliveryDetails, setDeliveryDetails] = useState<CustomerDeliveryDetails>({
-    recipientName: initialDeliveryDetails?.recipientName || initialCustomerDetails?.name || '',
-    phone: initialDeliveryDetails?.phone || initialCustomerDetails?.phone || '',
-    addressLine: initialDeliveryDetails?.addressLine || '',
-    area: initialDeliveryDetails?.area || restaurantProfile?.area || '',
-    city: initialDeliveryDetails?.city || restaurantProfile?.city || '',
-    state: initialDeliveryDetails?.state || restaurantProfile?.state || '',
-    postalCode: initialDeliveryDetails?.postalCode || '',
-    deliveryInstructions: initialDeliveryDetails?.deliveryInstructions || ''
+  const [deliveryDetails, setDeliveryDetails] = useState<CustomerDeliveryDetails>(() => {
+    const defaultAddr = customer?.addresses?.find((a) => a.isDefault) || customer?.addresses?.[0];
+    return {
+      recipientName: initialDeliveryDetails?.recipientName || initialCustomerDetails?.name || customer?.name || '',
+      phone: initialDeliveryDetails?.phone || initialCustomerDetails?.phone || customer?.phone || '',
+      addressLine: initialDeliveryDetails?.addressLine || defaultAddr?.addressLine || '',
+      area: initialDeliveryDetails?.area || defaultAddr?.area || restaurantProfile?.area || '',
+      city: initialDeliveryDetails?.city || defaultAddr?.city || restaurantProfile?.city || '',
+      state: initialDeliveryDetails?.state || defaultAddr?.state || restaurantProfile?.state || '',
+      postalCode: initialDeliveryDetails?.postalCode || defaultAddr?.postalCode || '',
+      deliveryInstructions: initialDeliveryDetails?.deliveryInstructions || ''
+    };
   });
+
+  // Auto-fill or update when customer profile is loaded/updated
+  useEffect(() => {
+    if (customer) {
+      setCustomerDetails((prev) => ({
+        name: prev.name || customer.name || '',
+        phone: prev.phone || customer.phone || '',
+        email: prev.email || customer.email || ''
+      }));
+
+      if (customer.addresses && customer.addresses.length > 0) {
+        const defaultAddr = customer.addresses.find((a) => a.isDefault) || customer.addresses[0];
+        setDeliveryDetails((prev) => ({
+          ...prev,
+          recipientName: prev.recipientName || customer.name || '',
+          phone: prev.phone || customer.phone || '',
+          addressLine: prev.addressLine || defaultAddr.addressLine,
+          area: prev.area || defaultAddr.area || restaurantProfile?.area || '',
+          city: prev.city || defaultAddr.city || restaurantProfile?.city || '',
+          state: prev.state || defaultAddr.state || restaurantProfile?.state || '',
+          postalCode: prev.postalCode || defaultAddr.postalCode
+        }));
+      }
+    }
+  }, [customer, restaurantProfile]);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [validationResult, setValidationResult] = useState<CheckoutValidationResult | null>(null);
@@ -190,7 +225,9 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
       orderType,
       customerDetails,
       deliveryDetails: orderType === 'delivery' ? deliveryDetails : undefined,
-      paymentMethod
+      paymentMethod,
+      customerId: firebaseUser ? firebaseUser.uid : null,
+      customerEmail: customer?.email || firebaseUser?.email || customerDetails.email || undefined
     };
 
     try {
@@ -200,12 +237,28 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
       const res = await submitCustomerOnlineOrder({
         intent,
         restaurantProfile,
-        menuItems
+        menuItems,
+        customerId: firebaseUser ? firebaseUser.uid : null,
+        customerEmail: customer?.email || firebaseUser?.email || customerDetails.email || undefined
       });
 
       setSubmittedOrder(res.order);
       setSubmittedKot(res.kot);
       setCurrentStep('order_submitted');
+
+      // Save to tracking storage for instant tracking & customer orders list
+      saveTrackedOrder({
+        orderId: res.order.id,
+        restaurantId: res.order.restaurantId,
+        orderNumber: res.order.orderNumber || res.order.id,
+        restaurantName: cart?.restaurantName || restaurantProfile?.name || res.order.restaurantId,
+        orderType: res.order.orderType,
+        status: res.order.status,
+        grandTotalMinor: res.order.grandTotalMinor,
+        itemCount: res.order.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 0,
+        placedAt: new Date().toISOString(),
+        customerId: res.order.customerId
+      });
 
       // Clear customer cart upon canonical success
       clearCart();
@@ -382,9 +435,86 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
 
               {/* 2. Customer Contact Details */}
               <div className="space-y-3 pt-2 border-t border-slate-100">
-                <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider">
-                  Customer Contact Details
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+                    Customer Contact Details
+                  </label>
+                </div>
+
+                {/* Signed In vs Guest Info Banner */}
+                {customer ? (
+                  <div
+                    id="checkout-logged-in-badge"
+                    className="p-3 bg-orange-50/80 border border-orange-200/80 rounded-2xl flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden shadow-2xs">
+                        {customer.photoURL ? (
+                          <img
+                            src={customer.photoURL}
+                            alt={customer.name}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          (customer.name || 'C')[0].toUpperCase()
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">
+                          Signed in as {customer.name}
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate">{customer.email}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-md shrink-0">
+                      Pre-filled
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    id="checkout-guest-prompt"
+                    className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
+                  >
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-slate-800">Guest Checkout</p>
+                      <p className="text-[11px] text-slate-500">
+                        Continue as guest, or sign in with Google to pre-fill your saved details.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      id="checkout-signin-google-btn"
+                      onClick={() => signInWithGoogle().catch(() => {})}
+                      disabled={isSigningIn}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl shadow-2xs flex items-center gap-1.5 cursor-pointer shrink-0 min-h-[38px] disabled:opacity-50"
+                    >
+                      {isSigningIn ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-600" />
+                      ) : (
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                          <path
+                            fill="#4285F4"
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                          />
+                        </svg>
+                      )}
+                      <span>Sign in with Google</span>
+                    </button>
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   <div>
@@ -446,6 +576,44 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
                       Required for Delivery
                     </span>
                   </div>
+
+                  {/* Saved addresses selector chips */}
+                  {customer?.addresses && customer.addresses.length > 0 && (
+                    <div
+                      id="checkout-saved-addresses-selector"
+                      className="space-y-1.5 p-2.5 bg-orange-50/60 border border-orange-200/60 rounded-xl"
+                    >
+                      <span className="text-[10px] font-bold text-slate-600 block uppercase tracking-wider">
+                        Use a saved address:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {customer.addresses.map((addr) => (
+                          <button
+                            key={addr.id}
+                            type="button"
+                            onClick={() => {
+                              setDeliveryDetails((prev) => ({
+                                ...prev,
+                                addressLine: addr.addressLine,
+                                area: addr.area || prev.area,
+                                city: addr.city || prev.city,
+                                postalCode: addr.postalCode || prev.postalCode
+                              }));
+                            }}
+                            className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 hover:border-orange-500 bg-white text-slate-700 font-medium capitalize flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                          >
+                            <MapPin className="w-3 h-3 text-orange-600" />
+                            <span>{addr.label}</span>
+                            {addr.isDefault && (
+                              <span className="text-[9px] bg-orange-100 text-orange-700 px-1 rounded font-semibold">
+                                Default
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-3">
                     <div>
@@ -897,14 +1065,31 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
                 )}
               </div>
 
-              <button
-                type="button"
-                id="close-order-success-btn"
-                onClick={onClose}
-                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-2xl transition-colors min-h-[44px]"
-              >
-                Done / Back to Menu
-              </button>
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  id="track-order-success-btn"
+                  onClick={() => {
+                    onClose();
+                    if (onTrackOrder) {
+                      onTrackOrder(submittedOrder.restaurantId, submittedOrder.id);
+                    }
+                  }}
+                  className="w-full py-3.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white text-xs font-extrabold rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 min-h-[44px] cursor-pointer"
+                >
+                  <Compass className="w-4 h-4" />
+                  <span>Track Order</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="close-order-success-btn"
+                  onClick={onClose}
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-2xl transition-colors min-h-[44px] cursor-pointer"
+                >
+                  Done / Back to Menu
+                </button>
+              </div>
             </div>
           )}
         </div>

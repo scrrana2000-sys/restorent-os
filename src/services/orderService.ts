@@ -42,6 +42,7 @@ export interface CreateOrderFromCartInput {
   cartState: CartState;
   orderType: OrderType;
   source: OrderSource;
+  customerId?: string | null;
   tableId?: string | null;
   tableSessionId?: string | null;
   customerSnapshot?: CustomerSnapshot | null;
@@ -469,6 +470,7 @@ export class OrderService implements IOrderService {
     const orderPayload: Omit<Order, 'id' | 'createdAt' | 'updatedAt'> = {
       restaurantId: cleanRestaurantId,
       orderNumber,
+      customerId: input.customerId ? input.customerId.trim() : null,
       orderType,
       source,
       status: 'confirmed', // Initial authoritative POS order status
@@ -852,6 +854,7 @@ export class OrderService implements IOrderService {
     const orderPayload: Omit<Order, 'id' | 'createdAt' | 'updatedAt'> = {
       restaurantId: cleanRestaurantId,
       orderNumber,
+      customerId: input.customerId ? input.customerId.trim() : null,
       orderType,
       source,
       status: 'sentToKitchen',
@@ -1904,6 +1907,361 @@ export class OrderService implements IOrderService {
         if (onError) onError(err as Error);
       }
     );
+  }
+
+  /**
+   * Subscribes to real-time online orders for a restaurant.
+   * Delivers all online orders sorted chronologically for queue processing.
+   */
+  subscribeToOnlineOrders(
+    restaurantId: string,
+    onUpdate: (orders: Order[]) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const cleanRestaurantId = restaurantId?.trim();
+    if (!cleanRestaurantId) {
+      if (onError) onError(new Error('restaurantId is required to subscribe to online orders.'));
+      return () => {};
+    }
+
+    const colRef = collection(db, 'restaurants', cleanRestaurantId, 'orders');
+    const q = query(
+      colRef,
+      where('source', '==', 'online'),
+      orderBy('createdAt', 'desc')
+    );
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const orders: Order[] = [];
+        snapshot.forEach((d) => {
+          orders.push({ id: d.id, ...d.data() } as Order);
+        });
+        onUpdate(orders);
+      },
+      (err) => {
+        if (!auth.currentUser) return;
+        const errCode = (err as any)?.code;
+        if (errCode === 'permission-denied' || errCode === 'unavailable') {
+          console.warn('[RestaurantOS] Online orders subscription notice:', (err as any)?.message);
+          onUpdate([]);
+        } else {
+          console.error('[RestaurantOS] Error listening to online orders:', err);
+        }
+        if (onError) onError(err as Error);
+      }
+    );
+  }
+
+  /**
+   * Accepts an incoming online order, sets estimated prep time, advances status to 'sentToKitchen' or 'preparing',
+   * and ensures corresponding kitchen ticket (KOT) is sent to kitchen display screens.
+   */
+  async acceptOnlineOrder(
+    restaurantId: string,
+    orderId: string,
+    actorUid: string,
+    prepTimeMinutes: number = 20
+  ): Promise<Order> {
+    const cleanRestaurantId = restaurantId.trim();
+    const cleanOrderId = orderId.trim();
+    const resolvedUserId = actorUid || auth.currentUser?.uid || 'staff';
+
+    await enforcePermission(cleanRestaurantId, 'modify_orders');
+
+    const path = orderDocPath(cleanRestaurantId, cleanOrderId);
+    const orderDocRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
+    const orderSnap = await getDoc(orderDocRef);
+
+    if (!orderSnap.exists()) {
+      throw new Error(`Cannot accept order: Order "${cleanOrderId}" not found.`);
+    }
+
+    const orderData = orderSnap.data() as Order;
+
+    if (orderData.status !== 'confirmed' && orderData.status !== 'draft') {
+      throw new Error(
+        `Cannot accept online order "${orderData.orderNumber || cleanOrderId}": Order is already in status "${orderData.status}".`
+      );
+    }
+
+    const now = new Date();
+    const targetStatus: OrderStatus = 'sentToKitchen';
+
+    // 1. Update order document
+    await updateDoc(orderDocRef, {
+      status: targetStatus,
+      acceptedAt: serverTimestamp() || now,
+      acceptedBy: resolvedUserId,
+      estimatedPrepMinutes: prepTimeMinutes,
+      updatedAt: serverTimestamp() || now,
+      updatedBy: resolvedUserId
+    });
+
+    // 2. Synchronize active KOTs if present
+    try {
+      const kotsCol = collection(db, 'restaurants', cleanRestaurantId, 'kots');
+      const kotQuery = query(kotsCol, where('orderId', '==', cleanOrderId));
+      const kotSnap = await getDocs(kotQuery);
+
+      if (kotSnap && !kotSnap.empty && kotSnap.docs) {
+        for (const kDoc of kotSnap.docs) {
+          const kot = kDoc.data() as KOT;
+          if (kot.status === 'draft' || kot.status === 'confirmed') {
+            await updateDoc(doc(db, 'restaurants', cleanRestaurantId, 'kots', kDoc.id), {
+              status: 'sentToKitchen',
+              sentToKitchenAt: serverTimestamp() || now,
+              updatedAt: serverTimestamp() || now,
+              updatedBy: resolvedUserId
+            });
+          }
+        }
+      } else {
+        // Create initial KOT for kitchen display if missing and items exist
+        if (orderData.items && orderData.items.length > 0) {
+          const kotNumber = `KOT-${Date.now().toString().slice(-4)}`;
+          const kotDocRef = doc(collection(db, 'restaurants', cleanRestaurantId, 'kots'));
+          await setDoc(kotDocRef, {
+            id: kotDocRef.id,
+            restaurantId: cleanRestaurantId,
+            orderId: cleanOrderId,
+            orderNumber: orderData.orderNumber,
+            kotNumber,
+            status: 'sentToKitchen',
+            source: 'online',
+            orderType: orderData.orderType,
+            items: orderData.items.map((i) => ({
+              itemId: i.itemId,
+              nameSnapshot: i.nameSnapshot,
+              quantity: i.quantity,
+              unitPriceMinor: i.unitPriceMinor,
+              foodTypeSnapshot: i.foodTypeSnapshot || null,
+              imageUrlSnapshot: i.imageUrlSnapshot || null,
+              notes: i.notes || ''
+            })),
+            notes: `Online Order (${orderData.orderType.toUpperCase()}) - Est. prep: ${prepTimeMinutes} mins`,
+            customerSnapshot: orderData.customerSnapshot || null,
+            sentToKitchenAt: serverTimestamp() || now,
+            createdAt: serverTimestamp() || now,
+            createdBy: resolvedUserId,
+            updatedAt: serverTimestamp() || now,
+            updatedBy: resolvedUserId
+          });
+        }
+      }
+    } catch (kotErr: any) {
+      console.warn('[RestaurantOS] KOT synchronization during online order accept warning:', kotErr);
+    }
+
+    // 3. Log Audit Event
+    await auditService.logEvent(cleanRestaurantId, {
+      restaurantId: cleanRestaurantId,
+      entityType: 'order',
+      entityId: cleanOrderId,
+      action: 'online_order_accepted',
+      actorUid: resolvedUserId,
+      metadata: {
+        orderNumber: orderData.orderNumber,
+        orderType: orderData.orderType,
+        estimatedPrepMinutes: prepTimeMinutes,
+        source: orderData.source
+      }
+    });
+
+    const updatedSnap = await getDoc(orderDocRef);
+    return { id: updatedSnap.id, ...updatedSnap.data() } as Order;
+  }
+
+  /**
+   * Rejects an online order with an explicit operational rejection reason,
+   * cancels associated KOTs, reverses stock consumption, and logs audit record.
+   */
+  async rejectOnlineOrder(
+    restaurantId: string,
+    orderId: string,
+    actorUid: string,
+    rejectionReason: string = 'Rejected by restaurant'
+  ): Promise<Order> {
+    const cleanRestaurantId = restaurantId.trim();
+    const cleanOrderId = orderId.trim();
+    const resolvedUserId = actorUid || auth.currentUser?.uid || 'staff';
+
+    await enforcePermission(cleanRestaurantId, 'cancel_orders');
+
+    const orderDocRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
+    const orderSnap = await getDoc(orderDocRef);
+
+    if (!orderSnap.exists()) {
+      throw new Error(`Cannot reject order: Order "${cleanOrderId}" not found.`);
+    }
+
+    const orderData = orderSnap.data() as Order;
+
+    if (orderData.status === 'completed' || orderData.status === 'cancelled') {
+      throw new Error(
+        `Cannot reject order "${orderData.orderNumber || cleanOrderId}": Order is already ${orderData.status}.`
+      );
+    }
+
+    const now = new Date();
+
+    // 1. Update order document to cancelled with rejection reason
+    await updateDoc(orderDocRef, {
+      status: 'cancelled',
+      cancellationReason: rejectionReason,
+      rejectionReason: rejectionReason,
+      cancelledAt: serverTimestamp() || now,
+      cancelledBy: resolvedUserId,
+      updatedAt: serverTimestamp() || now,
+      updatedBy: resolvedUserId
+    });
+
+    // 2. Cancel associated KOTs
+    try {
+      const kotsCol = collection(db, 'restaurants', cleanRestaurantId, 'kots');
+      const kotQuery = query(kotsCol, where('orderId', '==', cleanOrderId));
+      const kotSnap = await getDocs(kotQuery);
+
+      for (const kDoc of kotSnap.docs) {
+        const kot = kDoc.data() as KOT;
+        if (kot.status !== 'cancelled') {
+          await updateDoc(doc(db, 'restaurants', cleanRestaurantId, 'kots', kDoc.id), {
+            status: 'cancelled',
+            cancellationReason: rejectionReason,
+            cancelledAt: serverTimestamp() || now,
+            cancelledBy: resolvedUserId,
+            updatedAt: serverTimestamp() || now,
+            updatedBy: resolvedUserId
+          });
+        }
+      }
+    } catch (kotErr) {
+      console.warn('[RestaurantOS] KOT cancellation during online order rejection warning:', kotErr);
+    }
+
+    // 3. Reverse stock consumption if items had been consumed
+    try {
+      await stockConsumptionService.reverseOrderStockConsumption(
+        cleanRestaurantId,
+        cleanOrderId,
+        `Online order rejected: ${rejectionReason}`
+      );
+      await updateDoc(orderDocRef, {
+        stockConsumptionStatus: 'reversed',
+        updatedAt: serverTimestamp() || now
+      });
+    } catch (revErr) {
+      console.warn('[RestaurantOS] Stock reversal during online order reject warning:', revErr);
+    }
+
+    // 4. Log Audit Event
+    await auditService.logEvent(cleanRestaurantId, {
+      restaurantId: cleanRestaurantId,
+      entityType: 'order',
+      entityId: cleanOrderId,
+      action: 'online_order_rejected',
+      actorUid: resolvedUserId,
+      metadata: {
+        orderNumber: orderData.orderNumber,
+        orderType: orderData.orderType,
+        rejectionReason,
+        source: orderData.source
+      }
+    });
+
+    const updatedSnap = await getDoc(orderDocRef);
+    return { id: updatedSnap.id, ...updatedSnap.data() } as Order;
+  }
+
+  /**
+   * Marks an online order as ready for pickup (takeaway) or dispatch (delivery).
+   */
+  async markOnlineOrderReady(
+    restaurantId: string,
+    orderId: string,
+    actorUid: string
+  ): Promise<Order> {
+    const cleanRestaurantId = restaurantId.trim();
+    const cleanOrderId = orderId.trim();
+    const resolvedUserId = actorUid || auth.currentUser?.uid || 'staff';
+
+    await enforcePermission(cleanRestaurantId, 'modify_orders');
+
+    const orderDocRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
+    const orderSnap = await getDoc(orderDocRef);
+
+    if (!orderSnap.exists()) {
+      throw new Error(`Cannot update order: Order "${cleanOrderId}" not found.`);
+    }
+
+    const orderData = orderSnap.data() as Order;
+    const now = new Date();
+
+    // 1. Update order
+    await updateDoc(orderDocRef, {
+      status: 'ready',
+      readyAt: serverTimestamp() || now,
+      readyBy: resolvedUserId,
+      updatedAt: serverTimestamp() || now,
+      updatedBy: resolvedUserId
+    });
+
+    // 2. Mark active KOTs as ready
+    try {
+      const kotsCol = collection(db, 'restaurants', cleanRestaurantId, 'kots');
+      const kotQuery = query(kotsCol, where('orderId', '==', cleanOrderId));
+      const kotSnap = await getDocs(kotQuery);
+
+      for (const kDoc of kotSnap.docs) {
+        const kot = kDoc.data() as KOT;
+        if (kot.status !== 'cancelled' && kot.status !== 'ready' && kot.status !== 'served') {
+          await updateDoc(doc(db, 'restaurants', cleanRestaurantId, 'kots', kDoc.id), {
+            status: 'ready',
+            readyAt: serverTimestamp() || now,
+            updatedAt: serverTimestamp() || now,
+            updatedBy: resolvedUserId
+          });
+        }
+      }
+    } catch (kotErr) {
+      console.warn('[RestaurantOS] KOT status update to ready warning:', kotErr);
+    }
+
+    // 3. Log Audit Event
+    await auditService.logEvent(cleanRestaurantId, {
+      restaurantId: cleanRestaurantId,
+      entityType: 'order',
+      entityId: cleanOrderId,
+      action: 'online_order_ready',
+      actorUid: resolvedUserId,
+      metadata: {
+        orderNumber: orderData.orderNumber,
+        orderType: orderData.orderType
+      }
+    });
+
+    const updatedSnap = await getDoc(orderDocRef);
+    return { id: updatedSnap.id, ...updatedSnap.data() } as Order;
+  }
+
+  /**
+   * Completes an online order upon customer pickup or delivery completion.
+   */
+  async completeOnlineOrder(
+    restaurantId: string,
+    orderId: string,
+    actorUid: string
+  ): Promise<Order> {
+    const cleanRestaurantId = restaurantId.trim();
+    const cleanOrderId = orderId.trim();
+    const resolvedUserId = actorUid || auth.currentUser?.uid || 'staff';
+
+    await this.completeOrder(cleanRestaurantId, cleanOrderId, resolvedUserId);
+
+    const orderDocRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
+    const updatedSnap = await getDoc(orderDocRef);
+    return { id: updatedSnap.id, ...updatedSnap.data() } as Order;
   }
 
   /**

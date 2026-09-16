@@ -109,4 +109,99 @@
 - **Decision**: Adding menu items to an active Dine-In table session appends items to the existing open order rather than creating fragmented duplicate orders. In addition, order cancellation from POS within 2 minutes automatically cancels waiting KOTs (`sentToKitchen`/`confirmed`), whereas cancellation after 2 minutes is blocked from POS and must be initiated from the Kitchen Display (KDS).
 - **Rationale**: Ensures accurate single-bill table invoicing and prevents kitchen food wastage if order preparation has already commenced.
 
+---
+
+## Milestone 9 Architectural Decisions: Customer App & Online Ordering
+
+### 23. Customer Account & Profile Foundation (Milestone 9 — Phase 1)
+- **Decision**:
+  1. **Google Sign-In as Sole Authentication Provider**: Customer account authentication uses Google Sign-In (`signInWithPopup(auth, googleProvider)`). No other auth providers (email/password, social media, anonymous) are used for customer accounts.
+  2. **Strict Customer ID Contract**: `customerId` is deterministically bound to the Firebase Auth UID (`auth.currentUser.uid`). Profile documents are stored at `/customers/{customerId}`.
+  3. **Strict Decoupling from Restaurant Staff/Tenant Identity**: Customer authentication is isolated via `CustomerAuthContext` and `customerAuthService`, independent of `AuthContext` (which manages restaurant owner and employee memberships). A customer profile grants no administrative, POS, or staff permissions.
+  4. **Strict Isolation in Firestore Security Rules**:
+     - Rules enforce `allow read, write: if request.auth != null && request.auth.uid == customerId;` on `/customers/{customerId}`.
+     - Customer A cannot read or write Customer B's profile under any circumstances.
+     - Unauthenticated users cannot read or write customer documents.
+     - Restaurant staff and owners have no direct access to customer profile documents.
+  5. **Explicit Prohibition of Phone OTP / SMS Auth**:
+     - Phone OTP, SMS delivery services, phone verification screens, and reCAPTCHA verifiers are strictly prohibited and intentionally omitted.
+     - Phone numbers are stored purely as user-supplied string fields for delivery contact and order coordination, not as authentication credentials.
+  6. **Guest Checkout Preservation**:
+     - Guest checkout remains completely functional without requiring Google Sign-In or profile creation.
+     - When a customer is signed in, their name, phone, and delivery address are automatically pre-filled, with an option to sign in directly from the checkout modal.
+  7. **Preservation of Core Systems**:
+     - Zero modifications or rewrites to `OrderService`, KDS, POS, or table management.
+### 24. Customer ↔ Order Linking & Snapshot Immutability (Milestone 9 — Phase 2)
+- **Decision**:
+  1. **Order Customer ID Contract**:
+     - The `Order` domain model optionally contains `customerId?: string | null`.
+     - When an authenticated customer places an order, `customerId` is strictly set to the customer's Firebase UID (`auth.currentUser.uid`).
+     - When a guest places an order, `customerId` is `null` or omitted.
+  2. **Authoritative Anti-Spoofing Enforcement**:
+     - All online order submissions flow through `/api/submit-online-order` or direct validation where the authenticated ID token is decoded on the server.
+     - If `customerId` is provided, it must strictly match the verified `decoded.uid`. Any spoofing attempt (e.g. User A requesting `customerId` of User B) is authoritatively rejected with HTTP 403 / Security Violation.
+  3. **Snapshot Immutability vs Profile Decoupling**:
+     - `order.customerSnapshot` captures the point-in-time contact and delivery details (name, phone, email, delivery address).
+     - The customer profile at `/customers/{customerId}` is NOT overwritten by subsequent orders, nor does updating a profile alter historical order records. This guarantees accounting and legal audit immutability.
+  4. **Firestore Security Rules for Orders**:
+     - Security rules on `/orders/{orderId}` allow reads if:
+       - The authenticated customer owns the order (`resource.data.customerId == request.auth.uid`), OR
+       - The order is an online order (`resource.data.source == 'online'`), allowing guest order status lookup, OR
+       - The user is an authorized staff member or admin of the restaurant.
+     - Broad public reads (`allow read: if true;`) remain strictly prohibited.
+  5. **Core POS & KDS Integrity**:
+     - `OrderService`, KOT generation, KDS display, and payment lifecycle operate seamlessly without architectural restructuring.
+- **Rationale**: Guarantees secure, cryptographic identity binding between customer accounts and order histories while preserving guest checkout, preventing identity impersonation attacks, and protecting historical audit trails.
+
+### 25. Realtime Online Order Notification & Deduplication Architecture (Milestone 9 — Phase 3)
+- **Decision**:
+  1. **Zero Secondary Order Database / Single Source of Truth**:
+     - Restaurant staff notifications react exclusively to successfully created orders in Firestore under `/restaurants/{restaurantId}/orders`. No secondary notification table, webhook dispatcher, or duplicated order repository is created.
+  2. **Initial Snapshot & Reconnect Deduplication Engine**:
+     - On initial snapshot load, all existing orders are indexed into an in-memory `seenOrderIds` Set without triggering audio or visual alerts.
+     - Only subsequent document creations where `change.type === 'added'` and `order.source === 'online'` trigger alerts.
+     - Reconnect events re-use the persistent `seenOrderIds` cache to prevent re-announcing historical orders upon offline-to-online transitions.
+  3. **Local Notification State vs Order Lifecycle**:
+     - Notification state (pending, dismissed, viewed) is purely client-side React UI state.
+     - Acknowledging or dismissing a notification NEVER mutates `order.status` or writes to Firestore.
+  4. **Native Audio Synthesis with Graceful Degradation**:
+     - Uses native Web Audio API oscillators to generate a short two-tone chime without external asset loading.
+     - Gracefully catches browser autoplay policy rejections without throwing unhandled exceptions or suppressing visual notifications.
+  5. **Staff Tenant Isolation**:
+     - Notification subscriptions are strictly partitioned by `restaurantId`. Staff for Restaurant A cannot observe or receive order alerts for Restaurant B.
+- **Rationale**: Ensures operational awareness for KDS and POS staff when customers place online orders, while eliminating notification spam, preventing duplicate alerts across reconnects, preserving strict tenant boundaries, and protecting the order lifecycle from unintended status side-effects.
+
+### 26. Customer Order Tracking Architecture & Read-Only Observation (Milestone 9 — Phase 4)
+- **Decision**:
+  1. **Read-Only / Pure Observation Discipline**:
+     - Customer tracking operates strictly as a read and subscription layer on `/restaurants/{restaurantId}/orders/{orderId}`.
+     - Customer tracking NEVER writes unauthorized mutations to Firestore or creates a duplicate order collection. Status progression is strictly managed by authorized restaurant staff via POS, KDS, and Kitchen operations.
+  2. **Single Authoritative Lifecycle Mapping**:
+     - The customer tracking timeline translates existing backend `OrderStatus` values (`draft`, `confirmed`, `sentToKitchen`, `preparing`, `ready`, `served`, `completed`, `cancelled`) into 4 customer-friendly progress stages (Order Placed → Preparing in Kitchen → Ready/Out for Delivery → Completed) with cancelled state handling.
+  3. **Guest Checkout Preservation via Local Storage References**:
+     - For guest checkouts, an authorized tracking reference (`TrackedOrderReference`) is persisted to `localStorage` (`restaurantos_guest_tracked_orders`) upon order submission.
+     - For authenticated customers, references are stored under `restaurantos_customer_tracked_orders_{uid}`.
+     - Both guest and authenticated customers can re-open active orders from the top navigation bar ("Orders" button with dynamic count badge).
+  4. **Data Sanitization & Customer Privacy**:
+     - Internal kitchen and cashier metadata (such as internal cost margins and private server notes) are scrubbed via `sanitizeCustomerOrder` before rendering to customer views.
+  5. **No Phone OTP**:
+     - No SMS gateway, phone OTP, or phone authentication was introduced. Order tracking identity relies on Firebase Auth UID and client-side access tokens.
+  6. **CRM / Phase 5 Isolation**:
+     - Restaurant customer management, loyalty programs, marketing campaigns, and CRM metrics remain strictly out of scope for Phase 4.
+
+### 27. Online Order Queue, Prep Time Presets & Inventory Reversion Architecture (Milestone 9 — Phase 4)
+- **Decision**:
+  1. **Direct Queue Integration in Orders & POS**:
+     - Online orders seamlessly route into the unified restaurant order queue with tabbed filtration (`all`, `pending_action`, `in_kitchen`, `ready_handover`, `online_history`).
+  2. **Preparation Time Presets & Custom Input**:
+     - Order acceptance prompts staff with 5 preset preparation buttons (`15m`, `20m`, `30m`, `45m`, `60m`) or a custom minute input.
+     - Sets `estimatedPrepMinutes`, `acceptedAt`, and `estimatedReadyAt` on the order and automatically updates customer-facing tracking timeline and countdown.
+  3. **Order Rejection & Stock Reversion**:
+     - Rejection requires an explicit reason (preset or custom explanation) and sets `order.status = 'cancelled'`, `rejectionReason`, `rejectedAt`, and `cancelledBy`.
+     - Automatically invokes inventory restoration for all line items to return reserved stock to available inventory.
+     - Idempotent guards prevent double cancellation or rejection of already finalized/served orders.
+  4. **Bill Printing & Sound Alerts**:
+     - Online orders maintain full compatibility with thermal bill printing and optional sound alerts with user toggle persistence.
+- **Rationale**: Delivers a transparent, real-time tracking experience for online diners while maintaining strict separation of concerns, protecting internal operational data, preserving guest checkout convenience, guaranteeing inventory balance integrity, and upholding zero-mutation safety across the core order state machine.
+
 

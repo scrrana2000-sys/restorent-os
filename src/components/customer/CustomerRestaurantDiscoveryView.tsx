@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Search,
   X,
@@ -9,7 +9,8 @@ import {
   Loader2,
   Utensils,
   Store,
-  ArrowRight
+  ArrowRight,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useCustomerLocation } from '../../context/CustomerLocationContext';
 import { useCustomerRestaurantSearch } from '../../hooks/useCustomerRestaurantSearch';
@@ -58,71 +59,108 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
     pageSize: 12
   });
 
+  const [showFilters, setShowFilters] = useState<boolean>(false);
+
   // Extract available areas for the active city from city dataset
   const activeCityObj = location?.city ? findIndianCityByName(location.city) : undefined;
   const availableAreas = activeCityObj?.popularAreas || [];
 
+  const activeFiltersCount = [
+    filters.searchQuery ? 1 : 0,
+    filters.selectedCuisine ? 1 : 0,
+    filters.deliveryOnly ? 1 : 0,
+    filters.takeawayOnly ? 1 : 0,
+    filters.onlineOrderingOnly ? 1 : 0,
+    filters.selectedArea ? 1 : 0
+  ].reduce((a, b) => a + b, 0);
+
   return (
     <div className={`w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 space-y-4 sm:space-y-6 ${className}`}>
-      {/* Top Bar: Location Context & Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-100">
-        <div>
-          <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Discover Restaurants
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Order fresh food for delivery and takeaway near you
-          </p>
-        </div>
+      {/* Restaurants near city header & Icon-only Location & Filter controls */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-2 sm:gap-4">
+          <h2 className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 min-w-0 truncate">
+            <span className="truncate">
+              RESTAURANTS NEAR {location?.city || 'BENGALURU'}
+            </span>
+            {totalCount > 0 && (
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-black rounded-full shrink-0">
+                {totalCount}
+              </span>
+            )}
+          </h2>
 
-        {/* M9-C Location Selector Bar */}
-        <div className="flex items-center gap-2">
-          <CustomerLocationBar variant="pill" />
-        </div>
-      </div>
+          {/* Controls: Location button (icon only) + Filter button (icon only) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Location Icon-Only Button */}
+            <CustomerLocationBar variant="icon" />
 
-      {/* Search Input Box with Glass-Neumorphic Inset Depth */}
-      <div className="relative">
-        <div className="relative flex items-center glass-neu-inset rounded-2xl transition-all">
-          <div className="absolute left-4 text-orange-600/80 pointer-events-none">
-            <Search className="w-5 h-5" />
-          </div>
-          <input
-            id="customer-restaurant-search-input"
-            type="text"
-            value={filters.searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={
-              location?.city
-                ? `Search restaurants, cuisines, dishes in ${location.city}... (e.g. R-0YG9I)`
-                : 'Select your city to search restaurants...'
-            }
-            className="w-full pl-12 pr-10 py-3.5 bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
-          />
-          {filters.searchQuery && (
+            {/* Filter Icon-Only Button */}
             <button
-              id="clear-search-query-btn"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3.5 p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-white/60 transition-colors"
-              title="Clear search"
+              id="toggle-filters-btn"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`p-2.5 sm:p-3 text-xs font-bold rounded-xl sm:rounded-2xl flex items-center justify-center transition-all cursor-pointer select-none border shrink-0 min-w-[38px] min-h-[38px] sm:min-w-[44px] sm:min-h-[44px] relative ${
+                showFilters
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white border-transparent shadow-[2px_4px_12px_rgba(234,88,12,0.25)]'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-xs'
+              }`}
+              title={showFilters ? "Hide Filters" : "Show Filters"}
+              aria-label="Filters"
             >
-              <X className="w-4 h-4" />
+              <SlidersHorizontal className="w-4 h-4 sm:w-5 sm:h-5 text-slate-800" />
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-emerald-500 text-white text-[9px] font-black rounded-full min-w-[16px] text-center shadow-xs">
+                  {activeFiltersCount}
+                </span>
+              )}
             </button>
+          </div>
+        </div>
+
+          {/* Collapsible Search and Filters Panel */}
+          {showFilters && (
+            <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-md space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+              {/* Search input bar */}
+              <div className="relative">
+                <div className="relative flex items-center bg-slate-50/70 border border-slate-200/80 rounded-xl transition-all focus-within:border-orange-500/50">
+                  <div className="absolute left-3.5 text-slate-400 pointer-events-none">
+                    <Search className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="customer-restaurant-search-input"
+                    type="text"
+                    value={filters.searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={`Search restaurants, cuisines, dishes in ${location.city}...`}
+                    className="w-full pl-10 pr-9 py-2.5 bg-transparent text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  />
+                  {filters.searchQuery && (
+                    <button
+                      id="clear-search-query-btn"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                      title="Clear search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filters & Cuisines & All options (Capability pills) */}
+              <CustomerRestaurantFilters
+                filters={filters}
+                availableAreas={availableAreas}
+                onCuisineChange={setCuisine}
+                onAreaChange={setArea}
+                onDeliveryToggle={setDeliveryOnly}
+                onTakeawayToggle={setTakeawayOnly}
+                onOnlineOrderingToggle={setOnlineOrderingOnly}
+                onResetFilters={resetFilters}
+              />
+            </div>
           )}
         </div>
-      </div>
-
-      {/* Filters Bar */}
-      <CustomerRestaurantFilters
-        filters={filters}
-        availableAreas={availableAreas}
-        onCuisineChange={setCuisine}
-        onAreaChange={setArea}
-        onDeliveryToggle={setDeliveryOnly}
-        onTakeawayToggle={setTakeawayOnly}
-        onOnlineOrderingToggle={setOnlineOrderingOnly}
-        onResetFilters={resetFilters}
-      />
 
       {/* Exact Match Highlight Box */}
       {exactMatch && (
@@ -283,12 +321,6 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
         {/* Results Grid */}
         {!isLoading && !error && restaurants.length > 0 && (
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Restaurants near {location?.city} ({totalCount})
-              </h2>
-            </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {restaurants.map((restaurant) => (
                 <PublicRestaurantCard
