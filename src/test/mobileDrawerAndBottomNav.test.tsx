@@ -260,8 +260,8 @@ describe('Mobile Drawer + Bottom Navigation Architecture & Layering Fixes', () =
     expect(screen.getByRole('button', { name: /^More$/i })).toBeTruthy();
   });
 
-  // 9. Sidebar drawer contains Sign Out / Logout action
-  it('9. Sidebar drawer renders Sign Out button and calls logout on click', () => {
+  // 9. Sidebar drawer does not render removed user profile and Sign Out box
+  it('9. Sidebar drawer removes user account, Back to Customer Home, and Sign Out box', () => {
     const handleNavigate = vi.fn();
     const handleClose = vi.fn();
 
@@ -274,10 +274,9 @@ describe('Mobile Drawer + Bottom Navigation Architecture & Layering Fixes', () =
       />
     );
 
-    const logoutBtn = screen.getByRole('button', { name: /Sign Out \/ Logout/i });
-    expect(logoutBtn).toBeTruthy();
-    expect(logoutBtn.className).toContain('min-h-[44px]');
-    fireEvent.click(logoutBtn);
-    expect(handleClose).toHaveBeenCalledTimes(1);
+    const logoutBtn = screen.queryByRole('button', { name: /Sign Out \/ Logout/i });
+    expect(logoutBtn).toBeNull();
+    const backHomeBtn = screen.queryByRole('button', { name: /Back to Customer Home/i });
+    expect(backHomeBtn).toBeNull();
   });
 });

@@ -18,10 +18,7 @@ import {
   UserCheck,
   X,
   ChevronDown,
-  Check,
-  LogOut,
-  User,
-  Home
+  Check
 } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
@@ -316,55 +313,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
           )}
-        </div>
-
-        {/* User Account & Logout Section */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/60 shrink-0 space-y-2">
-          <div className="flex items-center gap-2.5 px-2 py-1">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm border border-indigo-400/30">
-              {profile?.displayName ? profile.displayName.charAt(0).toUpperCase() : user?.email ? user.email.charAt(0).toUpperCase() : 'A'}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-white truncate">
-                {profile?.displayName || user?.displayName || 'Administrator'}
-              </p>
-              <p className="text-[10px] text-slate-400 truncate">
-                {user?.email || 'Owner Account'}
-              </p>
-            </div>
-          </div>
-
-          {onBackToCustomerHome && (
-            <button
-              id="sidebar-back-to-customer-btn"
-              type="button"
-              onClick={() => {
-                onCloseMobile();
-                onBackToCustomerHome();
-              }}
-              className="w-full min-h-[44px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-indigo-300 hover:text-indigo-200 bg-indigo-950/40 hover:bg-indigo-950/70 border border-indigo-800/40 active:scale-95 transition-all shadow-xs"
-            >
-              <Home className="w-4 h-4 text-indigo-400 shrink-0" />
-              <span>Back to Customer Home</span>
-            </button>
-          )}
-
-          <button
-            id="sidebar-logout-btn"
-            type="button"
-            onClick={async () => {
-              onCloseMobile();
-              try {
-                await logout();
-              } catch (err) {
-                console.error('Sidebar Logout error:', err);
-              }
-            }}
-            className="w-full min-h-[44px] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-950/70 border border-rose-800/40 active:scale-95 transition-all shadow-xs"
-          >
-            <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>Sign Out / Logout</span>
-          </button>
         </div>
 
         {/* Footer info (Bottom safe area aware) */}
