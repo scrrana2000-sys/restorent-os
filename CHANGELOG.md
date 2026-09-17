@@ -2,6 +2,67 @@
 
 All notable changes to RestaurantOS will be documented in this file.
 
+## [Cloud Run Deployment Readiness & Public Webhook Verification] - 2026-09-17
+
+### Deployment Infrastructure & Production Ingress
+- **Cloud Run Deployment Architecture**:
+  - Full-stack production build verified: Single artifact build via `npm run build` compiles Vite SPA assets into `dist/` and compiles server entry point into self-contained CommonJS bundle `dist/server.cjs` via `esbuild`.
+  - Production start command verified: `npm start` (`node dist/server.cjs`) binds to `0.0.0.0:3000` with native static file serving and fallback SPA routing.
+  - Development Sandbox Isolation Verified: In the AI Studio development environment (`ais-dev-4ft674ruzfz7tdktvsq66r`), inbound requests are protected by an internal reverse-proxy security gate with session cookie redirects (`/__cookie_check.html`).
+  - Public Webhook Prerequisite: External automated callers like Razorpay require an unauthenticated public Cloud Run endpoint without interactive browser session challenges. Cloud Run service-level unauthenticated invocation must be enabled when deploying from AI Studio settings or Cloud Run console.
+- **Backend API Endpoints Documented**:
+  - `POST /api/subscription/create-order`: Server-authoritative order creation from commercial catalog.
+  - `POST /api/subscription/verify-and-activate`: Cryptographic HMAC SHA-256 payment signature verification & immediate plan activation.
+  - `POST /api/subscription/razorpay-webhook`: Persistent Firestore transactional OCC idempotency engine with HMAC SHA-256 signature verification.
+  - `GET /api/health`: Authenticated/unauthenticated production service health indicator.
+- **Secret Hygiene & Security Invariants**:
+  - Zero secrets exposed in documentation, client bundles, or frontend code.
+  - Server secrets (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`) remain strictly server-side.
+  - All existing tenant isolation, RBAC matrices, and Firestore security rules remain strictly preserved.
+
+## [Subscription System — Commercial Plans, Pricing & Customization] - 2026-09-17
+
+### Commercial Plan Configuration & Customization
+- **Finalized Commercial Pricing & Tier Definitions**:
+  - **Starter**: ₹299 / month (Single POS station, 15 tables, 5 staff accounts, KOT generation, digital QR menu, daily reports, receipt printing).
+  - **Growth**: ₹699 / month (Multi-device POS & captain handhelds, 50 tables, 15 staff accounts, live KDS, raw material inventory & recipe depletion, customer CRM insights, online ordering).
+  - **Pro**: ₹999 / month (Unlimited stations, 100 tables, 50 staff accounts, live KDS routing, batch tracking, Voice AI assistant, priority phone & WhatsApp support).
+- **Centralized Configuration (`src/config/subscriptionPlans.ts`)**:
+  - Centralized plan definitions, minor-unit (paise) and rupee calculations, and strict ordering (`COMMERCIAL_PLANS`).
+  - Added dedicated `CUSTOMIZATION_CONFIG` for bespoke restaurant integrations, custom branding, and specialized requirements.
+- **Customization Solution Section**:
+  - Rendered as a separate, distinct section with clear divider in Owner Center (`SubscriptionView.tsx`).
+  - Displays "Need a Custom Solution?", "Customization", and description.
+  - Dedicated "Contact Us" mailto action to official email: `radhachawan01@gmail.com`.
+  - Non-checkout architecture: completely decoupled from standard self-serve payment flows.
+- **Owner Center UI & Subscription Experience**:
+  - Updated plan display order: Starter (₹299/mo) → Growth (₹699/mo) → Pro (₹999/mo) → Divider → Customization.
+  - Transparent monthly pricing with operational limit badges and capability lists.
+  - Maintained 7-day free trial banner with "Choose a Plan" action.
+- **Testing & Verification**:
+  - Expanded test coverage in `src/test/subscriptionSystem.test.ts` verifying exact pricing, currency (INR), plan ordering, customization email, trial immutability, RBAC permissions, and payment order calculations.
+  - 120/120 test files passing (1,652 total tests green), 0 lint errors, clean production build.
+
+## [Milestone 12 — Final Production Hardening & Launch] - 2026-09-17
+
+### Production Hardening & Audit Completion
+- **Full Production System Audit**: Completed 22/22 audit phases covering security, tenant isolation, POS, inventory, online ordering, CRM, hardware/printers, offline synchronization, and voice assistant modules.
+- **Service Health Check Endpoint (`/api/health`)**: Verified production Express endpoint returning service status, ISO timestamp, version, and server authentication health.
+- **Progressive Web App (PWA) Manifest & Service Worker**:
+  - Configured Web App Manifest (`/manifest.webmanifest`) with standalone display, `#0f172a` theme color, and compliant icon definitions (192x192, 512x512, maskable).
+  - Registered Service Worker (`/sw.js`) handling app shell caching, static asset precaching, and offline fallback strategy.
+  - Added app installability links and iOS Safari meta headers in `index.html`.
+- **Firestore Security Rules Hardening**: Added `isServer()` overrides for inventory and stock ledger operations to prevent permission issues during server-side order processing.
+- **SEO & App Metadata Synchronization**: Aligned `<title>`, `og:title`, `<meta name="description">`, `og:description`, and `metadata.json` across entry points.
+- **Verification Suite**: 118 test files (1,629 total tests) passing 100% green with 0 linter errors, 0 TypeScript errors, and clean production build.
+
+## [Milestone 10 — AI Item Recognition] - 2026-09-17
+
+### Deferred / On Hold
+- **Status**: ON HOLD / DEFERRED.
+- **Reason**: Deferred because AI Item Recognition is not currently a product priority. Existing manual item creation is sufficient for the current RestaurantOS release.
+- **Roadmap Retention**: All M10 specifications and requirements preserved in `PROJECT_SPEC.md` for potential future implementation.
+
 ## [Milestone 9 — Phase 5: Restaurant Customer Management / CRM Foundation] - 2026-09-16
 
 ### Added & Verified

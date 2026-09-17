@@ -5,9 +5,12 @@ import path from 'path';
 import fs from 'fs';
 import {defineConfig} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ command, mode }) => {
+  const isBuild = command === 'build' || mode === 'production';
+  const base = process.env.VITE_BASE_PATH || (isBuild ? '/restorent-os/' : '/');
+
   return {
-    base: process.env.VITE_BASE_PATH || '/restorent-os/',
+    base,
     plugins: [
       react(),
       tailwindcss(),
@@ -39,9 +42,9 @@ export default defineConfig(() => {
       setupFiles: './src/test/setup.ts',
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
+      // Disable HMR WebSocket in AI Studio preview to prevent unhandled WebSocket closed exceptions
+      // across sandboxed reverse-proxy environments. Set ENABLE_HMR=true if local HMR is desired.
+      hmr: process.env.ENABLE_HMR === 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },

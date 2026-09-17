@@ -9,6 +9,10 @@
     <meta property="og:description" content="Production-grade restaurant management platform and Web Admin Dashboard" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
@@ -16,6 +20,40 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      (function() {
+        if ('serviceWorker' in navigator) {
+          var isDevHost =
+            window.location.hostname.includes('ais-dev') ||
+            window.location.hostname.includes('run.app') ||
+            window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.port === '3000';
+
+          if (isDevHost) {
+            // In development sandbox / AI Studio preview, unregister any stale workers and purge cache
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              for (var i = 0; i < registrations.length; i++) {
+                registrations[i].unregister();
+              }
+            }).catch(function() {});
+            if ('caches' in window) {
+              caches.keys().then(function(names) {
+                for (var j = 0; j < names.length; j++) {
+                  caches.delete(names[j]);
+                }
+              }).catch(function() {});
+            }
+          } else if (window.location.protocol === 'https:' && window.location.hostname.includes('github.io')) {
+            // Register PWA service worker only in official production hosted environment
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('./sw.js').catch(function(err) {
+                console.warn('[RestaurantOS PWA] Service worker registration deferred:', err);
+              });
+            });
+          }
+        }
+      })();
+    </script>
   </body>
 </html>
-

@@ -122,17 +122,18 @@ Completed and locked milestones/modules:
 - Phase 4.5 — POS Payment Due / Collection Center — COMPLETE / LOCKED
 - Phase 4.6A / 4.6B / 4.6C — Performance Audit, Optimization & Verification — COMPLETE / LOCKED (Sandbox measured; Live performance = NOT VERIFIED)
 
-Future roadmap items:
-- M9 — Customer App + Online Ordering — NOT STARTED
-- M10 — AI Item Recognition — NOT STARTED
-- M11 — Voice Ordering — NOT STARTED
-- M12 — Final Production Hardening + Launch — NOT STARTED
+Milestones & Modules Status:
+- M1 through M8.5 — Web Admin, POS, Kitchen, Captain, Inventory, Reports, RBAC, Operating Modes — COMPLETE / LOCKED
+- M9 — Customer App + Online Ordering (Phases 1-5 + Restaurant Banner) — COMPLETE / VERIFIED
+- M10 — AI Item Recognition — ON HOLD / DEFERRED (Deferred because AI Item Recognition is not currently a product priority. Existing manual item creation is sufficient for the current RestaurantOS release.)
+- M11 — Voice Assistant / Ordering — COMPLETE / VERIFIED
+- M12 — Final Production Hardening + Launch — ACTIVE DEVELOPMENT / VERIFIED
 
 The existing completed functionality must be preserved. Future work must be additive and must not silently rewrite completed milestone contracts.
 
-## CURRENT MILESTONE STATUS — M8 COMPLETE / CONDITIONAL — STOPPED BEFORE M9
+## CURRENT MILESTONE STATUS — M12 FINAL PRODUCTION HARDENING & LAUNCH ACTIVE / M10 ON HOLD & DEFERRED
 
-M1 through M8, Phase 3, Phase 4, Phase 4.5, and Phase 4.6 are fully implemented and verified in software. M9 remains strictly NOT STARTED.
+M1 through M8.5, M9 (Phases 1–5 + Restaurant Banner), and M11 (Voice Assistant) are fully implemented and verified in software. M10 (AI Item Recognition) is ON HOLD / DEFERRED (Deferred because AI Item Recognition is not currently a product priority. Existing manual item creation is sufficient for the current RestaurantOS release). M12 (Final Production Hardening + Launch) is the active milestone.
 
 ## MILESTONE 1 — WEB ADMIN FOUNDATION
 
@@ -999,12 +1000,10 @@ A feature is done only when:
 
 Build ONLY the currently activated milestone.
 
-CURRENT MILESTONE STATUS: MILESTONE 9 — PHASE 1 COMPLETE & VERIFIED
+CURRENT MILESTONE STATUS: MILESTONE 12 — FINAL PRODUCTION HARDENING & LAUNCH (ACTIVE) / MILESTONE 10 ON HOLD & DEFERRED
 
-M1 through M8.5, M11, Phase 3, Phase 4, Phase 4.5, Phase 4.6, and Milestone 9 Phase 1 are fully implemented and verified in software.
-Milestone 9 Phase 1 (Customer Account & Profile Foundation) is COMPLETE & VERIFIED.
-Milestone 9 Phase 2 (Customer ↔ Order Linking Foundation) is the next phase and MUST NOT be started until explicitly activated.
-
-After implementation, execute the LOOPING DEVELOPMENT PROTOCOL and do not stop while known current-change errors remain unless the environment itself blocks execution.
+M1 through M8.5, M9 (Phases 1–5 + Restaurant Banner), and M11 (Voice Assistant) are fully implemented and verified in software.
+Milestone 10 (AI Item Recognition) is ON HOLD / DEFERRED (Deferred because AI Item Recognition is not currently a product priority. Existing manual item creation is sufficient for the current RestaurantOS release).
+Milestone 12 (Final Production Hardening + Launch) is the current active milestone.
 
 END OF SPECIFICATION

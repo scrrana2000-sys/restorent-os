@@ -25,7 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getRestaurantOperatingProfile } from '../../config/restaurantOperatingModes';
 import { isViewAllowed } from '../../utils/permissions';
 
-export type AdminView = 'pos' | 'kitchen' | 'captain' | 'dashboard' | 'restaurant' | 'categories' | 'items' | 'settings' | 'reports' | 'audit' | 'orders' | 'payments' | 'staff' | 'inventory' | 'customers';
+export type AdminView = 'pos' | 'kitchen' | 'captain' | 'dashboard' | 'restaurant' | 'categories' | 'items' | 'settings' | 'reports' | 'audit' | 'orders' | 'payments' | 'staff' | 'inventory' | 'customers' | 'subscription';
 
 interface SidebarProps {
   currentView: AdminView;
@@ -73,6 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
     { id: 'audit', label: 'Audit Logs', icon: ShieldCheck },
     { id: 'staff', label: 'Staff & Roles', icon: Users },
+    { id: 'subscription', label: 'Subscription & Plans', icon: Sparkles },
     { id: 'restaurant', label: 'Restaurant Setup', icon: Store },
     { id: 'categories', label: 'Categories', icon: FolderTree },
     { id: 'items', label: 'Menu Items', icon: UtensilsCrossed }

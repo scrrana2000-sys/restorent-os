@@ -18,7 +18,14 @@ service cloud.firestore {
     function isOwnerOfRestaurant(restaurantId) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/restaurants/$(restaurantId))
-        && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid;
+        && (
+          get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
+          || (
+            exists(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid))
+            && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid)).data.role == 'owner'
+            && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid)).data.isActive == true
+          )
+        );
     }
 
     function isMemberOfRestaurant(restaurantId) {
@@ -90,10 +97,14 @@ service cloud.firestore {
       allow get: if isSignedIn() && (
         resource == null ||
         resource.data.ownerId == request.auth.uid ||
-        isMemberOfRestaurant(restaurantId)
+        isMemberOfRestaurant(restaurantId) ||
+        isServer()
       );
 
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow list: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        isServer()
+      );
 
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid;
@@ -213,14 +224,15 @@ service cloud.firestore {
             && (
               (
                 request.resource.data.status != 'cancelled'
-                && isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
+                && isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain', 'kitchen'])
               )
               || (
                 request.resource.data.status == 'cancelled'
                 && isMemberWithRole(restaurantId, 'manager')
               )
             )
-          );
+          )
+          || isServer();
 
         allow delete: if isOwnerOfRestaurant(restaurantId)
           || isMemberWithRole(restaurantId, 'manager');
@@ -305,18 +317,25 @@ service cloud.firestore {
            || isServer();
        }
 
+       // ==========================================================
+       // ORDER STOCK LOCKS (Idempotent stock consumption lock)
+       // ==========================================================
+
+       match /order_stock_locks/{lockId} {
+         allow read, write: if canAccessRestaurant(restaurantId) || isServer();
+       }
+
       // ==========================================================
       // INVENTORY ITEMS
       // ==========================================================
 
       match /inventoryItems/{itemId} {
-        allow read: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
+        allow read: if canAccessRestaurant(restaurantId);
 
         allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == restaurantId;
 
-        allow update: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+        allow update: if (canAccessRestaurant(restaurantId) || isServer())
           && request.resource.data.restaurantId == resource.data.restaurantId
           && request.resource.data.id == resource.data.id;
 
@@ -328,12 +347,10 @@ service cloud.firestore {
       // ==========================================================
 
       match /stockMovements/{movementId} {
-        allow read: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
+        allow read: if canAccessRestaurant(restaurantId);
 
-        allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
-          && request.resource.data.restaurantId == restaurantId
-          && request.resource.data.actorUid == request.auth.uid;
+        allow create: if (canAccessRestaurant(restaurantId) || isServer())
+          && request.resource.data.restaurantId == restaurantId;
 
         allow update, delete: if false; // Historical stock movements are strictly immutable
       }
@@ -394,8 +411,7 @@ service cloud.firestore {
       // ==========================================================
 
       match /recipes/{recipeId} {
-        allow read: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
+        allow read: if canAccessRestaurant(restaurantId);
 
         allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == restaurantId;
@@ -412,13 +428,12 @@ service cloud.firestore {
       // ==========================================================
 
       match /stockConsumptions/{consumptionId} {
-        allow read: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
+        allow read: if canAccessRestaurant(restaurantId);
 
-        allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain']))
+        allow create: if (canAccessRestaurant(restaurantId) || isServer())
           && request.resource.data.restaurantId == restaurantId;
 
-        allow update: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+        allow update: if (canAccessRestaurant(restaurantId) || isServer())
           && request.resource.data.restaurantId == resource.data.restaurantId;
 
         allow delete: if false; // Consumptions cannot be deleted to preserve audit trail
@@ -451,6 +466,29 @@ service cloud.firestore {
 
         allow delete: if isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager');
       }
+
+      // ==========================================================
+      // SUBSCRIPTION & TRIAL
+      // Owner/Server controlled, immutable history, strict tenant scoping
+      // ==========================================================
+
+      match /subscription/{subDocId} {
+        allow read: if canAccessRestaurant(restaurantId) || isServer();
+
+        allow create, update: if (isOwnerOfRestaurant(restaurantId) || isServer())
+          && request.resource.data.restaurantId == restaurantId;
+
+        allow delete: if false; // Subscriptions must never be deleted
+      }
+
+      match /subscriptionHistory/{historyId} {
+        allow read: if canAccessRestaurant(restaurantId) || isServer();
+
+        allow create: if (isOwnerOfRestaurant(restaurantId) || isServer())
+          && request.resource.data.restaurantId == restaurantId;
+
+        allow update, delete: if false; // Billing history is strictly immutable
+      }
     }
 
     // ============================================================
@@ -463,6 +501,15 @@ service cloud.firestore {
       allow write: if isSignedIn() && (
         isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager')
       );
+    }
+
+    // ============================================================
+    // SUBSCRIPTION WEBHOOK IDEMPOTENCY RECORDS
+    // Global root collection: /subscriptionWebhookEvents/{eventId}
+    // Server-only access. Strictly protected against client/browser tampering.
+    // ============================================================
+    match /subscriptionWebhookEvents/{eventId} {
+      allow read, write: if isServer();
     }
 
     // ============================================================

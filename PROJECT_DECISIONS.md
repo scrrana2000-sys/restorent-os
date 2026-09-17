@@ -204,4 +204,26 @@
      - Online orders maintain full compatibility with thermal bill printing and optional sound alerts with user toggle persistence.
 - **Rationale**: Delivers a transparent, real-time tracking experience for online diners while maintaining strict separation of concerns, protecting internal operational data, preserving guest checkout convenience, guaranteeing inventory balance integrity, and upholding zero-mutation safety across the core order state machine.
 
+### 28. Subscription System & 7-Day Free Trial Architecture
+- **Decision**:
+  1. **Restaurant-Bound State Persistence**:
+     - Trial and active subscriptions are attached strictly to the restaurant entity at `/restaurants/{restaurantId}/subscription/current` in Firestore.
+     - Never stored solely in browser `localStorage`, cookies, or client timestamps.
+     - Trial period begins once at restaurant provisioning and lasts strictly 7 calendar days.
+  2. **Authoritative Server-Side Payment Verification**:
+     - Upgrades and plan activations pass through backend endpoint `/api/subscription/verify-and-activate` before writing to Firestore.
+     - Firestore rules restrict subscription modification strictly to `isTenantOwner(restaurantId)` or `isServer()`, denying all unauthorized client mutation.
+  3. **Pluggable Payment Gateway Abstraction**:
+     - Designed around the `SubscriptionPaymentProvider` interface, avoiding hardcoding to any single gateway and preventing raw card/CVV storage in the database.
+     - Ships with a secure sandbox provider (`MockSubscriptionGatewayProvider`) and easily plugs into Razorpay or Stripe.
+  4. **RBAC & Separation of Concerns**:
+     - Subscription viewing is granted to Owners and Managers (`access_subscription`).
+     - Subscription changes and payment checkout are restricted exclusively to Owners (`manage_subscription`).
+     - Line staff (Cashier, Kitchen, Captain, Accountant) are completely blocked from viewing or managing subscriptions.
+  5. **Graceful Degradation & Operational Gating**:
+     - When subscription/trial is active, all POS, KOT, and Inventory features are unlocked.
+     - When expired, operational creation is locked while read-only access to historical data, reports, and settings is preserved.
+- **Rationale**: Ensures transparent, multi-tenant billing enforcement without data loss or vendor lock-in, while maintaining strict security boundaries and tenant isolation.
+
+
 

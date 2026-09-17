@@ -117,8 +117,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       error.toLowerCase().includes('backend didn\'t respond') ||
       error.toLowerCase().includes('could not reach'));
 
+  const isDarkView = currentView === 'subscription';
+
   return (
-    <div className="min-h-screen bg-slate-50 flex relative">
+    <div className={`min-h-screen ${isDarkView ? 'bg-[#0B0F19] text-slate-100' : 'bg-slate-50'} flex relative`}>
       {/* Switching Context Overlay */}
       {isSwitching && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center transition-all duration-200">
@@ -142,11 +144,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col lg:pl-64 min-w-0">
+      <div className={`flex-1 flex flex-col lg:pl-64 min-w-0 ${isDarkView ? 'bg-[#0B0F19]' : ''}`}>
         <div className={currentView === 'pos' ? 'hidden lg:block' : 'block'}>
           <Header
             onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
             onNavigateToSetup={() => onNavigate('restaurant')}
+            isDark={isDarkView}
           />
         </div>
 
@@ -212,7 +215,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
         <SecurityRulesNotice />
 
-        <main className={`flex-1 p-2 sm:p-4 lg:p-6 pb-16 sm:pb-18 lg:pb-6 ${['pos', 'kitchen', 'captain'].includes(currentView) ? 'max-w-none w-full !p-0 sm:!p-2 lg:!p-4 pb-16 sm:pb-18 lg:pb-4' : 'max-w-7xl w-full mx-auto'}`}>
+        <main className={`flex-1 ${
+          ['pos', 'kitchen', 'captain'].includes(currentView)
+            ? 'max-w-none w-full !p-0 sm:!p-2 lg:!p-4 pb-16 sm:pb-18 lg:pb-4'
+            : isDarkView
+            ? 'max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 pb-24 sm:pb-28 lg:pb-12 bg-[#0B0F19]'
+            : 'max-w-7xl w-full mx-auto p-2 sm:p-4 lg:p-6 pb-16 sm:pb-18 lg:pb-6'
+        }`}>
           {restaurantLoading && !restaurant ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mb-4" />

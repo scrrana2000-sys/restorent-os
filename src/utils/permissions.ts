@@ -42,7 +42,9 @@ export type PermissionAction =
   | 'print_bill'
   | 'print_kot'
   | 'access_customers'
-  | 'view_customers';
+  | 'view_customers'
+  | 'access_subscription'
+  | 'manage_subscription';
 
 export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boolean>> = {
   owner: {
@@ -86,6 +88,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     print_kot: true,
     access_customers: true,
     view_customers: true,
+    access_subscription: true,
+    manage_subscription: true,
   },
   manager: {
     access_pos: true,
@@ -128,6 +132,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     print_kot: true,
     access_customers: true,
     view_customers: true,
+    access_subscription: true,
+    manage_subscription: false,
   },
   cashier: {
     access_pos: true,
@@ -170,6 +176,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     print_kot: false,
     access_customers: true,
     view_customers: true,
+    access_subscription: false,
+    manage_subscription: false,
   },
   kitchen: {
     access_pos: false,
@@ -212,6 +220,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     print_kot: true,
     access_customers: false,
     view_customers: false,
+    access_subscription: false,
+    manage_subscription: false,
   },
   captain: {
     access_pos: false,
@@ -254,6 +264,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     print_kot: true,
     access_customers: false,
     view_customers: false,
+    access_subscription: false,
+    manage_subscription: false,
   },
   accountant: {
     access_pos: false,
@@ -296,6 +308,8 @@ export const PERMISSION_MATRIX: Record<StaffRole, Record<PermissionAction, boole
     print_kot: false,
     access_customers: false,
     view_customers: false,
+    access_subscription: false,
+    manage_subscription: false,
   },
 };
 
@@ -323,6 +337,7 @@ export function isViewAllowed(role: StaffRole | undefined, view: string): boolea
   if (view === 'purchases') return hasPermission(role, 'access_purchases');
   if (view === 'printers') return hasPermission(role, 'access_printers') || hasPermission(role, 'manage_printers');
   if (view === 'customers') return hasPermission(role, 'access_customers') || hasPermission(role, 'view_customers');
+  if (view === 'subscription') return hasPermission(role, 'access_subscription');
   return false;
 }
 

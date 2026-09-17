@@ -8,13 +8,33 @@ import { submitCustomerOnlineOrder } from './src/services/customerCheckoutServic
 import {
   verifyFirebaseToken,
   verifyRestaurantStaffAuthorization,
+  verifyRestaurantOwnerForSubscription,
+  ensureServerAuthenticated,
   checkRateLimit
 } from './src/server/invitationAuth';
+import {
+  getPublicRazorpayKeyId,
+  createRazorpayOrder,
+  verifyRazorpayPaymentSignature,
+  verifyRazorpayWebhookSignature,
+  processRazorpayWebhookPayload,
+  activateSubscriptionInFirestore,
+  recordSubscriptionAudit,
+  validateSelfServePlan
+} from './src/server/razorpayService';
+import { getPlanById } from './src/config/subscriptionPlans';
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: '50kb' }));
+app.use(
+  express.json({
+    limit: '50kb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 
 // Permissive CORS middleware with support for GitHub Pages and Cloud Run previews
 app.use((req, res, next) => {
@@ -30,7 +50,10 @@ app.use((req, res, next) => {
     if (isAllowed) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization, X-Requested-With, X-Razorpay-Signature, X-Razorpay-Event-Id'
+      );
       res.setHeader('Access-Control-Allow-Credentials', 'true');
     }
   }
@@ -38,6 +61,7 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
+
   next();
 });
 
@@ -48,45 +72,6 @@ app.get('/api/health', (_req, res) => {
     service: 'restaurantos-api'
   });
 });
-
-let isServerAuthenticated = false;
-let isServerAuthenticating = false;
-
-async function ensureServerAuthenticated() {
-  if (isServerAuthenticated && auth.currentUser) return;
-  if (isServerAuthenticating) {
-    while (isServerAuthenticating) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    if (isServerAuthenticated && auth.currentUser) return;
-  }
-
-  isServerAuthenticating = true;
-  const email = 'system-server@restaurantos.app';
-  const password = process.env.SYSTEM_SERVER_PASSWORD || 'SystemSecurePassword123!';
-
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-    isServerAuthenticated = true;
-    console.log('[RestaurantOS Server] System server authenticated successfully.');
-  } catch (err: any) {
-    if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-email') {
-      try {
-        await createUserWithEmailAndPassword(auth, email, password);
-        isServerAuthenticated = true;
-        console.log('[RestaurantOS Server] System server account created and authenticated.');
-      } catch (createErr) {
-        console.error('[RestaurantOS Server] Failed to create system server account:', createErr);
-        throw createErr;
-      }
-    } else {
-      console.error('[RestaurantOS Server] Failed to authenticate system server:', err);
-      throw err;
-    }
-  } finally {
-    isServerAuthenticating = false;
-  }
-}
 
 const onlineOrderIpLimits = new Map<string, number[]>();
 
@@ -473,21 +458,372 @@ function buildEmailTemplate({ name, role, restaurantName, url }: { name: string;
   `;
 }
 
+/**
+ * Subscription Config Endpoint
+ * Returns public Razorpay key and currency for client-side checkout initiation.
+ */
+app.get('/api/subscription/config', (_req, res) => {
+  return res.json({
+    success: true,
+    keyId: getPublicRazorpayKeyId(),
+    currency: 'INR'
+  });
+});
+
+/**
+ * Authoritative Server-Side Razorpay Order Creation
+ * Computes price server-side in paise (INR) based on centralized plan catalog.
+ * Validates plan legitimacy and enforces restaurant ownership.
+ */
+app.post('/api/subscription/create-order', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Bearer authentication token is required.'
+      });
+    }
+
+    const idToken = authHeader.substring(7).trim();
+    if (!idToken) {
+      return res.status(401).json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Empty Bearer authentication token.'
+      });
+    }
+
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser || !authUser.uid) {
+      return res.status(401).json({
+        success: false,
+        error: 'INVALID_AUTH_TOKEN',
+        message: 'Invalid or expired Firebase authentication token.'
+      });
+    }
+
+    const {
+      restaurantId,
+      planId,
+      billingCycle = 'monthly',
+      customerEmail,
+      customerName,
+      amount
+    } = req.body;
+
+    if (!restaurantId || !planId) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_PARAMETERS',
+        message: 'restaurantId and planId are required.'
+      });
+    }
+
+    const cleanRestaurantId = String(restaurantId).trim();
+    const cleanPlanId = String(planId).trim();
+
+    // Validate plan
+    const planValidation = validateSelfServePlan(cleanPlanId);
+    if (!planValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_PLAN',
+        message: planValidation.error
+      });
+    }
+
+    // Reject arbitrary client amount manipulation if passed
+    const targetPlan = getPlanById(cleanPlanId);
+    const expectedAmount =
+      billingCycle === 'annual' ? targetPlan.priceAnnualPaise : targetPlan.priceMonthlyPaise;
+    if (amount !== undefined && Number(amount) !== expectedAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'PRICE_MISMATCH',
+        message: `Amount ${amount} does not match authoritative plan price ${expectedAmount}. Price manipulation is rejected.`
+      });
+    }
+
+    // Verify restaurant ownership
+    const ownerCheck = await verifyRestaurantOwnerForSubscription(
+      authUser.uid,
+      idToken,
+      cleanRestaurantId
+    );
+    if (!ownerCheck.authorized) {
+      return res.status(ownerCheck.code || 403).json({
+        success: false,
+        error: ownerCheck.error || 'FORBIDDEN',
+        message: ownerCheck.message || 'Only restaurant owners can purchase subscriptions.'
+      });
+    }
+
+    const order = await createRazorpayOrder({
+      restaurantId: cleanRestaurantId,
+      planId: cleanPlanId,
+      billingCycle,
+      customerEmail: customerEmail || authUser.email,
+      customerName,
+      callerUid: authUser.uid
+    });
+
+    return res.json({
+      success: true,
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: order.keyId,
+      planId: order.planId,
+      planName: order.planName,
+      billingCycle: order.billingCycle
+    });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Razorpay order creation error:', err);
+    return res.status(400).json({
+      success: false,
+      error: 'ORDER_CREATION_FAILED',
+      message: err?.message || 'Failed to create subscription order.'
+    });
+  }
+});
+
+/**
+ * Authoritative Server-Side Subscription Verification and Activation
+ *
+ * Verifies Razorpay payment signatures with HMAC SHA-256, validates plan
+ * configurations and pricing, checks restaurant ownership, activates
+ * subscription in Firestore, and records audit history.
+ */
+app.post('/api/subscription/verify-and-activate', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Bearer authentication token is required.'
+      });
+    }
+
+    const idToken = authHeader.substring(7).trim();
+    if (!idToken) {
+      return res.status(401).json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Empty Bearer authentication token.'
+      });
+    }
+
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser || !authUser.uid) {
+      return res.status(401).json({
+        success: false,
+        error: 'INVALID_AUTH_TOKEN',
+        message: 'Invalid or expired Firebase authentication token.'
+      });
+    }
+
+    const {
+      restaurantId,
+      planId,
+      billingCycle = 'monthly',
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      providerOrderId,
+      paymentId,
+      signature,
+      paymentReference,
+      amount,
+      currency
+    } = req.body;
+
+    const cleanRestaurantId = String(restaurantId || '').trim();
+    const cleanPlanId = String(planId || '').trim();
+
+    if (!cleanRestaurantId || !cleanPlanId) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_PARAMETERS',
+        message: 'restaurantId and planId are required.'
+      });
+    }
+
+    // Validate plan
+    const planValidation = validateSelfServePlan(cleanPlanId);
+    if (!planValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_PLAN',
+        message: planValidation.error
+      });
+    }
+
+    // Verify restaurant ownership
+    const ownerCheck = await verifyRestaurantOwnerForSubscription(
+      authUser.uid,
+      idToken,
+      cleanRestaurantId
+    );
+    if (!ownerCheck.authorized) {
+      return res.status(ownerCheck.code || 403).json({
+        success: false,
+        error: ownerCheck.error || 'FORBIDDEN',
+        message: ownerCheck.message || 'Only restaurant owners can activate subscriptions.'
+      });
+    }
+
+    const orderId = razorpayOrderId || providerOrderId || paymentReference;
+    const payId = razorpayPaymentId || paymentId || paymentReference;
+    const sig = razorpaySignature || signature;
+
+    if (!orderId || !payId) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_PAYMENT_DETAILS',
+        message: 'Razorpay orderId and paymentId are required for verification.'
+      });
+    }
+
+    const targetPlan = getPlanById(cleanPlanId);
+    const expectedAmount =
+      billingCycle === 'annual' ? targetPlan.priceAnnualPaise : targetPlan.priceMonthlyPaise;
+
+    // Reject arbitrary client amount manipulation
+    if (amount !== undefined && Number(amount) !== expectedAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'PRICE_MISMATCH',
+        message: `Amount ${amount} does not match authoritative price ${expectedAmount} for plan ${cleanPlanId}. Client-side price tampering is rejected.`
+      });
+    }
+
+    // Cryptographic signature verification
+    const isSignatureValid = verifyRazorpayPaymentSignature({
+      razorpayOrderId: orderId,
+      razorpayPaymentId: payId,
+      razorpaySignature: sig || ''
+    });
+
+    if (!isSignatureValid) {
+      // Record payment failure audit log
+      await recordSubscriptionAudit({
+        restaurantId: cleanRestaurantId,
+        eventType: 'PAYMENT_FAILED',
+        planId: targetPlan.planId,
+        planName: targetPlan.name,
+        billingCycle,
+        amount: expectedAmount,
+        currency: currency || 'INR',
+        status: 'failed',
+        razorpayOrderId: orderId,
+        razorpayPaymentId: payId,
+        paymentReference: payId,
+        metadata: {
+          failureReason: 'INVALID_SIGNATURE',
+          callerUid: authUser.uid
+        }
+      }).catch(() => {});
+
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_SIGNATURE',
+        message: 'Razorpay payment signature verification failed. The transaction cannot be verified.'
+      });
+    }
+
+    // Authoritative subscription activation in Firestore
+    const updatedSub = await activateSubscriptionInFirestore({
+      restaurantId: cleanRestaurantId,
+      planId: targetPlan.planId,
+      billingCycle,
+      razorpayOrderId: orderId,
+      razorpayPaymentId: payId,
+      idToken
+    });
+
+    return res.json({
+      success: true,
+      verified: true,
+      subscription: updatedSub,
+      data: updatedSub
+    });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Subscription verification error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'SUBSCRIPTION_VERIFICATION_ERROR',
+      message: err?.message || 'Failed to verify and activate subscription.'
+    });
+  }
+});
+
+/**
+ * Razorpay Webhook Endpoint
+ * Handles asynchronous server-to-server lifecycle notifications:
+ * - payment.captured / order.paid -> activates/renews subscription
+ * - payment.failed -> logs failure audit
+ * - subscription.charged -> renews billing period
+ * - subscription.cancelled -> marks subscription expired
+ */
+app.post('/api/subscription/razorpay-webhook', async (req: any, res) => {
+  try {
+    const signature = (req.headers['x-razorpay-signature'] as string) || '';
+    const rawBody = req.rawBody || JSON.stringify(req.body);
+
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      if (!signature) {
+        console.warn('[RestaurantOS Server] Webhook rejected: missing x-razorpay-signature header');
+        return res.status(400).json({ success: false, error: 'MISSING_WEBHOOK_SIGNATURE' });
+      }
+      const isValid = verifyRazorpayWebhookSignature(rawBody, signature);
+      if (!isValid) {
+        console.warn('[RestaurantOS Server] Webhook rejected: invalid signature');
+        return res.status(400).json({ success: false, error: 'INVALID_WEBHOOK_SIGNATURE' });
+      }
+    }
+
+    const eventId =
+      (req.headers['x-razorpay-event-id'] as string) ||
+      req.body?.event_id ||
+      (req.body?.payload?.payment?.entity?.id
+        ? `${req.body.payload.payment.entity.id}_${req.body.event}`
+        : `event_${Date.now()}`);
+
+    const result = await processRazorpayWebhookPayload(req.body, eventId);
+    return res.status(200).json({ received: true, ...result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Webhook processing error:', err);
+    return res.status(500).json({ error: 'WEBHOOK_PROCESSING_ERROR', message: err?.message });
+  }
+});
+
 // Start Express + Vite middleware server
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.ENABLE_HMR === 'true',
+      },
       appType: 'spa'
     });
+
+    // Seamlessly support both root (/) and base subpath (/restorent-os/) in dev without 302 redirects
+    app.use((req, res, next) => {
+      if (req.url.startsWith('/restorent-os/')) {
+        req.url = req.url.slice('/restorent-os'.length) || '/';
+      } else if (req.url === '/restorent-os') {
+        req.url = '/';
+      }
+      next();
+    });
+
     app.use(vite.middlewares);
-    app.get('/', (_req, res) => {
-      res.redirect('/restorent-os/');
-    });
-    app.get('/restorent-os', (_req, res) => {
-      res.redirect('/restorent-os/');
-    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use('/restorent-os', express.static(distPath));
@@ -499,6 +835,9 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[RestaurantOS Server] Server running on http://0.0.0.0:${PORT}`);
+    ensureServerAuthenticated().catch((err) => {
+      console.warn('[RestaurantOS Server] Background system server auth notice:', err?.message || err);
+    });
   });
 }
 

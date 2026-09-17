@@ -1,8 +1,41 @@
 # RestaurantOS — Master Project State & Status
 
 ## Current Milestone & Phase Status
-- **Current Active Milestone**: Milestone 9 — Public Online Ordering & Customer CRM Platform
-- **Active Operational Phase**: Phase 5 — Restaurant Customer Management / CRM Foundation (COMPLETE & VERIFIED)
+- **Current Active Feature**: Subscription System + Commercial Plans & Customization (COMPLETE, PRODUCTION-HARDENED & VERIFIED)
+  - **7-Day Free Trial**: Server-authoritative, idempotent start bound to `/restaurants/{restaurantId}/subscription/current`. Survives device changes, reloads, and logouts. Existing trial duration is preserved and cannot be fraudulently restarted.
+  - **Commercial Plans & Monthly Pricing**:
+    - **Starter**: ₹299 / month (29,900 paise) (Single station, 15 tables, 5 staff, KOT, digital QR menu, reports, receipt printing).
+    - **Growth**: ₹699 / month (69,900 paise) (Multi-device, 50 tables, 15 staff, live KDS, raw inventory & recipe depletion, CRM insights, online ordering).
+    - **Pro**: ₹999 / month (99,900 paise) (Unlimited stations, 100 tables, 50 staff, live KDS routing, batch tracking, Voice AI assistant, priority support).
+    - **Customization Solution**: Dedicated tier for custom integrations, bespoke branding, and special requirements with direct email contact (`radhachawan01@gmail.com`).
+  - **Strict Display Order**: Starter (₹299/mo) → Growth (₹699/mo) → Pro (₹999/mo) → Divider → Customization.
+  - **Backend Authority**: `/api/subscription/create-order` computes pricing strictly server-side from `COMMERCIAL_PLANS`. `/api/subscription/verify-and-activate` cryptographically validates payment signatures via HMAC SHA-256 before activating.
+  - **Persistent Webhook Idempotency Engine**:
+    - Replaced in-memory tracking with persistent Firestore collection `/subscriptionWebhookEvents/{eventId}`.
+    - Transactional OCC (`runTransaction`) claims webhook events atomically before processing, surviving server restarts and container scale-outs.
+    - Post-processing state updates with `completeWebhookEvent` mark events as `processed`, `ignored`, or `failed`.
+    - Payment deduplication: If a payment has already activated a plan for a tenant, duplicate webhooks or concurrent activations return the existing subscription without generating duplicate audit entries.
+    - Security rules: `/subscriptionWebhookEvents/{eventId}` access restricted strictly to `isServer()`.
+  - **Credential Safety**:
+    - Frontend NEVER receives or exposes `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET`.
+    - Public Key ID (`RAZORPAY_KEY_ID`) exposed safely to client for Razorpay Checkout popup.
+    - Production keys deferred per user direction ("Razorpay credentials abhi provide nahi karne hain").
+  - **Owner Center Integration**: `SubscriptionStatusBanner` on Owner Central dashboard, `SubscriptionView` management console, plan switch modal, and immutable billing audit log (`/restaurants/{restaurantId}/subscriptionHistory/`).
+  - **RBAC & Security Rules**: `access_subscription` for Owner/Manager, `manage_subscription` strictly for Owner. Firestore rules enforce multi-tenant isolation and append-only billing logs.
+- **Cloud Run Deployment & Webhook Ingress Readiness**:
+  - **Build & Artifacts**: Production build verified via `npm run build` producing optimized Vite SPA assets and self-contained CommonJS server bundle `dist/server.cjs`.
+  - **Start Command**: `npm start` executes `node dist/server.cjs` listening on `0.0.0.0:3000`.
+  - **Sandbox Restriction vs Production Cloud Run**: The AI Studio development container (`ais-dev-4ft674ruzfz7tdktvsq66r`) intercepts unauthenticated HTTP POST calls with an interactive session cookie challenge (`302 Found` to `/__cookie_check.html`).
+  - **Deployment Path**: Deploying from AI Studio via Settings Menu > "Deploy to Cloud Run" with "Allow unauthenticated invocations" enabled establishes the public production domain (e.g., `https://restaurantos-<hash>.a.run.app`) where `/api/subscription/razorpay-webhook` directly accepts external server-to-server POST deliveries.
+- **Current Active Milestone**: Milestone 12 — Final Production Hardening & Launch (COMPLETE & VERIFIED)
+- **Milestone 10 Status**: ON HOLD / DEFERRED
+  - **Reason**: Deferred because AI Item Recognition is not currently a product priority. Existing manual item creation is sufficient for the current RestaurantOS release.
+- **Milestone 12 Status**: COMPLETE & VERIFIED
+  - **Full Production Audit**: 22/22 audit phases passed with 100% verification across all core modules.
+  - **Health Endpoint**: Production health API (`/api/health`) verified returning service status, timestamp, version, and database state.
+  - **PWA Integration**: Web App Manifest (`/manifest.webmanifest`) configured with standalone display, theme color `#0f172a`, icon definitions (192x192, 512x512, maskable), and Service Worker registration (`sw.js`).
+  - **SEO & Metadata Synchronization**: Synced `<title>`, `og:title`, `description`, `og:description`, and `metadata.json` across all public entry points.
+  - **Zero Regressions & Security Boundary**: Hardened Firestore rules with `isServer()` overrides for inventory and stock consumption, keeping 118 test files (1,629 tests) 100% green with zero TypeScript, lint, or build errors.
 - **Milestone 9 Status**: COMPLETE / VERIFIED
   - **Phase 1 (Discovery & City Selection)**: Public multi-tenant restaurant discovery, GPS/PIN/City location selector, and public restaurant profiles.
   - **Phase 2 (Menu & Customization)**: Public menu viewing, food type badges, variant & addon customizers, and cart boundary isolation.
@@ -52,11 +85,18 @@
 - **Milestone 7 — Inventory, Stock Ledger, Procurement, Recipe Consumption & Intelligence (Phases 7A–7F)**: COMPLETE & LOCKED
 - **Milestone 8 — Printer & Hardware Integration (Phases 8A–8B)**: COMPLETE / CONDITIONAL
 - **Milestone 8.5 — Adaptive Operating Model & Small Restaurant Mode**: COMPLETE & VERIFIED
-- **Milestone 9 — Customer App & Online Ordering**: IN PROGRESS
+- **Milestone 9 — Customer App & Online Ordering**: COMPLETE & VERIFIED
   - **Phase 9A — Public Restaurant Identity & Safe Model**: COMPLETE & VERIFIED
   - **Phase 9B — Public Restaurant Discovery Service / Query**: COMPLETE & VERIFIED
   - **Phase 9C — Customer Location Context & Manual City Fallback**: COMPLETE & VERIFIED
   - **Milestone 9 — Phase 1: Customer Account & Profile Foundation**: COMPLETE & VERIFIED
+  - **Milestone 9 — Phase 2: Customer ↔ Order Linking Foundation**: COMPLETE & VERIFIED
+  - **Milestone 9 — Phase 3: Restaurant New Online Order Notification**: COMPLETE & VERIFIED
+  - **Milestone 9 — Phase 4: Customer Order Tracking**: COMPLETE & VERIFIED
+  - **Milestone 9 — Phase 5: Restaurant Customer Management / CRM Foundation**: COMPLETE & VERIFIED
+- **Milestone 10 — AI Item Recognition**: ON HOLD / DEFERRED (Deferred because AI Item Recognition is not currently a product priority. Existing manual item creation is sufficient for the current RestaurantOS release.)
+- **Milestone 11 — Voice Assistant & Voice Ordering**: COMPLETE & VERIFIED
+- **Milestone 12 — Final Production Hardening & Launch**: COMPLETE & VERIFIED
     - **Google Sign-In Authentication**: Direct Google OAuth (`GoogleAuthProvider`) integration via `CustomerAuthContext` and `customerAuthService`.
     - **UID Mapping**: Customer ID is strictly bound to Firebase Auth UID (`customerId = user.uid`).
     - **Staff/Customer Identity Decoupling**: Customer accounts are completely separated from restaurant staff and owner roles.

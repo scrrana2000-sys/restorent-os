@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RestaurantProvider, useRestaurant } from '../context/RestaurantContext';
+import { SubscriptionProvider } from '../context/SubscriptionContext';
 import { AdminLayout } from '../components/layout/AdminLayout';
 import { AdminView } from '../components/layout/Sidebar';
 import { LoginPage } from './LoginPage';
 import { PosPage } from './PosPage';
+import { SubscriptionView } from '../components/subscription/SubscriptionView';
+import { SubscriptionStatusBanner } from '../components/subscription/SubscriptionStatusBanner';
 import { lazy, Suspense } from 'react';
 import {
   UtensilsCrossed,
@@ -369,6 +372,7 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
       }
       onBackToCustomerHome={handleBackToCustomer}
     >
+      <SubscriptionStatusBanner onOpenPlans={() => setCurrentView('subscription')} />
       {allowedToView ? (
         <Suspense fallback={<ViewFallback />}>
           {currentView === 'pos' && <PosPage onNavigate={setCurrentView} />}
@@ -382,6 +386,7 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
           {currentView === 'inventory' && <InventoryPage />}
           {currentView === 'dashboard' && <DashboardPage onNavigate={setCurrentView} />}
           {currentView === 'staff' && <StaffPage />}
+          {currentView === 'subscription' && <SubscriptionView />}
           {currentView === 'restaurant' && <RestaurantSetupPage />}
           {currentView === 'categories' && <CategoriesPage />}
           {currentView === 'items' && <ItemsPage />}
@@ -476,7 +481,9 @@ export const OwnerCentralPage: React.FC<OwnerCentralPageProps> = ({ onBackToCust
   // Authenticated: Wrap in RestaurantProvider to manage restaurant context
   return (
     <RestaurantProvider>
-      <OwnerCentralManagementConsole onBackToCustomerHome={handleBackToCustomer} />
+      <SubscriptionProvider>
+        <OwnerCentralManagementConsole onBackToCustomerHome={handleBackToCustomer} />
+      </SubscriptionProvider>
     </RestaurantProvider>
   );
 };

@@ -81,7 +81,7 @@ export class BrowserPrinterAdapter implements PrinterAdapter {
 
         // Clean up iframe after short delay
         setTimeout(() => {
-          if (document.body.contains(iframe)) {
+          if (typeof document !== 'undefined' && document.body && document.body.contains(iframe)) {
             document.body.removeChild(iframe);
           }
         }, 1000);

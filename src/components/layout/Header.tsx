@@ -22,11 +22,13 @@ import {
 interface HeaderProps {
   onOpenMobileMenu: () => void;
   onNavigateToSetup: () => void;
+  isDark?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenMobileMenu,
-  onNavigateToSetup
+  onNavigateToSetup,
+  isDark = false
 }) => {
   const { user, profile, logout } = useAuth();
   const { restaurant, availableRestaurants, switchRestaurant, isSwitching } = useRestaurant();
@@ -75,13 +77,17 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 h-14 sm:h-16 lg:h-18 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-3 sm:px-6 lg:px-8 flex items-center justify-between">
+    <header className={`sticky top-0 z-30 h-14 sm:h-16 lg:h-18 backdrop-blur-md border-b px-3 sm:px-6 lg:px-8 flex items-center justify-between transition-colors ${
+      isDark ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200/80 text-slate-900'
+    }`}>
       {/* Left section */}
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           onClick={onOpenMobileMenu}
           aria-label="Open Navigation Menu"
-          className="lg:hidden p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 focus:outline-none active:scale-95"
+          className={`lg:hidden p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl focus:outline-none active:scale-95 transition-colors ${
+            isDark ? 'text-slate-300 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'
+          }`}
         >
           <MenuIcon className="w-5 h-5" />
         </button>
@@ -95,10 +101,12 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             disabled={isSwitching}
             className={`flex items-center gap-2 p-1 px-2 -ml-1 rounded-xl transition-all duration-150 text-left focus:outline-none min-h-[44px] ${
-              availableRestaurants.length > 1 ? 'hover:bg-slate-100 cursor-pointer' : 'cursor-default'
+              availableRestaurants.length > 1 ? (isDark ? 'hover:bg-slate-800 cursor-pointer' : 'hover:bg-slate-100 cursor-pointer') : 'cursor-default'
             }`}
           >
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 font-bold overflow-hidden shadow-xs shrink-0">
+            <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center font-bold overflow-hidden shadow-xs shrink-0 ${
+              isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'
+            }`}>
               {restaurant?.logoUrl ? (
                 <img
                   src={restaurant.logoUrl}
@@ -112,14 +120,18 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-1">
-                <h1 className="text-xs sm:text-base font-bold text-slate-900 leading-none truncate max-w-[130px] sm:max-w-xs">
+                <h1 className={`text-xs sm:text-base font-bold leading-none truncate max-w-[130px] sm:max-w-xs ${
+                  isDark ? 'text-white' : 'text-slate-900'
+                }`}>
                   {restaurant?.name || 'RestaurantOS'}
                 </h1>
                 {availableRestaurants.length > 1 && (
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 )}
               </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate hidden sm:block">
+              <p className={`text-[10px] sm:text-[11px] mt-0.5 truncate hidden sm:block ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}>
                 {restaurant?.city ? `${restaurant.city}, ${restaurant.country}` : 'Web Admin Dashboard'}
               </p>
             </div>
@@ -127,8 +139,10 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Outlets Dropdown */}
           {isOutletOpen && availableRestaurants.length > 1 && (
-            <div className="absolute left-0 mt-2 w-72 rounded-2xl bg-white shadow-xl border border-slate-250 py-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
-              <div className="px-4 py-2 border-b border-slate-100 pb-2">
+            <div className={`absolute left-0 mt-2 w-72 rounded-2xl shadow-xl border py-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150 ${
+              isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+            }`}>
+              <div className={`px-4 py-2 border-b pb-2 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Select Restaurant Outlet
                 </p>
@@ -151,13 +165,15 @@ export const Header: React.FC<HeaderProps> = ({
                       }}
                       className={`w-full px-4 py-2 text-left transition-colors flex items-center justify-between group ${
                         isActive
-                          ? 'bg-indigo-50 text-indigo-900 font-semibold'
-                          : 'hover:bg-slate-50 text-slate-700 hover:text-slate-900'
+                          ? (isDark ? 'bg-indigo-900/40 text-indigo-300 font-semibold' : 'bg-indigo-50 text-indigo-900 font-semibold')
+                          : (isDark ? 'hover:bg-slate-800 text-slate-300 hover:text-white' : 'hover:bg-slate-50 text-slate-700 hover:text-slate-900')
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                          isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                          isActive
+                            ? (isDark ? 'bg-indigo-800/60 text-indigo-300' : 'bg-indigo-100 text-indigo-700')
+                            : (isDark ? 'bg-slate-800 text-slate-400 group-hover:bg-slate-700' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200')
                         }`}>
                           {res.logoUrl ? (
                             <img src={res.logoUrl} alt={res.name} className="w-full h-full object-cover rounded-lg" referrerPolicy="no-referrer" />
@@ -173,7 +189,7 @@ export const Header: React.FC<HeaderProps> = ({
                         </div>
                       </div>
                       {isActive && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
                       )}
                     </button>
                   );
@@ -198,21 +214,23 @@ export const Header: React.FC<HeaderProps> = ({
           }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
             isAssistantEnabled
-              ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200/80 shadow-2xs'
-              : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+              ? (isDark ? 'bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 border-indigo-500/40' : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200/80 shadow-2xs')
+              : (isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200')
           }`}
           title={isAssistantEnabled ? 'Voice Assistant is Visible (Click to Fully Close/Hide)' : 'Voice Assistant is Closed (Click to Open)'}
           aria-label={isAssistantEnabled ? 'Hide Voice Assistant' : 'Show Voice Assistant'}
         >
-          <Sparkles className={`w-3.5 h-3.5 ${isAssistantEnabled ? 'text-amber-500 animate-pulse' : 'text-slate-400'}`} />
+          <Sparkles className={`w-3.5 h-3.5 ${isAssistantEnabled ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
           <span className="hidden sm:inline">
             {isAssistantEnabled ? 'Assistant ON' : 'Assistant OFF'}
           </span>
         </button>
 
         {/* Tax Mode Chip */}
-        <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-xs font-semibold text-slate-700 border border-slate-200">
-          <Percent className="w-3.5 h-3.5 text-indigo-600" />
+        <div className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border ${
+          isDark ? 'bg-slate-800/90 text-slate-300 border-slate-700' : 'bg-slate-100/90 text-slate-700 border-slate-200'
+        }`}>
+          <Percent className="w-3.5 h-3.5 text-indigo-400" />
           <span>GST: {restaurant?.defaultTaxRate ?? 5}%</span>
           <span className="text-[10px] text-slate-400 font-normal capitalize">
             ({restaurant?.taxMode || 'exclusive'})
@@ -223,16 +241,20 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-2.5 p-1.5 pl-2 rounded-xl hover:bg-slate-100 transition-colors duration-150 focus:outline-none"
+            className={`flex items-center gap-2.5 p-1.5 pl-2 rounded-xl transition-colors duration-150 focus:outline-none ${
+              isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
+            }`}
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-700 text-white font-bold flex items-center justify-center text-xs shadow-xs">
               {profile?.displayName ? profile.displayName.charAt(0).toUpperCase() : 'A'}
             </div>
             <div className="text-left hidden sm:block">
-              <p className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[120px]">
+              <p className={`text-xs font-bold leading-tight truncate max-w-[120px] ${
+                isDark ? 'text-white' : 'text-slate-800'
+              }`}>
                 {profile?.displayName || 'Admin'}
               </p>
-              <p className="text-[10px] text-slate-500 leading-none truncate max-w-[120px]">
+              <p className="text-[10px] text-slate-400 leading-none truncate max-w-[120px]">
                 Owner
               </p>
             </div>
@@ -241,11 +263,15 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Profile Dropdown Menu */}
           {isProfileOpen && (
-            <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
-              <div className="px-4 py-3 border-b border-slate-100">
-                <p className="text-xs font-bold text-slate-900">{profile?.displayName || 'Administrator'}</p>
-                <p className="text-xs text-slate-500 truncate mt-0.5">{user?.email}</p>
-                <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+            <div className={`absolute right-0 mt-2 w-64 rounded-2xl shadow-xl border py-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150 ${
+              isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-100 text-slate-900'
+            }`}>
+              <div className={`px-4 py-3 border-b ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+                <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{profile?.displayName || 'Administrator'}</p>
+                <p className="text-xs text-slate-400 truncate mt-0.5">{user?.email}</p>
+                <div className={`mt-2 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                  isDark ? 'text-indigo-300 bg-indigo-950/60 border border-indigo-500/30' : 'text-indigo-600 bg-indigo-50'
+                }`}>
                   <ShieldCheck className="w-3 h-3" />
                   Primary Owner Access
                 </div>
@@ -257,22 +283,26 @@ export const Header: React.FC<HeaderProps> = ({
                     setIsProfileOpen(false);
                     onNavigateToSetup();
                   }}
-                  className="w-full px-4 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5"
+                  className={`w-full px-4 py-2 text-left text-xs font-semibold flex items-center gap-2.5 ${
+                    isDark ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-50'
+                  }`}
                 >
                   <Store className="w-4 h-4 text-slate-400" />
                   Restaurant Profile & GST
                 </button>
               </div>
 
-              <div className="pt-1 border-t border-slate-100">
+              <div className={`pt-1 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
                 <button
                   onClick={() => {
                     setIsProfileOpen(false);
                     handleLogout();
                   }}
-                  className="w-full px-4 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2.5"
+                  className={`w-full px-4 py-2 text-left text-xs font-semibold text-rose-400 flex items-center gap-2.5 ${
+                    isDark ? 'hover:bg-rose-950/30' : 'hover:bg-rose-50'
+                  }`}
                 >
-                  <LogOut className="w-4 h-4 text-rose-500" />
+                  <LogOut className="w-4 h-4 text-rose-400" />
                   Sign Out
                 </button>
               </div>
