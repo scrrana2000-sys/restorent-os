@@ -57,6 +57,44 @@ export class StockConsumptionService {
    * If any ingredient has insufficient stock, the entire transaction is rejected with ZERO stock changes.
    * Idempotently returns cached consumption records if already executed for this order.
    */
+  /**
+   * Browser-safe entry point for order workflows.
+   * The browser never writes stock ledgers directly; it calls the authenticated
+   * backend endpoint. The backend then executes the authoritative transaction.
+   */
+  async consumeStockForOrderViaBackend(
+    restaurantId: string,
+    data: ConsumeStockForOrderDTO
+  ): Promise<{ consumptions: StockConsumption[]; movements: StockMovement[] }> {
+    const cleanRestId = restaurantId?.trim();
+    if (!cleanRestId) throw new Error('restaurantId is required to consume stock');
+
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window === 'undefined' || isTestRuntime) {
+      return this.consumeStockForOrder(cleanRestId, data);
+    }
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Authentication is required for server-side stock consumption.');
+
+    const idToken = await currentUser.getIdToken();
+    const response = await fetch(getApiUrl('/api/stock/consume-order'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ restaurantId: cleanRestId, data })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.success || !payload?.result) {
+      throw new Error(payload?.message || 'Server-side stock consumption failed.');
+    }
+
+    return payload.result as { consumptions: StockConsumption[]; movements: StockMovement[] };
+  }
+
   async consumeStockForOrder(
     restaurantId: string,
     data: ConsumeStockForOrderDTO,
