@@ -22,7 +22,13 @@ service cloud.firestore {
     function isOwnerOfRestaurant(restaurantId) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/restaurants/$(restaurantId))
-        && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid;
+        && (
+          get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
+          || (
+            get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.provisioningType == 'initial_owner'
+            && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.createdBy == request.auth.uid
+          )
+        );
     }
 
     function isMemberOfRestaurant(restaurantId) {
