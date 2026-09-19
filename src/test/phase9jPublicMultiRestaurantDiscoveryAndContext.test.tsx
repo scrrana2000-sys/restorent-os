@@ -37,6 +37,34 @@ import { MenuItem } from '../types/menu';
 import { Order } from '../types/order';
 import { KOT } from '../types/kot';
 
+vi.mock('firebase/firestore', () => ({
+  doc: vi.fn((_db: any, ...parts: string[]) => ({ path: parts.join('/'), id: parts[parts.length - 1] })),
+  getDoc: vi.fn(async (ref: any) => ({
+    exists: () => true,
+    id: ref?.id || '',
+    data: () => ({
+      itemId: ref?.id || 'm-dosa-1',
+      restaurantId: 'rest-raichur-101',
+      name: 'Masala Dosa',
+      price: 80,
+      taxRate: 5,
+      taxInclusive: false,
+      isActive: true,
+      isAvailable: true,
+      categoryId: 'cat-breakfast',
+      foodType: 'veg'
+    })
+  })),
+  getDocs: vi.fn(async () => ({ empty: true, docs: [], size: 0, forEach: () => {} })),
+  collection: vi.fn((_db: any, ...parts: string[]) => ({ path: parts.join('/') })),
+  query: vi.fn((colRef: any) => colRef),
+  where: vi.fn(() => ({})),
+  orderBy: vi.fn(() => ({})),
+  limit: vi.fn(() => ({})),
+  serverTimestamp: vi.fn(() => new Date().toISOString())
+}));
+
+
 // Mocks for Firebase Firestore
 vi.mock('../config/firebase', () => ({
   db: {},
@@ -517,7 +545,9 @@ describe('M9-J: Public Multi-Restaurant Discovery & Restaurant Context', () => {
           isActive: true,
           isAvailable: true,
           categoryId: 'cat-breakfast',
-          foodType: 'veg'
+          foodType: 'veg',
+          taxRate: 5,
+          taxInclusive: false
         } as MenuItem
       ];
 
