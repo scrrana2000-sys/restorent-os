@@ -23,7 +23,12 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
 
   isServerAuthenticating = true;
   const email = 'system-server@restaurantos.app';
-  const password = process.env.SYSTEM_SERVER_PASSWORD || 'restaurantos_sys_secure_server_pwd_2026_default_key';
+  const password = process.env.SYSTEM_SERVER_PASSWORD?.trim() || '';
+
+  if (!password) {
+    console.error('[RestaurantOS Server] SYSTEM_SERVER_PASSWORD is not configured.');
+    return process.env.NODE_ENV === 'production' ? false : true;
+  }
 
   try {
     await signInWithEmailAndPassword(auth, email, password);
