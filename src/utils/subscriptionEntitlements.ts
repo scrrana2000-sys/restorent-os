@@ -178,9 +178,20 @@ export function isFeatureEntitled(
   entitlements: SubscriptionEntitlements | null | undefined,
   feature: keyof import('../types/subscription').PlanLimits
 ): boolean {
-  if (!entitlements || !entitlements.canPerformOperationalActions) {
+  if (!entitlements) {
     return false;
   }
+
+  // During the first 7 days, the trial is intentionally full-access.
+  // Paid-plan limits begin only after the trial expires or a paid plan is active.
+  if (entitlements.hasValidTrial) {
+    return true;
+  }
+
+  if (!entitlements.canPerformOperationalActions) {
+    return false;
+  }
+
   const limits = entitlements.plan.limits;
   return Boolean(limits[feature]);
 }
@@ -196,6 +207,10 @@ export function isViewPlanEntitled(
 
   // Subscription view is always accessible even when expired
   if (view === 'subscription') return true;
+
+  // The 7-day first-login trial unlocks every admin module, independent of
+  // commercial plan limits or adaptive operating-model switches.
+  if (entitlements.hasValidTrial) return true;
 
   // For expired subscriptions, general operational views are restricted
   if (!entitlements.canPerformOperationalActions) {
