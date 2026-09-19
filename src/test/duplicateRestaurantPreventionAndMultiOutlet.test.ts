@@ -140,6 +140,7 @@ vi.mock('firebase/firestore', () => {
 });
 
 import { getOrCreateInitialRestaurant, createRestaurantBranch, getRestaurantsForUser } from '../services/restaurantService';
+import { auth } from '../config/firebase';
 import { auditUserRestaurants } from '../services/duplicateRestaurantAuditService';
 
 describe('CRITICAL REGRESSION SUITE — Duplicate Restaurant Prevention & Multi-Outlet Safeguards', () => {
@@ -312,7 +313,8 @@ describe('CRITICAL REGRESSION SUITE — Duplicate Restaurant Prevention & Multi-
     const ownerUid = 'owner_multi_outlet_01';
     const initial = await getOrCreateInitialRestaurant(ownerUid, 'mo@test.com', 'Multi Owner');
 
-    // Explicit user action
+    // Explicit user action — simulate the signed-in owner identity.
+    (auth as any).currentUser = { uid: ownerUid };
     const newBranch = await createRestaurantBranch(ownerUid, 'mo@test.com', 'Branch Downtown', 'Bengaluru');
 
     expect(newBranch.restaurantId).not.toBe(initial.restaurantId);
@@ -324,6 +326,7 @@ describe('CRITICAL REGRESSION SUITE — Duplicate Restaurant Prevention & Multi-
     const ownerUid = 'owner_multi_outlet_02';
     const initial = await getOrCreateInitialRestaurant(ownerUid, 'mo2@test.com', 'Multi Owner 2');
 
+    (auth as any).currentUser = { uid: ownerUid };
     const branch1 = await createRestaurantBranch(ownerUid, 'mo2@test.com', 'Downtown Branch', 'Mumbai');
     const branch2 = await createRestaurantBranch(ownerUid, 'mo2@test.com', 'Airport Branch', 'Mumbai');
 
@@ -335,6 +338,7 @@ describe('CRITICAL REGRESSION SUITE — Duplicate Restaurant Prevention & Multi-
   it('19. Refresh after explicit outlet creation → no additional outlet', async () => {
     const ownerUid = 'owner_multi_refresh';
     const initial = await getOrCreateInitialRestaurant(ownerUid, 'mr@test.com', 'Refresh Owner');
+    (auth as any).currentUser = { uid: ownerUid };
     const branch1 = await createRestaurantBranch(ownerUid, 'mr@test.com', 'Branch 1', 'Pune');
 
     // Refresh resolution
@@ -345,6 +349,7 @@ describe('CRITICAL REGRESSION SUITE — Duplicate Restaurant Prevention & Multi-
   it('20. Switching between outlets → no new restaurant', async () => {
     const ownerUid = 'owner_switch';
     const initial = await getOrCreateInitialRestaurant(ownerUid, 'sw@test.com', 'Switch Owner');
+    (auth as any).currentUser = { uid: ownerUid };
     const branch1 = await createRestaurantBranch(ownerUid, 'sw@test.com', 'Branch B', 'Goa');
 
     // Switching between initial and branch1
