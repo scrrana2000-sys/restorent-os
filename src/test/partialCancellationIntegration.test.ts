@@ -24,7 +24,7 @@ vi.mock('firebase/firestore', () => {
     updateDoc: vi.fn().mockResolvedValue(undefined),
     runTransaction: vi.fn(async (_db, cb) => {
       const mockTx = {
-        get: vi.fn(),
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
         set: vi.fn(),
         update: vi.fn(),
         delete: vi.fn()
