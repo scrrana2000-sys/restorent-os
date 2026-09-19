@@ -41,11 +41,37 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # GitHub Actions secrets are intentionally read into job env first so the
+      # workflow can fail with a precise configuration error instead of the
+      # opaque auth-action error when credentials are missing.
+      - name: Validate Google Cloud authentication configuration
+        env:
+          WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+        run: |
+          if [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ]; then
+            echo "Google Cloud auth: Workload Identity Federation configured."
+          elif [ -n "$GCP_CREDENTIALS_JSON" ]; then
+            echo "Google Cloud auth: service-account JSON configured."
+          else
+            echo "::error::Google Cloud deployment credentials are missing."
+            echo "::error::Configure GCP_WORKLOAD_IDENTITY_PROVIDER + GCP_SERVICE_ACCOUNT (recommended), or GCP_CREDENTIALS_JSON."
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud with Workload Identity Federation
+        if: ${{ env.WIF_PROVIDER != '' && env.WIF_SERVICE_ACCOUNT != '' }}
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+
+      - name: Authenticate to Google Cloud with Service Account JSON
+        if: ${{ env.GCP_CREDENTIALS_JSON != '' && (env.WIF_PROVIDER == '' || env.WIF_SERVICE_ACCOUNT == '') }}
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
       - name: Deploy API to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v3
