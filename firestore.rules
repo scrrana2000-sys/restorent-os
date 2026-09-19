@@ -28,6 +28,21 @@ service cloud.firestore {
             get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.provisioningType == 'initial_owner'
             && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.createdBy == request.auth.uid
           )
+          || (
+            // Trusted owner pointer maintained in the authenticated user's profile.
+            // The users/{uid} document may only point at a restaurant the same
+            // user already owns or is actively a member of, so this cannot be
+            // used to claim another tenant.
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.restaurantId == restaurantId
+            && (
+              get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
+              || (
+                get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.provisioningType == 'initial_owner'
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.createdBy == request.auth.uid
+              )
+            )
+          )
         );
     }
 
@@ -87,7 +102,16 @@ service cloud.firestore {
         && request.resource.data.diff({}).affectedKeys().hasOnly([
           'userId', 'displayName', 'email', 'photoUrl', 'createdAt', 'updatedAt',
           'restaurantId', 'initialRestaurantId'
-        ]);
+        ])
+        && (
+          !('restaurantId' in request.resource.data)
+          || !exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId))
+          || get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)).data.ownerId == request.auth.uid
+          || (
+            exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)/members/$(request.auth.uid))
+            && get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)/members/$(request.auth.uid)).data.isActive == true
+          )
+        );
 
       allow update: if isSignedIn()
         && request.auth.uid == userId
@@ -95,7 +119,24 @@ service cloud.firestore {
         && request.resource.data.email == resource.data.email
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'displayName', 'photoUrl', 'updatedAt', 'restaurantId', 'initialRestaurantId'
-        ]);
+        ])
+        && (
+          (
+            request.resource.data.restaurantId == resource.data.restaurantId
+            && request.resource.data.initialRestaurantId == resource.data.initialRestaurantId
+          )
+          || (
+            ('restaurantId' in request.resource.data)
+            && exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId))
+            && (
+              get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)).data.ownerId == request.auth.uid
+              || (
+                exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)/members/$(request.auth.uid))
+                && get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)/members/$(request.auth.uid)).data.isActive == true
+              )
+            )
+          )
+        );
     }
 
     // ============================================================
