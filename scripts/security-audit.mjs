@@ -6,7 +6,7 @@ const rules = read('firestore.rules');
 const pkg = JSON.parse(read('package.json'));
 const workflow = read('.github/workflows/deploy.yml');
 const checks = [
- ['no hardcoded default server password', !read('src/server/invitationAuth.ts').includes('SystemSecurePassword123!')],
+ ['no hardcoded default server password', !read('src/server/invitationAuth.ts').includes('restaurantos_sys_secure_server_pwd_2026_default_key') && !read('server.ts').includes("process.env.SYSTEM_SERVER_PASSWORD = 'restaurantos_sys_secure_server_pwd_2026_default_key'")],
  ['no production simulated payment path', !read('src/services/subscriptionPaymentService.ts').includes('simulatedOrderId') && read('src/services/subscriptionPaymentService.ts').includes('Mock payment provider is disabled outside test environments.')],
  ['subscription writes server-only', rules.includes("match /subscription/{subDocId}") && rules.includes('allow create, update: if isServer()')],
  ['subscription history immutable', rules.includes("match /subscriptionHistory/{historyId}") && rules.includes('allow update, delete: if false')],
