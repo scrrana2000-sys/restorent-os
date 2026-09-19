@@ -1771,7 +1771,8 @@ async function startServer() {
   if (process.env.NODE_ENV === 'production') {
     const serverAuthenticated = await ensureServerAuthenticated();
     if (!serverAuthenticated) {
-      console.warn('[RestaurantOS Server] Warning: trusted server authentication deferred. (Fatal: trusted server authentication failed check active). Continuing startup.');
+      console.error('[RestaurantOS Server] Fatal: backend server identity could not be initialized.');
+      process.exit(1);
     }
   }
 
