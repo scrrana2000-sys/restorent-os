@@ -38,6 +38,8 @@ vi.mock('firebase/firestore', () => ({
           id: ref?.id || 'dish_biryani_101',
           name: 'Hyderabadi Chicken Biryani',
           price: 350, // 350 INR -> 35000 paise
+          taxRate: 5,
+          taxInclusive: false,
           isActive: true,
           isAvailable: true
         })
