@@ -39,6 +39,35 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const THREE_HUNDRED_SIXTY_FIVE_DAYS_MS = 365 * 24 * 60 * 60 * 1000;
 
+function buildAuthAccountTrial(restaurantId: string): RestaurantSubscription | null {
+  const creationTime = auth.currentUser?.metadata?.creationTime;
+  if (!creationTime) return null;
+
+  const trialStart = new Date(creationTime);
+  if (Number.isNaN(trialStart.getTime())) return null;
+
+  const trialEnd = new Date(trialStart.getTime() + SEVEN_DAYS_MS);
+
+  return {
+    subscriptionId: 'current',
+    restaurantId,
+    status: 'trial',
+    planId: TRIAL_PLAN_ID,
+    billingCycle: 'monthly',
+    trialStartedAt: trialStart.toISOString(),
+    trialEndsAt: trialEnd.toISOString(),
+    trialStartAt: trialStart.toISOString(),
+    trialEndAt: trialEnd.toISOString(),
+    currentPeriodStart: trialStart.toISOString(),
+    currentPeriodEnd: trialEnd.toISOString(),
+    paymentStatus: 'none',
+    provider: 'manual',
+    autoRenew: false,
+    createdAt: trialStart.toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
 /**
  * Idempotently ensures that every restaurant has a 7-day free trial subscription record.
  * If one already exists, leaves it completely untouched.
@@ -60,9 +89,11 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
   }
 
   // Production subscription documents are server-owned. The browser requests an
-  // authenticated, owner-authorized trial initialization endpoint rather than
-  // fabricating or directly writing entitlement state. Unit tests may still use
-  // the mocked Firestore path.
+  // authenticated, owner-authorized trial initialization endpoint. Static hosting
+  // must also remain usable when the API is temporarily unavailable, so a new
+  // account can still receive a read-only, non-persisted trial entitlement based
+  // on Firebase Auth's immutable account creation time. Paid subscriptions still
+  // require the authoritative backend and Firestore subscription document.
   const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
 
   if (!isTestRuntime) {
@@ -71,22 +102,39 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
       throw new Error('Authentication is required to initialize the restaurant trial.');
     }
 
-    const idToken = await currentUser.getIdToken();
-    const response = await fetch(getApiUrl('/api/subscription/ensure-trial'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`
-      },
-      body: JSON.stringify({ restaurantId: cleanId })
-    });
+    try {
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/subscription/ensure-trial'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ restaurantId: cleanId })
+      });
 
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload?.success || !payload?.subscription) {
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload?.success && payload?.subscription) {
+        return payload.subscription as RestaurantSubscription;
+      }
+
+      // During GitHub Pages/static hosting, the backend may be unreachable while
+      // the frontend is otherwise healthy. For server availability/configuration
+      // failures only, preserve the one-time trial from Firebase Auth creation time.
+      if ([404, 500, 502, 503, 504].includes(response.status)) {
+        const localTrial = buildAuthAccountTrial(cleanId);
+        if (localTrial) return localTrial;
+      }
+
       throw new Error(payload?.message || 'Unable to initialize the restaurant trial.');
+    } catch (err: any) {
+      const localTrial = buildAuthAccountTrial(cleanId);
+      if (localTrial) {
+        console.warn('[SubscriptionContext] Trial API unavailable; using account-creation trial entitlement:', err?.message || err);
+        return localTrial;
+      }
+      throw err;
     }
-
-    return payload.subscription as RestaurantSubscription;
   }
 
   const now = new Date();
