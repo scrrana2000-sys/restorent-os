@@ -38,6 +38,21 @@ describe('Subscription Security, RBAC & Activation Audit', () => {
       expect(rulesContent).toMatch(/function\s+isServer\(\)\s*\{[\s\S]*?request\.auth\.token\.server\s*==\s*true[\s\S]*?\}/);
       expect(rulesContent).not.toContain("request.auth.token.email == 'system-server@restaurantos.app'");
     });
+
+    it('enforces an authoritative current-subscription timestamp for new operational resources', () => {
+      expect(rulesContent).toMatch(/function\s+isSubscriptionActive\(restaurantId\)/);
+      expect(rulesContent).toMatch(/subscription\/current/);
+      expect(rulesContent).toMatch(/status\s+in\s+\['trial',\s*'active',\s*'grace_period'\]/);
+      expect(rulesContent).toMatch(/operationalAccessUntil\s+is\s+timestamp/);
+      expect(rulesContent).toMatch(/request\.time\s*<\s*subscription\.data\.operationalAccessUntil/);
+
+      // New-resource creates are subscription-gated; existing-resource updates
+      // are deliberately left available for mid-service closeout/settlement.
+      expect(rulesContent).toMatch(/match\s+\/orders\/\{orderId\}[\s\S]*?allow\s+create:\s*if\s+isSubscriptionActive\(restaurantId\)/);
+      expect(rulesContent).toMatch(/match\s+\/tables\/\{tableId\}[\s\S]*?allow\s+create:\s*if\s+isSubscriptionActive\(restaurantId\)/);
+      expect(rulesContent).toMatch(/match\s+\/tableSessions\/\{sessionId\}[\s\S]*?allow\s+create:\s*if\s*\([\s\S]*?isSubscriptionActive\(restaurantId\)/);
+      expect(rulesContent).toMatch(/match\s+\/kots\/\{kotId\}[\s\S]*?allow\s+create:\s*if\s+isSubscriptionActive\(restaurantId\)/);
+    });
   });
 
   describe('2. Plan Pricing and Amount Verification', () => {

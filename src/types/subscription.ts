@@ -84,6 +84,12 @@ export interface RestaurantSubscription {
   lastPaymentAmount?: number; // in paise
   lastPaymentDate?: string;
   autoRenew: boolean;
+  /**
+   * Firestore Timestamp used by Security Rules as the authoritative operational
+   * entitlement boundary. Kept separate from the legacy ISO-string date fields
+   * used by the UI.
+   */
+  operationalAccessUntil?: any;
   createdAt: any;
   updatedAt: any;
 }

@@ -89,6 +89,32 @@ service cloud.firestore {
         || (fromStatus == 'draft' && toStatus == 'cancelled');
     }
 
+    /**
+     * Server-authoritative subscription gate for NEW operational resources.
+     *
+     * The current subscription document is fixed at /subscription/current.
+     * operationalAccessUntil MUST be a Firestore timestamp so Rules can compare
+     * it with request.time. A missing/legacy field fails closed.
+     *
+     * Active states:
+     *  - trial: active 7-day trial
+     *  - active: paid subscription
+     *  - grace_period: explicitly granted backend grace window
+     *
+     * Existing resources are intentionally NOT gated by this helper so staff can
+     * close/settle work already in progress after an entitlement expires.
+     */
+    function isSubscriptionActive(restaurantId) {
+      let subscription = get(
+        /databases/$(database)/documents/restaurants/$(restaurantId)/subscription/current
+      );
+      return isSignedIn()
+        && subscription.data.restaurantId == restaurantId
+        && subscription.data.status in ['trial', 'active', 'grace_period']
+        && subscription.data.operationalAccessUntil is timestamp
+        && request.time < subscription.data.operationalAccessUntil;
+    }
+
     // ============================================================
     // USERS
     // ============================================================
@@ -348,8 +374,9 @@ service cloud.firestore {
       match /tables/{tableId} {
         allow read: if isServer() || canAccessRestaurant(restaurantId);
 
-        allow create: if (isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRole(restaurantId, 'manager'))
+        allow create: if isSubscriptionActive(restaurantId)
+          && (isOwnerOfRestaurant(restaurantId)
+            || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == restaurantId;
 
         allow delete: if (isOwnerOfRestaurant(restaurantId)
@@ -388,9 +415,12 @@ service cloud.firestore {
         allow read: if isServer() || canAccessRestaurant(restaurantId);
 
         allow create: if (
-          isServer()
-          || isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
+          isSubscriptionActive(restaurantId)
+          && (
+            isServer()
+            || isOwnerOfRestaurant(restaurantId)
+            || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
+          )
         )
           && request.resource.data.id == sessionId
           && request.resource.data.restaurantId == restaurantId
@@ -454,18 +484,21 @@ service cloud.firestore {
         );
 
         // Orders creation is permitted for trusted server authority or verified restaurant staff/owner.
-        allow create: if (
-          isServer()
-          && request.resource.data.restaurantId == restaurantId
-          && request.resource.data.id == orderId
-          && request.resource.data.createdBy is string
-        ) || (
-          isSignedIn()
-          && (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain']))
-          && request.resource.data.restaurantId == restaurantId
-          && request.resource.data.id == orderId
-          && request.resource.data.createdBy == request.auth.uid
-        );
+        allow create: if isSubscriptionActive(restaurantId)
+          && (
+            (
+              isServer()
+              && request.resource.data.restaurantId == restaurantId
+              && request.resource.data.id == orderId
+              && request.resource.data.createdBy is string
+            ) || (
+              isSignedIn()
+              && (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain']))
+              && request.resource.data.restaurantId == restaurantId
+              && request.resource.data.id == orderId
+              && request.resource.data.createdBy == request.auth.uid
+            )
+          );
 
         // Financial/order-total fields are protected. Cashiers may only settle an order when
         // the same atomic transaction creates the linked Payment record; managers/owners retain
@@ -588,22 +621,25 @@ service cloud.firestore {
         allow read: if isServer() || canAccessRestaurant(restaurantId);
 
         // KOT creation is permitted for trusted server authority or verified staff/kitchen/owner.
-        allow create: if (
-          isServer()
-          && request.resource.data.restaurantId == restaurantId
-          && request.resource.data.id == kotId
-          && request.resource.data.orderId is string
-          && request.resource.data.createdBy is string
-          && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId))
-          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.restaurantId == restaurantId
-        ) || (
-          isSignedIn()
-          && (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain', 'kitchen']))
-          && request.resource.data.restaurantId == restaurantId
-          && request.resource.data.id == kotId
-          && request.resource.data.orderId is string
-          && request.resource.data.createdBy == request.auth.uid
-        );
+        allow create: if isSubscriptionActive(restaurantId)
+          && (
+            (
+              isServer()
+              && request.resource.data.restaurantId == restaurantId
+              && request.resource.data.id == kotId
+              && request.resource.data.orderId is string
+              && request.resource.data.createdBy is string
+              && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId))
+              && get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.restaurantId == restaurantId
+            ) || (
+              isSignedIn()
+              && (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain', 'kitchen']))
+              && request.resource.data.restaurantId == restaurantId
+              && request.resource.data.id == kotId
+              && request.resource.data.orderId is string
+              && request.resource.data.createdBy == request.auth.uid
+            )
+          );
 
         // Partial item-cancellation writes are server-authoritative. The API authenticates
         // the caller's owner/manager/captain/kitchen role, then the trusted server

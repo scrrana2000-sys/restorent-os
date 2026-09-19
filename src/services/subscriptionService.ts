@@ -19,7 +19,8 @@ import {
   onSnapshot,
   query,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import {
@@ -82,10 +83,45 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
   const existingSnap = await getDoc(subDocRef);
 
   if (existingSnap.exists()) {
-    return {
+    const existing = {
       subscriptionId: existingSnap.id,
       ...existingSnap.data()
     } as RestaurantSubscription;
+
+    // New production rules require a native Firestore Timestamp for the
+    // subscription entitlement boundary. Ask the trusted backend to backfill
+    // legacy documents that predate this field.
+    if (existing.operationalAccessUntil) {
+      return existing;
+    }
+
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (isTestRuntime) return existing;
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) return existing;
+
+    try {
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/subscription/ensure-trial'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ restaurantId: cleanId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload?.success && payload?.subscription) {
+        return payload.subscription as RestaurantSubscription;
+      }
+    } catch (upgradeErr) {
+      console.warn('[RestaurantOS Subscription] Legacy subscription timestamp backfill notice:', upgradeErr);
+    }
+
+    // Return the existing document for UI display. Firestore create rules will
+    // still fail closed until the trusted backend supplies operationalAccessUntil.
+    return existing;
   }
 
   // Production subscription documents are server-owned. The browser requests an
@@ -143,6 +179,7 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
     subscriptionId: 'current',
     restaurantId: cleanId,
     status: 'trial',
+    operationalAccessUntil: Timestamp.fromDate(trialEnds),
     planId: TRIAL_PLAN_ID,
     billingCycle: 'monthly',
     trialStartedAt: now.toISOString(),

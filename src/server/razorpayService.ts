@@ -11,7 +11,7 @@
 import crypto from 'crypto';
 import { getPlanById, COMMERCIAL_PLANS, TRIAL_PLAN_ID, CUSTOMIZATION_CONFIG } from '../config/subscriptionPlans';
 import { BillingCycle, SubscriptionHistoryEventType } from '../types/subscription';
-import { doc, getDoc, setDoc, collection, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, runTransaction, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ensureServerAuthenticated, getFirestoreBaseUrl } from './invitationAuth';
 
@@ -544,7 +544,36 @@ export async function ensureRestaurantTrialInFirestore(restaurantId: string) {
     return await runTransaction(db, async (transaction) => {
       const existingSnap = await transaction.get(subDocRef);
       if (existingSnap.exists()) {
-        return { subscriptionId: existingSnap.id, ...existingSnap.data() };
+        const existingData = existingSnap.data() as Record<string, any>;
+
+        if (existingData.operationalAccessUntil == null) {
+          let accessUntil: Date | null = null;
+          if (existingData.status === 'trial' && typeof existingData.trialEndsAt === 'string') {
+            const parsed = new Date(existingData.trialEndsAt);
+            if (!Number.isNaN(parsed.getTime())) accessUntil = parsed;
+          } else if (
+            (existingData.status === 'active' || existingData.status === 'grace_period')
+            && typeof existingData.currentPeriodEnd === 'string'
+          ) {
+            const parsed = new Date(existingData.currentPeriodEnd);
+            if (!Number.isNaN(parsed.getTime())) accessUntil = parsed;
+          }
+
+          if (accessUntil) {
+            transaction.update(subDocRef, {
+              operationalAccessUntil: Timestamp.fromDate(accessUntil),
+              updatedAt: new Date().toISOString()
+            });
+            return {
+              subscriptionId: existingSnap.id,
+              ...existingData,
+              operationalAccessUntil: Timestamp.fromDate(accessUntil),
+              updatedAt: new Date().toISOString()
+            };
+          }
+        }
+
+        return { subscriptionId: existingSnap.id, ...existingData };
       }
 
       const now = new Date();
@@ -553,6 +582,7 @@ export async function ensureRestaurantTrialInFirestore(restaurantId: string) {
         subscriptionId: 'current',
         restaurantId: cleanRestaurantId,
         status: 'trial',
+        operationalAccessUntil: Timestamp.fromDate(trialEnds),
         planId: TRIAL_PLAN_ID,
         billingCycle: 'monthly',
         trialStartedAt: now.toISOString(),
@@ -580,6 +610,7 @@ export async function ensureRestaurantTrialInFirestore(restaurantId: string) {
       subscriptionId: 'current',
       restaurantId: cleanRestaurantId,
       status: 'trial',
+      operationalAccessUntil: Timestamp.fromDate(trialEnds),
       planId: TRIAL_PLAN_ID,
       billingCycle: 'monthly',
       trialStartedAt: now.toISOString(),
@@ -694,6 +725,7 @@ export async function activateSubscriptionInFirestore(params: {
     subscriptionId: 'current',
     restaurantId,
     status: 'active',
+    operationalAccessUntil: Timestamp.fromDate(periodEnd),
     planId: plan.planId,
     planName: plan.name,
     billingCycle,
