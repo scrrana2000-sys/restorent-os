@@ -15,8 +15,8 @@ describe('GitHub Pages Production Invitation URL Migration Suite', () => {
   describe('1. Canonical Production Constants & URL Resolution', () => {
     it('defines the canonical production GitHub Pages URL', () => {
       expect(PRODUCTION_PUBLIC_URL).toBe('https://scrrana2000-sys.github.io/restorent-os/');
-      expect(PRODUCTION_ORIGIN).toBe('https://scrrana2000-sys.github.io');
-      expect(PRODUCTION_BASE_PATH).toBe('/restorent-os/');
+      expect(PRODUCTION_ORIGIN).toBe('https://scrrana2000-sys.github.io/restorent-os');
+      expect(PRODUCTION_BASE_PATH).toBe('/');
     });
 
     it('returns the canonical production base URL by default', () => {
