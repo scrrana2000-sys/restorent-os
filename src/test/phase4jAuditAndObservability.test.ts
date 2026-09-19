@@ -350,7 +350,7 @@ describe('Phase 4J: Audit & Observability Verification Suite', () => {
               subscriptionId: 'current',
               restaurantId,
               status: 'active',
-              planId: 'growth_monthly',
+              planId: 'growth',
               currentPeriodEnd: new Date(Date.now() + 864000000).toISOString()
             })
           } as any;
