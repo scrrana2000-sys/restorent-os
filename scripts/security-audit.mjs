@@ -21,7 +21,7 @@ const checks = [
  ['stock consumption uses trusted server endpoint in browser', read('src/services/stockConsumptionService.ts').includes("/api/stock/consume-order")],
  ['stock ledger writes are server-only', rules.includes("match /stockMovements/{movementId}") && rules.includes("allow create: if isServer()") && rules.includes("match /stockConsumptions/{consumptionId}")],
  ['print jobs bind to creator', read('src/services/printer/PrinterService.ts').includes("createdBy: auth.currentUser?.uid || 'system'")],
- ['pages API URL comes from secret', read('.github/workflows/deploy.yml').includes('VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}')],
+ ['pages API URL is the trusted production HTTPS endpoint', read('.github/workflows/deploy.yml').includes('VITE_API_BASE_URL: https://restaurantos-xqi52dpwgo-as.a.run.app')],
  ['cloud run deploy waits for verify', read('.github/workflows/deploy-cloud-run.yml').includes('needs: verify')]
 ];
 
@@ -38,7 +38,7 @@ checks.push(
   ['production container runs as non-root node user', dockerfile.includes('USER node')],
   ['docker build excludes environment secret files', dockerignore.includes('.env') && dockerignore.includes('.env.*')],
   ['Cloud Run workflow runs release verification before deploy', cloudRunWorkflow.includes('needs: verify') && cloudRunWorkflow.includes('npm run verify')],
-  ['Pages workflow receives explicit API and public URL secrets', releaseWorkflow.includes('VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}') && releaseWorkflow.includes('VITE_PUBLIC_APP_URL: ${{ secrets.PUBLIC_APP_URL }}')],
+  ['Pages workflow receives explicit public production endpoints', releaseWorkflow.includes('VITE_API_BASE_URL: https://restaurantos-xqi52dpwgo-as.a.run.app') && releaseWorkflow.includes('VITE_PUBLIC_APP_URL: https://restaurantos01.ai.studio')],
   ['server-side permission helper recognizes only the dedicated server account', read('src/utils/permissions.ts').includes("user.email === 'system-server@restaurantos.app'" )],
   ['user profile role is not client-writable', rules.includes("match /users/{userId}") && rules.includes("role fields are never") && !/updateDoc\(userRef,[\s\S]{0,220}?role\s*:\s*newRole/.test(read('src/services/staffService.ts'))],
   ['public bill uses tokenized API access', serverSource.includes('/api/orders/public-bill') && serverSource.includes('BILL_FORBIDDEN') && serverSource.includes('customerTrackingToken !== accessToken')],
