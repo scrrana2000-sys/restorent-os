@@ -44,6 +44,21 @@ describe('Phase 4J: Audit & Observability Verification Suite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    vi.mocked(firestore.getDocs).mockResolvedValue({
+      empty: true,
+      docs: [],
+      size: 0,
+      forEach: () => {}
+    } as any);
+    vi.mocked(firestore.runTransaction).mockImplementation(async (_db, callback: any) => {
+      const tx = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(tx);
+    });
   });
 
   // ==========================================
