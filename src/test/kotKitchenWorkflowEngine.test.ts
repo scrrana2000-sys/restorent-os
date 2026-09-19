@@ -22,7 +22,8 @@ vi.mock('firebase/firestore', () => {
     where: vi.fn((field, op, val) => ({ type: 'where', field, op, val })),
     orderBy: vi.fn((field, dir) => ({ type: 'orderBy', field, dir })),
     onSnapshot: vi.fn(() => vi.fn()),
-    serverTimestamp: vi.fn(() => new Date('2026-09-08T12:00:00Z'))
+    serverTimestamp: vi.fn(() => new Date('2026-09-08T12:00:00Z')),
+    runTransaction: vi.fn()
   };
 });
 
@@ -40,6 +41,16 @@ describe('KOT Service & Kitchen Workflow Engine (Phase 2E)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(firestore.getDocs).mockResolvedValue({ empty: true, docs: [], size: 0, forEach: () => {} } as any);
+    vi.mocked(firestore.runTransaction).mockImplementation(async (_db, callback: any) => {
+      const tx = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(tx);
+    });
     kotService = new KOTService();
 
     sampleOrder = {
