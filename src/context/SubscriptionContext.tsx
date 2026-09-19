@@ -101,7 +101,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         restaurantId!,
         (sub) => {
           if (isMounted) {
-            setSubscription(sub);
+            // Keep a valid first-login/Auth-time trial in memory if the
+            // subscription document has not been persisted yet. Once Firestore
+            // has the real document, the listener naturally replaces it.
+            setSubscription(sub || initializedSubscription);
             setLoading(false);
           }
         },
