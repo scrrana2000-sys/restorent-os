@@ -620,9 +620,9 @@ describe('M7-7C Security Attack Tests & Hardening Verification (Attacks 1-20)', 
       'key_replay_123'
     );
 
-    // Should return cached result without invoking runTransaction
+    // Idempotency is now acquired atomically through a Firestore transaction.
     expect(replayResult).toEqual(mockReceivingResult);
-    expect(firestore.runTransaction).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).toHaveBeenCalledTimes(1);
   });
 
   // =========================================================================
