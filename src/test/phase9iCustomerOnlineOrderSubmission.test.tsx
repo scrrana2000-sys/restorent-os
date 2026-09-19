@@ -21,6 +21,34 @@ import { MenuItem } from '../types/menu';
 import { Order } from '../types/order';
 import { KOT } from '../types/kot';
 
+vi.mock('../config/firebase', () => ({
+  db: {},
+  auth: { currentUser: null }
+}));
+
+vi.mock('firebase/firestore', () => ({
+  doc: vi.fn((_db: any, ...parts: string[]) => ({ path: parts.join('/'), id: parts[parts.length - 1] })),
+  getDoc: vi.fn(async (ref: any) => {
+    const id = ref?.id || '';
+    const item = id === 'item-paneer-tikka'
+      ? { itemId: id, restaurantId: 'rest-online-901', name: 'Paneer Tikka', price: 280, taxRate: 5, taxInclusive: false, isActive: true, isAvailable: true, categoryId: 'cat-starters', foodType: 'veg' }
+      : { itemId: id, restaurantId: 'rest-online-901', name: 'Mango Lassi', price: 90, taxRate: 5, taxInclusive: false, isActive: true, isAvailable: true, categoryId: 'cat-beverages', foodType: 'veg' };
+    return {
+      exists: () => true,
+      id,
+      data: () => item
+    };
+  }),
+  getDocs: vi.fn(async () => ({ empty: true, docs: [], size: 0, forEach: () => {} })),
+  collection: vi.fn((_db: any, ...parts: string[]) => ({ path: parts.join('/') })),
+  query: vi.fn((colRef: any) => colRef),
+  where: vi.fn(() => ({})),
+  orderBy: vi.fn(() => ({})),
+  limit: vi.fn(() => ({})),
+  serverTimestamp: vi.fn(() => new Date().toISOString())
+}));
+
+
 const mockRestaurantProfile: PublicRestaurantProfile = {
   restaurantId: 'rest-online-901',
   publicSlug: 'spice-junction',
@@ -84,7 +112,9 @@ const mockMenuItems: MenuItem[] = [
     isActive: true,
     isAvailable: true,
     categoryId: 'cat-starters',
-    foodType: 'veg'
+    foodType: 'veg',
+    taxRate: 5,
+    taxInclusive: false
   } as MenuItem,
   {
     itemId: 'item-mango-lassi',
@@ -94,7 +124,9 @@ const mockMenuItems: MenuItem[] = [
     isActive: true,
     isAvailable: true,
     categoryId: 'cat-beverages',
-    foodType: 'veg'
+    foodType: 'veg',
+    taxRate: 5,
+    taxInclusive: false
   } as MenuItem
 ];
 
