@@ -22,15 +22,7 @@ vi.mock('firebase/firestore', () => {
     }),
     setDoc: vi.fn().mockResolvedValue(undefined),
     updateDoc: vi.fn().mockResolvedValue(undefined),
-    runTransaction: vi.fn(async (_db, cb) => {
-      const mockTx = {
-        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
-        set: vi.fn(),
-        update: vi.fn(),
-        delete: vi.fn()
-      };
-      return await cb(mockTx);
-    }),
+    runTransaction: vi.fn(),
     query: vi.fn((colRef, ...clauses) => ({ type: 'query', colRef, clauses })),
     where: vi.fn((field, op, val) => ({ type: 'where', field, op, val })),
     orderBy: vi.fn((field, dir) => ({ type: 'orderBy', field, dir })),
@@ -67,6 +59,16 @@ describe('Partial Item / Quantity Cancellation Engine', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(firestore.runTransaction).mockReset();
+    vi.mocked(firestore.runTransaction).mockImplementation(async (_db, cb: any) => {
+      const mockTx = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return await cb(mockTx);
+    });
   });
 
   it('partially cancels 5 of 10 items in OrderService, preserving originalQuantity and updating financial totals', async () => {
