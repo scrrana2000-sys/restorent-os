@@ -77,16 +77,26 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     let isMounted = true;
 
     async function initSubscription() {
+      let initializedSubscription: RestaurantSubscription | null = null;
+
       try {
-        // Ensure 7-day trial exists
-        await ensureRestaurantTrial(restaurantId!);
+        // Server-authoritatively create the one-time 7-day trial when the
+        // restaurant has no subscription yet. Use the returned document
+        // immediately so the UI never renders a false "expired" state while
+        // waiting for the realtime listener to deliver the same document.
+        initializedSubscription = await ensureRestaurantTrial(restaurantId!);
+        if (isMounted && initializedSubscription) {
+          setSubscription(initializedSubscription);
+        }
       } catch (err: any) {
         console.warn('[SubscriptionContext] Trial initialization notice:', err?.message || err);
       }
 
       if (!isMounted) return;
 
-      // Realtime listener for subscription
+      // Realtime listener for subscription. The initial server result above
+      // remains authoritative until this listener provides the same/current
+      // Firestore document, preventing a transient lock screen on first login.
       unsubSub = subscribeToRestaurantSubscription(
         restaurantId!,
         (sub) => {
