@@ -96,9 +96,9 @@ jobs:
             PORT=3000
             PUBLIC_APP_URL=https://restaurantos01.ai.studio
             ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://restaurantos-xqi52dpwgo-as.a.run.app
+            SYSTEM_SERVER_UID=restaurantos-system-server
           flags: '--allow-unauthenticated'
           secrets: |
-            SYSTEM_SERVER_PASSWORD=SYSTEM_SERVER_PASSWORD:latest
             RAZORPAY_KEY_ID=RAZORPAY_KEY_ID:latest
             RAZORPAY_KEY_SECRET=RAZORPAY_KEY_SECRET:latest
             RAZORPAY_WEBHOOK_SECRET=RAZORPAY_WEBHOOK_SECRET:latest
