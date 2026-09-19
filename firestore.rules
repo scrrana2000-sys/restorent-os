@@ -474,6 +474,8 @@ service cloud.firestore {
         // Partial item-cancellation is executed through the trusted backend. The backend
         // verifies the caller role and validates item-by-item reductions; the server claim
         // then performs the Firestore write under the existing trusted server authority.
+        // The trusted server uses this exact shape for partial item cancellation;
+        // client users never receive the server claim and therefore cannot use this branch.
         allow update: if (
           (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager') || isServer())
           && request.resource.data.restaurantId == resource.data.restaurantId
@@ -641,8 +643,10 @@ service cloud.firestore {
             'updatedBy', 'updatedAt'
           ])
           && isAllowedOrderStatusTransition(resource.data.status, request.resource.data.status)
-        ||
-          (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'kitchen', 'captain']))
+        )
+        || (
+          (isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRoles(restaurantId, ['manager', 'kitchen', 'captain']))
           && request.resource.data.restaurantId == resource.data.restaurantId
           && request.resource.data.id == resource.data.id
           && request.resource.data.orderId == resource.data.orderId
