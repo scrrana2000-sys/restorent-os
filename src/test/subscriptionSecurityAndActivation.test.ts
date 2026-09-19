@@ -34,8 +34,9 @@ describe('Subscription Security, RBAC & Activation Audit', () => {
       expect(rulesContent).toMatch(/allow\s+read,\s*write:\s*if\s+isServer\(\);/);
     });
 
-    it('defines isServer() strictly to system-server@restaurantos.app', () => {
-      expect(rulesContent).toMatch(/function\s+isServer\(\)\s*\{[\s\S]*?request\.auth\.token\.email\s*==\s*'system-server@restaurantos\.app'[\s\S]*?\}/);
+    it('defines isServer() using an Admin-issued custom claim', () => {
+      expect(rulesContent).toMatch(/function\s+isServer\(\)\s*\{[\s\S]*?request\.auth\.token\.server\s*==\s*true[\s\S]*?\}/);
+      expect(rulesContent).not.toContain("request.auth.token.email == 'system-server@restaurantos.app'");
     });
   });
 
