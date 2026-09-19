@@ -111,6 +111,18 @@ describe('M7-7F Concurrency, Atomic Isolation & Idempotency Hardening Suite (22 
         forEach: () => {}
       } as any;
     });
+
+    // Default transactional Firestore behavior for idempotency checks that do not
+    // override the transaction mock in an individual test.
+    vi.mocked(firestore.runTransaction).mockImplementation(async (_db: any, callback: any) => {
+      const tx = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(tx);
+    });
   });
 
   // ============================================================================
@@ -221,14 +233,13 @@ describe('M7-7F Concurrency, Atomic Isolation & Idempotency Hardening Suite (22 
         })
       } as any);
 
-      await expect(
-        idempotencyService.checkOrAcquire(
-          'rest_test_conc',
-          'client_req_001',
-          'create_inventory_item',
-          payload
-        )
-      ).rejects.toThrow(/in progress/i);
+      const res = await idempotencyService.checkOrAcquire(
+        'rest_test_conc',
+        'client_req_001',
+        'create_inventory_item',
+        payload
+      );
+      expect(res.action).toBe('in_flight');
     });
 
     it('7: Records failure and clears blocking status on failed execution', async () => {
