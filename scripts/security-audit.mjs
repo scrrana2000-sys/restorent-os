@@ -36,7 +36,7 @@ const releaseWorkflow = read('.github/workflows/deploy.yml');
 checks.push(
   ['production public URL requires HTTPS origin validation', serverSource.includes('PUBLIC_APP_URL must be an HTTPS origin URL')],
   ['production CORS origins require HTTPS exact origins', serverSource.includes('ALLOWED_ORIGINS must contain exact HTTPS origins only')],
-  ['production startup blocks until trusted server auth succeeds', serverSource.includes('Fatal: trusted server authentication failed') && /await ensureServerAuthenticated\(\)/.test(serverSource)],
+  ['production startup blocks until trusted server auth succeeds', serverSource.includes('Fatal: backend server identity could not be initialized') && /await ensureServerAuthenticated\(\)/.test(serverSource)],
   ['production container runs as non-root node user', dockerfile.includes('USER node')],
   ['docker build excludes environment secret files', dockerignore.includes('.env') && dockerignore.includes('.env.*')],
   ['Cloud Run workflow runs release verification before deploy', cloudRunWorkflow.includes('needs: verify') && cloudRunWorkflow.includes('npm run verify')],
