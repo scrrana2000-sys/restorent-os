@@ -86,8 +86,33 @@ export async function getRestaurantsForUser(userId: string): Promise<Restaurant[
 }
 
 async function ensureOwnerMembership(restaurant: Restaurant, userId: string, ownerEmail: string, ownerName: string): Promise<void> {
-  if (!restaurant?.restaurantId || restaurant.ownerId !== userId) return;
+  if (!restaurant?.restaurantId) return;
+
+  // Self-heal only when Firestore itself establishes that this authenticated
+  // user is the original owner. This keeps the client from ever claiming an
+  // unrelated restaurant while repairing legacy owner/member bootstrap data.
+  const canBootstrapOwner =
+    restaurant.ownerId === userId
+    || (
+      restaurant.provisioningType === 'initial_owner'
+      && restaurant.createdBy === userId
+    );
+
+  if (!canBootstrapOwner) return;
+
   try {
+    const restaurantRef = doc(db, 'restaurants', restaurant.restaurantId);
+
+    // Legacy initial-owner documents may have a stale/missing ownerId. The
+    // Firestore rules explicitly permit this exact createdBy-based repair.
+    if (restaurant.ownerId !== userId && restaurant.provisioningType === 'initial_owner' && restaurant.createdBy === userId) {
+      await updateDoc(restaurantRef, {
+        ownerId: userId,
+        updatedAt: serverTimestamp()
+      });
+      restaurant.ownerId = userId;
+    }
+
     const memberRef = doc(db, 'restaurants', restaurant.restaurantId, 'members', userId);
     const memberSnap = await getDoc(memberRef);
     const payload = {
@@ -164,8 +189,25 @@ export async function getOrCreateInitialRestaurant(
           const profileRestRef = doc(db, 'restaurants', profileRestId);
           const profileRestSnap = await transaction.get(profileRestRef);
           if (profileRestSnap.exists()) {
-            console.log('[RestaurantOS Idempotency] Transaction resolved existing restaurant via user profile:', profileRestId);
-            return { restaurantId: profileRestSnap.id, ...profileRestSnap.data() } as Restaurant;
+            const profileRestData = profileRestSnap.data() as any;
+
+            // Repair a legacy initial-owner record before returning it. Without
+            // this, a stale ownerId causes every nested collection read to fail
+            // even though the authenticated user originally provisioned it.
+            if (
+              profileRestData.provisioningType === 'initial_owner'
+              && profileRestData.createdBy === userId
+              && profileRestData.ownerId !== userId
+            ) {
+              transaction.update(profileRestRef, {
+                ownerId: userId,
+                updatedAt: serverTimestamp()
+              });
+              profileRestData.ownerId = userId;
+              console.log('[RestaurantOS Owner Bootstrap] Repaired ownerId from profile-linked initial restaurant:', profileRestId);
+            }
+
+            return { restaurantId: profileRestSnap.id, ...profileRestData } as Restaurant;
           }
         }
       }
