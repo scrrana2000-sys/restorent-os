@@ -18,6 +18,10 @@ jobs:
   build:
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    env:
+      # Public frontend configuration is secret-overridable but has safe production defaults.
+      VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+      VITE_PUBLIC_APP_URL: ${{ secrets.PUBLIC_APP_URL }}
     steps:
       - name: Checkout source revision
         uses: actions/checkout@v4
@@ -33,10 +37,14 @@ jobs:
       - name: Verify source, tests, and production build
         run: npm run verify
 
+      - name: Resolve frontend deployment configuration
+        run: |
+          VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://restaurantos-xqi52dpwgo-as.a.run.app}"
+          VITE_PUBLIC_APP_URL="${VITE_PUBLIC_APP_URL:-https://restaurantos01.ai.studio}"
+          echo "VITE_API_BASE_URL=$VITE_API_BASE_URL" >> "$GITHUB_ENV"
+          echo "VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL" >> "$GITHUB_ENV"
+
       - name: Validate frontend deployment configuration
-        env:
-          VITE_API_BASE_URL: https://restaurantos-xqi52dpwgo-as.a.run.app
-          VITE_PUBLIC_APP_URL: https://restaurantos01.ai.studio
         run: |
           test -n "$VITE_API_BASE_URL"
           test -n "$VITE_PUBLIC_APP_URL"
@@ -47,8 +55,7 @@ jobs:
         run: npm run build:web
         env:
           VITE_BASE_PATH: /restorent-os/
-          VITE_API_BASE_URL: https://restaurantos-xqi52dpwgo-as.a.run.app
-          VITE_PUBLIC_APP_URL: https://restaurantos01.ai.studio
+          # VITE_API_BASE_URL and VITE_PUBLIC_APP_URL are resolved above and exported to GITHUB_ENV.
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
