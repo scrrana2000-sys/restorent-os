@@ -25,13 +25,20 @@ vi.mock('../config/firebase', () => ({
   db: {}
 }));
 
-vi.mock('../services/idempotencyService', () => ({
-  idempotencyService: {
-    checkOrAcquire: vi.fn().mockResolvedValue({ action: 'execute', recordRef: {} }),
-    recordSuccess: vi.fn().mockResolvedValue(undefined),
-    recordFailure: vi.fn().mockResolvedValue(undefined)
+vi.mock('../services/idempotencyService', () => {
+  const checkOrAcquire = vi.fn().mockResolvedValue({ action: 'execute', recordRef: {} });
+  const recordSuccess = vi.fn().mockResolvedValue(undefined);
+  const recordFailure = vi.fn().mockResolvedValue(undefined);
+  class MockIdempotencyService {
+    checkOrAcquire = checkOrAcquire;
+    recordSuccess = recordSuccess;
+    recordFailure = recordFailure;
   }
-}));
+  return {
+    IdempotencyService: MockIdempotencyService,
+    idempotencyService: new MockIdempotencyService()
+  };
+});
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db, ...parts) => ({ path: parts.join('/') })),
