@@ -36,12 +36,32 @@ vi.mock('firebase/firestore', () => ({
         id: ref?.id || 'item_1',
         data: () => ({
           id: ref?.id || 'dish_biryani_101',
+          itemId: ref?.id || 'dish_biryani_101',
+          restaurantId: 'rest_m9_phase2',
           name: 'Hyderabadi Chicken Biryani',
           price: 350, // 350 INR -> 35000 paise
           taxRate: 5,
           taxInclusive: false,
           isActive: true,
           isAvailable: true
+        })
+      });
+    }
+
+    if (p.endsWith('/subscription/current')) {
+      return Promise.resolve({
+        exists: () => true,
+        id: 'current',
+        data: () => ({
+          subscriptionId: 'current',
+          restaurantId: 'rest_m9_phase2',
+          planId: 'growth',
+          status: 'active',
+          billingCycle: 'monthly',
+          paymentStatus: 'paid',
+          provider: 'mock_gateway',
+          currentPeriodStart: '2026-09-01T00:00:00.000Z',
+          currentPeriodEnd: '2026-10-01T00:00:00.000Z'
         })
       });
     }
