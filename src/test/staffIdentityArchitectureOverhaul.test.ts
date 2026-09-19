@@ -47,6 +47,29 @@ describe('URGENT SECURITY + IDENTITY ARCHITECTURE OVERHAUL — Staff Invitation 
     vi.mocked(firestore.updateDoc).mockReset();
     vi.mocked(firestore.deleteDoc).mockReset();
 
+    // Provide an active trial by default so invitation tests can exercise the
+    // staff flow without depending on a real subscription document.
+    vi.mocked(firestore.getDoc).mockImplementation(async (ref: any) => {
+      const path = ref?.path || '';
+      if (path.endsWith('/subscription/current')) {
+        return {
+          exists: () => true,
+          id: 'current',
+          data: () => ({
+            subscriptionId: 'current',
+            restaurantId: 'rest_alpha',
+            planId: 'trial_7d',
+            status: 'trial',
+            paymentStatus: 'none',
+            billingCycle: 'monthly',
+            trialStartedAt: '2026-09-19T00:00:00.000Z',
+            trialEndsAt: '2026-09-26T00:00:00.000Z'
+          })
+        } as any;
+      }
+      return { exists: () => false, id: ref?.id || '', data: () => undefined } as any;
+    });
+
     // Mock global fetch for email endpoint
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
