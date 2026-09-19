@@ -18,6 +18,8 @@ const checks = [
  ['idempotency is actor-bound', rules.includes('resource.data.createdBy == request.auth.uid')],
  ['checkout modifier matching is ID-only', !read('src/services/customerCheckoutService.ts').includes('a.name === clientAddon.name')],
  ['subscription entitlement fails closed', !read('src/services/subscriptionService.ts').includes("paymentStatus: 'paid',\n      provider: 'mock_gateway'") && read('src/services/subscriptionService.ts').includes('evaluateSubscriptionEntitlements(null)')],
+ ['server rules use custom claim', rules.includes('request.auth.token.server == true') && !rules.includes("request.auth.token.email == 'system-server@restaurantos.app'")],
+ ['server identity is Admin-issued', read('src/server/invitationAuth.ts').includes('createCustomToken') && read('src/server/invitationAuth.ts').includes('setCustomUserClaims') && !read('src/server/invitationAuth.ts').includes('createUserWithEmailAndPassword') && !read('src/server/invitationAuth.ts').includes('signInWithEmailAndPassword')],
  ['stock consumption uses trusted server endpoint in browser', read('src/services/stockConsumptionService.ts').includes("/api/stock/consume-order")],
  ['stock ledger writes are server-only', rules.includes("match /stockMovements/{movementId}") && rules.includes("allow create: if isServer()") && rules.includes("match /stockConsumptions/{consumptionId}")],
  ['print jobs bind to creator', read('src/services/printer/PrinterService.ts').includes("createdBy: auth.currentUser?.uid || 'system'")],
