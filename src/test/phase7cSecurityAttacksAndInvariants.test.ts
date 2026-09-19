@@ -97,6 +97,17 @@ describe('M7-7C Security Attack Tests & Hardening Verification (Attacks 1-20)', 
       empty: true,
       docs: []
     } as any);
+
+    // Default transaction mock used by idempotency-protected operations.
+    vi.mocked(firestore.runTransaction).mockImplementation(async (_db: any, callback: any) => {
+      const tx = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(tx);
+    });
   });
 
   // =========================================================================
