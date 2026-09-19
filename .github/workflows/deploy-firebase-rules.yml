@@ -1,0 +1,59 @@
+name: Deploy Firebase Firestore Rules
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firestore.rules'
+      - 'firebase.json'
+      - '.firebaserc'
+      - 'firestore.indexes.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-rules-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-rules:
+    name: Deploy Firestore Rules & Indexes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Authenticate Firebase CLI
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || {
+            echo "::error::FIREBASE_SERVICE_ACCOUNT_JSON GitHub secret is required."
+            exit 1
+          }
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Validate Firebase project and rules configuration
+        run: |
+          test -f firebase.json
+          test -f .firebaserc
+          test -f firestore.rules
+          node -e "const f=require('./firebase.json'); if (!Array.isArray(f.firestore)||!f.firestore.length) process.exit(1); console.log('Firestore targets:', f.firestore.map(x => x.database).join(', '));"
+
+      - name: Deploy Firestore rules and indexes
+        run: firebase deploy --only firestore --project $(node -p "require('./.firebaserc').projects.default") --non-interactive
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-service-account.json"
