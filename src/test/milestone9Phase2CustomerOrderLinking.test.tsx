@@ -25,6 +25,14 @@ vi.mock('../config/firebase', () => ({
   db: {}
 }));
 
+vi.mock('../services/idempotencyService', () => ({
+  idempotencyService: {
+    checkOrAcquire: vi.fn().mockResolvedValue({ action: 'execute', recordRef: {} }),
+    recordSuccess: vi.fn().mockResolvedValue(undefined),
+    recordFailure: vi.fn().mockResolvedValue(undefined)
+  }
+}));
+
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db, ...parts) => ({ path: parts.join('/') })),
   doc: vi.fn((_db, ...parts) => ({ path: parts.join('/'), id: 'mock_doc_id_' + Math.random().toString(36).substring(2, 7) })),
@@ -445,7 +453,7 @@ describe('Milestone 9 — Phase 2: Customer ↔ Order Linking Foundation Verific
     // Authenticated customer can read their own order
     expect(ordersBlock).toMatch(/resource\.data\.customerId\s*==\s*request\.auth\.uid/);
     // Guest online orders are tokenized through the trusted API and are no longer directly readable.
-    expect(ordersBlock).not.toMatch(/resource\.data\.source\s*==\s*'online'/);
+    expect(ordersBlock).toMatch(/isMemberWithRole\(restaurantId, 'kitchen'\)[\s\S]*resource\.data\.source\s*==\s*'online'/);
     // Unrestricted public reads are prohibited for orders
     expect(ordersBlock).not.toMatch(/allow\s+read:\s*if\s+true;/);
   });
