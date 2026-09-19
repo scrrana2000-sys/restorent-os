@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as firestore from 'firebase/firestore';
 import { kotService } from '../services/kotService';
 import { orderService } from '../services/orderService';
 import { stockConsumptionService } from '../services/stockConsumptionService';
