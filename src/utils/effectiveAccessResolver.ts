@@ -114,7 +114,20 @@ export function getEffectiveFeatureAccess(params: EffectiveAccessParams): Effect
     }
   }
 
-  // 2. Subscription Expired Check (except for 'subscription' view)
+  // 2. First-login trial: all subscription-gated modules are available
+  // for the entire seven-day trial, including modules disabled by a paid-plan
+  // tier or adaptive operating-model capability. RBAC still applies above.
+  if (entitlements?.hasValidTrial && featureOrView !== 'subscription') {
+    return {
+      allowed: true,
+      reason: 'GRANTED',
+      featureOrView,
+      message: 'Feature access granted during the 7-day free trial.',
+      actionType: 'none'
+    };
+  }
+
+  // 3. Subscription Expired Check (except for 'subscription' view)
   if (featureOrView !== 'subscription') {
     if (entitlements && !entitlements.canPerformOperationalActions) {
       return {
@@ -140,7 +153,7 @@ export function getEffectiveFeatureAccess(params: EffectiveAccessParams): Effect
     };
   }
 
-  // 3. Subscription Tier Entitlement Check
+  // 4. Subscription Tier Entitlement Check
   let hasSubscriptionEntitlement = true;
   let requiredPlan = 'Starter';
 
@@ -149,13 +162,13 @@ export function getEffectiveFeatureAccess(params: EffectiveAccessParams): Effect
     requiredPlan = getMinimumRequiredPlan(featureOrView);
   }
 
-  // 4. Operating Model Capability Check
+  // 5. Operating Model Capability Check
   let hasOperatingCapability = true;
   if (operatingCapabilityKey && operatingProfile?.capabilities) {
     hasOperatingCapability = Boolean(operatingProfile.capabilities[operatingCapabilityKey]);
   }
 
-  // 5. Evaluate combined access
+  // 6. Evaluate combined access
   if (!hasSubscriptionEntitlement) {
     // Subscription entitlement missing
     return {
