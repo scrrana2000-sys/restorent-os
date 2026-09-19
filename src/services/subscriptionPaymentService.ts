@@ -283,4 +283,11 @@ export const razorpayPaymentProvider = new RazorpaySubscriptionPaymentProvider()
 export const mockPaymentProvider = new MockSubscriptionGatewayProvider();
 
 // Active default payment provider
-export const defaultPaymentProvider: SubscriptionPaymentProvider = razorpayPaymentProvider;
+const isTestRuntime =
+  (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true')) ||
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test');
+
+// Production always uses Razorpay. Tests use the deterministic mock gateway so
+// subscription-domain tests can exercise activation without forged Razorpay signatures.
+export const defaultPaymentProvider: SubscriptionPaymentProvider =
+  isTestRuntime ? new MockSubscriptionGatewayProvider() : razorpayPaymentProvider;
