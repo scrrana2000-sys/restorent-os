@@ -22,6 +22,33 @@ export class ErrorBoundary extends (React.Component as new (props: Props) => {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[RestaurantOS ErrorBoundary] Uncaught error:', error, errorInfo);
+
+    // A first-load chunk/render race can occasionally happen while the
+    // GitHub Pages deployment is replacing cached assets. Recover once
+    // automatically instead of making the user manually reload. The
+    // session flag prevents an infinite reload loop if the error is real.
+    try {
+      const key = 'restaurantos-runtime-auto-recovery-v1';
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        window.setTimeout(() => window.location.reload(), 50);
+      }
+    } catch {
+      // Storage may be unavailable; keep the visible error fallback.
+    }
+  }
+
+  public componentDidMount() {
+    // If the app survived the initial render window, clear the recovery
+    // guard so a future, unrelated transient load can recover once again.
+    try {
+      const key = 'restaurantos-runtime-auto-recovery-v1';
+      window.setTimeout(() => {
+        try {
+          sessionStorage.removeItem(key);
+        } catch {}
+      }, 5000);
+    } catch {}
   }
 
   constructor(props: Props) {
