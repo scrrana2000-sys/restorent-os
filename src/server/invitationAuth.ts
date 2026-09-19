@@ -2,13 +2,15 @@ import fs from 'fs';
 import path from 'path';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithCustomToken } from 'firebase/auth';
+import { adminAuth, SYSTEM_SERVER_UID } from './firebaseAdmin';
 
 let isServerAuthenticated = false;
 let isServerAuthenticating = false;
 
 export async function ensureServerAuthenticated(): Promise<boolean> {
-  // In pure unit test environment with mock tokens, return early
+  // This identity is backend-only. It is provisioned and granted the server
+  // custom claim exclusively through the Firebase Admin SDK.
   if (process.env.NODE_ENV === 'test' || process.env.VITEST || process.env.SKIP_SERVER_AUTH_FOR_LOCAL_TEST === 'true') {
     return true;
   }
@@ -18,41 +20,48 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
     while (isServerAuthenticating) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    if (isServerAuthenticated && auth.currentUser) return true;
+    return isServerAuthenticated && Boolean(auth.currentUser);
   }
 
   isServerAuthenticating = true;
-  const email = 'system-server@restaurantos.app';
-  const password = process.env.SYSTEM_SERVER_PASSWORD?.trim() || '';
-
-  if (!password) {
-    console.error('[RestaurantOS Server] SYSTEM_SERVER_PASSWORD is not configured.');
-    return process.env.NODE_ENV === 'production' ? false : true;
-  }
-
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    if (process.env.NODE_ENV === 'production' && !process.env.SYSTEM_SERVER_UID?.trim()) {
+      console.error('[RestaurantOS Server] SYSTEM_SERVER_UID is not configured.');
+      return false;
+    }
+
+    let serverUser;
+    try {
+      serverUser = await adminAuth.getUser(SYSTEM_SERVER_UID);
+    } catch (err: any) {
+      if (err?.code !== 'auth/user-not-found') throw err;
+      // The UID is created only by the Admin SDK. A browser/client cannot race
+      // to claim this privileged identity.
+      serverUser = await adminAuth.createUser({
+        uid: SYSTEM_SERVER_UID,
+        disabled: false
+      });
+    }
+
+    const currentClaims = serverUser.customClaims || {};
+    if (currentClaims.server !== true) {
+      await adminAuth.setCustomUserClaims(SYSTEM_SERVER_UID, {
+        ...currentClaims,
+        server: true
+      });
+    }
+
+    // The token is minted by the Admin SDK and immediately consumed only by
+    // this backend process. It is never returned to a browser.
+    const customToken = await adminAuth.createCustomToken(SYSTEM_SERVER_UID, { server: true });
+    await signInWithCustomToken(auth, customToken);
+
     isServerAuthenticated = true;
-    console.log('[RestaurantOS Server] System server authenticated successfully.');
+    console.log('[RestaurantOS Server] Backend server identity authenticated with Admin-issued custom claim.');
     return true;
   } catch (err: any) {
-    const code = err?.code || '';
-    if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials' || code.includes('user-not-found')) {
-      try {
-        console.log('[RestaurantOS Server] System server account not found or uninitialized; attempting initial registration...');
-        await createUserWithEmailAndPassword(auth, email, password);
-        isServerAuthenticated = true;
-        console.log('[RestaurantOS Server] System server registered and authenticated successfully.');
-        return true;
-      } catch (createErr: any) {
-        console.warn('[RestaurantOS Server] System server registration fallback notice:', createErr?.message || createErr);
-      }
-    }
-    console.warn('[RestaurantOS Server] System server email authentication notice:', err?.message || err);
-    if (process.env.NODE_ENV !== 'production') {
-      // In development / preview, permit operations to proceed gracefully
-      return true;
-    }
+    isServerAuthenticated = false;
+    console.error('[RestaurantOS Server] Backend server authentication failed:', err?.message || err);
     return false;
   } finally {
     isServerAuthenticating = false;
