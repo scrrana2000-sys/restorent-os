@@ -72,7 +72,7 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
   } = useRestaurant();
   const [currentView, setCurrentView] = useState<AdminView>('pos');
   const [showMultiSelector, setShowMultiSelector] = useState<boolean>(false);
-  const { entitlements } = useSubscription();
+  const { entitlements, loading: subscriptionLoading, error: subscriptionError } = useSubscription();
 
   // Onboarding form state
   const cleanOwnerFirstName = user?.displayName ? user.displayName.split(' ')[0] : user?.email ? user.email.split('@')[0] : 'Owner';
@@ -104,7 +104,7 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
 
   const userRole = profile?.role || 'owner';
 
-  if (loading || isSwitching) {
+  if (loading || isSwitching || subscriptionLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center shadow-xl shadow-indigo-600/30 animate-pulse mb-4">
@@ -113,7 +113,9 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
         <h2 className="text-xl font-bold tracking-tight">Owner Central</h2>
         <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          Loading restaurant management console...
+          {subscriptionLoading
+            ? 'Verifying your 7-day trial and feature access...'
+            : 'Loading restaurant management console...'}
         </p>
       </div>
     );
