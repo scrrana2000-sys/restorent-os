@@ -52,6 +52,25 @@ function createMockRestaurant(mode: 'single_person' | 'small_team' | 'full_servi
 }
 
 describe('Effective Access Resolver - Dual Layer Control System', () => {
+
+  it('7-day trial -> all subscription-gated features are unlocked during the trial', () => {
+    const sub = createMockSub('trial_7d', 'trial');
+    const entitlements = evaluateSubscriptionEntitlements(sub);
+    const rest = createMockRestaurant('full_service');
+    const operatingProfile = getRestaurantOperatingProfile(rest);
+
+    for (const feature of ['kitchen', 'captain', 'inventory', 'customers', 'voiceAssistant']) {
+      const access = getEffectiveFeatureAccess({
+        featureOrView: feature,
+        entitlements,
+        operatingProfile,
+        userRole: 'owner'
+      });
+      expect(access.allowed).toBe(true);
+      expect(access.reason).toBe('GRANTED');
+    }
+  });
+
   it('Scenario 1: Starter + Full Service -> KDS blocked by Subscription ("SUBSCRIPTION_REQUIRED")', () => {
     const sub = createMockSub('starter');
     const entitlements = evaluateSubscriptionEntitlements(sub);
