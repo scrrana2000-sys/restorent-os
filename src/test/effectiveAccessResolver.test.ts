@@ -71,6 +71,23 @@ describe('Effective Access Resolver - Dual Layer Control System', () => {
     }
   });
 
+  it('7-day trial -> full access even when an operating mode would normally disable a module', () => {
+    const sub = createMockSub('trial_7d', 'trial');
+    const entitlements = evaluateSubscriptionEntitlements(sub);
+    const rest = createMockRestaurant('single_person');
+    const operatingProfile = getRestaurantOperatingProfile(rest);
+
+    const access = getEffectiveFeatureAccess({
+      featureOrView: 'kitchen',
+      entitlements,
+      operatingProfile,
+      userRole: 'owner'
+    });
+
+    expect(access.allowed).toBe(true);
+    expect(access.reason).toBe('GRANTED');
+  });
+
   it('Scenario 1: Starter + Full Service -> KDS blocked by Subscription ("SUBSCRIPTION_REQUIRED")', () => {
     const sub = createMockSub('starter');
     const entitlements = evaluateSubscriptionEntitlements(sub);
