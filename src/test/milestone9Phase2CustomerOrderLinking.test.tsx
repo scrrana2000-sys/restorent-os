@@ -438,8 +438,10 @@ describe('Milestone 9 — Phase 2: Customer ↔ Order Linking Foundation Verific
     expect(ordersBlockMatch).toBeTruthy();
     const ordersBlock = ordersBlockMatch![0];
 
-    // Restaurant staff can still access all restaurant orders
-    expect(ordersBlock).toMatch(/canAccessRestaurant\(restaurantId\)/);
+    // Owner/manager/cashier/captain/accountant staff remain authorized through
+    // the hardened role-specific read predicates.
+    expect(ordersBlock).toMatch(/isOwnerOfRestaurant\(restaurantId\)/);
+    expect(ordersBlock).toMatch(/isMemberWithRoles\(restaurantId, \['manager', 'cashier', 'captain', 'accountant'\]\)/);
     // Authenticated customer can read their own order
     expect(ordersBlock).toMatch(/resource\.data\.customerId\s*==\s*request\.auth\.uid/);
     // Guest online orders are tokenized through the trusted API and are no longer directly readable.
