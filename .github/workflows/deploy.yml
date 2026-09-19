@@ -1,9 +1,7 @@
 name: Deploy RestaurantOS Web to GitHub Pages
 
 on:
-  workflow_run:
-    workflows: ["Deploy RestaurantOS API to Cloud Run"]
-    types: [completed]
+  push:
     branches: [main, master]
   workflow_dispatch:
 
@@ -18,13 +16,11 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout verified source revision
+      - name: Checkout source revision
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
