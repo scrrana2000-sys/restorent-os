@@ -15,33 +15,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email == 'system-server@restaurantos.app';
     }
 
+    // Keep tenant authorization deterministic and cheap. The previous
+    // implementation performed many repeated get()/exists() calls while
+    // evaluating a single request. That can hit Firestore Rules document-access
+    // limits and surface as a generic "permission-denied" even for the owner.
     function isOwnerOfRestaurant(restaurantId) {
       return isSignedIn()
-        && (
-          (
-            exists(/databases/$(database)/documents/restaurants/$(restaurantId))
-            && (
-              get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
-              || (
-                'createdBy' in get(/databases/$(database)/documents/restaurants/$(restaurantId)).data
-                && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.createdBy == request.auth.uid
-              )
-              || (
-                'userId' in get(/databases/$(database)/documents/restaurants/$(restaurantId)).data
-                && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.userId == request.auth.uid
-              )
-              || (
-                'email' in get(/databases/$(database)/documents/restaurants/$(restaurantId)).data
-                && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.email == request.auth.token.email
-              )
-              || (
-                exists(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid))
-                && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid)).data.role == 'owner'
-                && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid)).data.isActive == true
-              )
-            )
-          )
-        );
+        && exists(/databases/$(database)/documents/restaurants/$(restaurantId))
+        && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid;
     }
 
     function isMemberOfRestaurant(restaurantId) {
