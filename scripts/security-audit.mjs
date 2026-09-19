@@ -41,7 +41,7 @@ checks.push(
   ['docker build excludes environment secret files', dockerignore.includes('.env') && dockerignore.includes('.env.*')],
   ['Cloud Run workflow runs release verification before deploy', cloudRunWorkflow.includes('needs: verify') && cloudRunWorkflow.includes('npm run verify')],
   ['Pages workflow resolves trusted public production endpoints', releaseWorkflow.includes('VITE_API_BASE_URL:-https://restaurantos-xqi52dpwgo-as.a.run.app') && releaseWorkflow.includes('VITE_PUBLIC_APP_URL:-https://restaurantos01.ai.studio')],
-  ['server-side permission helper recognizes only the dedicated server account', read('src/utils/permissions.ts').includes("user.email === 'system-server@restaurantos.app'" )],
+  ['server-side permission helper uses trusted claim', read('src/utils/permissions.ts').includes('tokenResult.claims.server === true') && !read('src/utils/permissions.ts').includes("user.email === 'system-server@restaurantos.app'")],
   ['user profile role is not client-writable', rules.includes("match /users/{userId}") && rules.includes("role fields are never") && !/updateDoc\(userRef,[\s\S]{0,220}?role\s*:\s*newRole/.test(read('src/services/staffService.ts'))],
   ['public bill uses tokenized API access', serverSource.includes('/api/orders/public-bill') && serverSource.includes('BILL_FORBIDDEN') && serverSource.includes('customerTrackingToken !== accessToken')],
   ['guest tracking uses high-entropy token', serverSource.includes("randomBytes(32).toString('base64url')")],
