@@ -1033,7 +1033,9 @@ service cloud.firestore {
       match /subscription/{subDocId} {
         allow read: if canAccessRestaurant(restaurantId) || isServer();
 
-        allow create, update: if (isServer() || isOwnerOfRestaurant(restaurantId))
+        // Subscription entitlements are server-authoritative. Browser clients may
+        // read the current subscription, but must never create or mutate it directly.
+        allow create, update: if isServer()
           && request.resource.data.restaurantId == restaurantId;
 
         allow delete: if false;
@@ -1042,7 +1044,8 @@ service cloud.firestore {
       match /subscriptionHistory/{historyId} {
         allow read: if canAccessRestaurant(restaurantId) || isServer();
 
-        allow create: if (isServer() || isOwnerOfRestaurant(restaurantId))
+        // Payment history is an immutable server-owned audit trail.
+        allow create: if isServer()
           && request.resource.data.restaurantId == restaurantId;
 
         allow update, delete: if false;
