@@ -278,7 +278,9 @@ describe('Order Creation & POS Engine (Phase 2D)', () => {
             itemId: sampleItem1.itemId,
             name: sampleItem1.name,
             isAvailable: true,
-            price: sampleItem1.price
+            price: sampleItem1.price,
+            taxRate: sampleItem1.taxRate,
+            taxInclusive: sampleItem1.taxInclusive
           })
         } as any);
 
