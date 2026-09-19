@@ -262,7 +262,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           try {
             const found = await getRestaurantById(cachedRestaurantId);
             if (found) {
-              let hasAccess = found.ownerId === user.uid;
+              let hasAccess =
+                found.ownerId === user.uid
+                || (
+                  found.provisioningType === 'initial_owner'
+                  && found.createdBy === user.uid
+                );
               if (!hasAccess) {
                 try {
                   const memberRef = doc(db, 'restaurants', found.restaurantId, 'members', user.uid);
@@ -330,7 +335,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             try {
               const found = await getRestaurantById(targetRestaurantId);
               if (found) {
-                let hasAccess = found.ownerId === user.uid;
+                let hasAccess =
+                found.ownerId === user.uid
+                || (
+                  found.provisioningType === 'initial_owner'
+                  && found.createdBy === user.uid
+                );
                 if (!hasAccess) {
                   try {
                     const memberRef = doc(db, 'restaurants', found.restaurantId, 'members', user.uid);
@@ -375,11 +385,29 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           console.log('[RestaurantOS Debug] Strategy 3: Checking direct deterministic paths:', deterministicDocId, `restaurants/${user.uid}`);
           try {
             const byInitDoc = await getRestaurantById(deterministicDocId);
-            if (byInitDoc && byInitDoc.ownerId === user.uid) {
+            if (
+              byInitDoc
+              && (
+                byInitDoc.ownerId === user.uid
+                || (
+                  byInitDoc.provisioningType === 'initial_owner'
+                  && byInitDoc.createdBy === user.uid
+                )
+              )
+            ) {
               resolvedRestaurant = byInitDoc;
             } else {
               const byUidRest = await getRestaurantById(user.uid);
-              if (byUidRest && byUidRest.ownerId === user.uid) {
+              if (
+                byUidRest
+                && (
+                  byUidRest.ownerId === user.uid
+                  || (
+                    byUidRest.provisioningType === 'initial_owner'
+                    && byUidRest.createdBy === user.uid
+                  )
+                )
+              ) {
                 resolvedRestaurant = byUidRest;
               }
             }
@@ -521,7 +549,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
 
           let activeRole: StaffRole = 'owner';
-          if (resolvedRestaurant.ownerId !== user.uid) {
+          const isLegacyInitialOwner =
+            resolvedRestaurant.provisioningType === 'initial_owner'
+            && resolvedRestaurant.createdBy === user.uid;
+
+          if (resolvedRestaurant.ownerId !== user.uid && !isLegacyInitialOwner) {
             const memberRef = doc(db, 'restaurants', resolvedRestaurant.restaurantId, 'members', user.uid);
             const memberSnap = await getDoc(memberRef);
             if (memberSnap.exists()) {
