@@ -39,6 +39,16 @@ import * as firestore from 'firebase/firestore';
 describe('Phase 2G: Final Acceptance Audit Suite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(firestore.runTransaction).mockReset();
+    vi.mocked(firestore.runTransaction).mockImplementation(async (_db, callback: any) => {
+      const tx = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(tx);
+    });
     if (typeof localStorage !== 'undefined') {
       localStorage.clear();
     }
