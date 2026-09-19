@@ -95,6 +95,12 @@ vi.mock('firebase/firestore', () => ({
   getDocs: vi.fn(),
   setDoc: vi.fn().mockResolvedValue(undefined),
   updateDoc: vi.fn().mockResolvedValue(undefined),
+  writeBatch: vi.fn(() => ({
+    set: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    commit: vi.fn().mockResolvedValue(undefined)
+  })),
   query: vi.fn(),
   where: vi.fn(),
   orderBy: vi.fn(),
