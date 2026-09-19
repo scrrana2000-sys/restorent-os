@@ -1,23 +1,26 @@
 /**
  * Authoritative utility functions for resolving public RestaurantOS application URLs.
  *
- * Production Frontend:
- * https://scrrana2000-sys.github.io/restorent-os/
+ * Production Frontend (Cloud Run):
+ * https://restaurantos-xqi52dpwgo-as.a.run.app
  *
- * All public invitation links, QR codes, and email CTAs must target this canonical URL
- * while preserving the GitHub Pages base path (/restorent-os/).
+ * Cloud Run serves the app from the domain root (no subpath), unlike the GitHub Pages
+ * build which still ships with its own /restorent-os/ base path via VITE_BASE_PATH in
+ * .github/workflows/deploy.yml. All public invitation links, QR codes, and email CTAs
+ * target whichever of these is actually running, resolved at runtime below.
  */
 
 export const PRODUCTION_PUBLIC_URL = 'https://scrrana2000-sys.github.io/restorent-os/';
-export const PRODUCTION_ORIGIN = 'https://scrrana2000-sys.github.io';
-export const PRODUCTION_BASE_PATH = '/restorent-os/';
+export const PRODUCTION_ORIGIN = 'https://scrrana2000-sys.github.io/restorent-os';
+export const PRODUCTION_BASE_PATH = '/';
 
 // Retained for backward compatibility alias
 export const PUBLIC_APP_URL = PRODUCTION_PUBLIC_URL;
 
 /**
- * Resolves the configured public app base URL including the base path (e.g. /restorent-os/).
- * Always ends with a trailing slash for deterministic URL concatenation.
+ * Resolves the configured public app base URL including the base path (e.g. /restorent-os/
+ * on GitHub Pages, or / on Cloud Run). Always ends with a trailing slash for deterministic
+ * URL concatenation.
  */
 export function getPublicAppBaseUrl(): string {
   // 1. Explicit environment variable override if provided
@@ -31,12 +34,15 @@ export function getPublicAppBaseUrl(): string {
     return envUrl.endsWith('/') ? envUrl : `${envUrl}/`;
   }
 
-  // 2. Browser runtime check: if already running on github.io, use window origin + base
+  // 2. Browser runtime check: any non-localhost host (Cloud Run, GitHub Pages, or a future
+  // custom domain) resolves from the actual window origin + build base path, so this never
+  // needs updating again when the deployment target changes.
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname || '';
-    if (hostname.includes('github.io')) {
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    if (!isLocal) {
       const origin = window.location.origin;
-      const base = import.meta.env.BASE_URL || PRODUCTION_BASE_PATH;
+      const base = import.meta.env.BASE_URL || '/';
       const cleanBase = base.startsWith('/') ? base : `/${base}`;
       const normalizedBase = cleanBase.endsWith('/') ? cleanBase : `${cleanBase}/`;
       return `${origin}${normalizedBase}`;
@@ -48,7 +54,7 @@ export function getPublicAppBaseUrl(): string {
 }
 
 /**
- * Returns the public app origin (e.g. https://scrrana2000-sys.github.io).
+ * Returns the public app origin (e.g. https://scrrana2000-sys.github.io/restorent-os).
  */
 export function getPublicAppOrigin(): string {
   const baseUrl = getPublicAppBaseUrl();
@@ -179,6 +185,7 @@ export interface PublicBillParams {
   orderId: string;
   restaurantId: string;
   autoDownload: boolean;
+  accessToken?: string;
 }
 
 /**
@@ -191,18 +198,18 @@ export function extractBillParamsFromUrl(): PublicBillParams | null {
     const searchParams = new URLSearchParams(window.location.search);
     let bill = searchParams.get('bill') || searchParams.get('orderId') || searchParams.get('order');
     let rest = searchParams.get('rest') || searchParams.get('restaurantId') || searchParams.get('restaurant');
+    let accessToken = searchParams.get('accessToken') || searchParams.get('token') || '';
     const autoDownload = searchParams.get('download') === 'pdf' || searchParams.get('autoDownload') === 'true';
 
     // Also inspect hash if using hash routing
-    if (!bill && window.location.hash) {
+    if (window.location.hash) {
       const hash = window.location.hash;
       const questionIndex = hash.indexOf('?');
       if (questionIndex !== -1) {
         const hashParams = new URLSearchParams(hash.substring(questionIndex));
-        bill = hashParams.get('bill') || hashParams.get('orderId') || hashParams.get('order');
-        if (!rest) {
-          rest = hashParams.get('rest') || hashParams.get('restaurantId') || hashParams.get('restaurant');
-        }
+        if (!bill) bill = hashParams.get('bill') || hashParams.get('orderId') || hashParams.get('order');
+        if (!rest) rest = hashParams.get('rest') || hashParams.get('restaurantId') || hashParams.get('restaurant');
+        if (!accessToken) accessToken = hashParams.get('accessToken') || hashParams.get('token') || '';
       }
     }
 
@@ -210,7 +217,8 @@ export function extractBillParamsFromUrl(): PublicBillParams | null {
       return {
         orderId: bill.trim(),
         restaurantId: (rest || '').trim(),
-        autoDownload
+        autoDownload,
+        accessToken: accessToken.trim()
       };
     }
   } catch (err) {

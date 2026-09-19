@@ -36,6 +36,10 @@ export interface PlanLimits {
   inventoryManagement: boolean;
   reportsAnalytics: boolean;
   voiceAssistant: boolean;
+  kitchenDisplay?: boolean;
+  captainHandheld?: boolean;
+  customerCrm?: boolean;
+  thermalPrinterRouting?: boolean;
 }
 
 export interface SubscriptionPlan {

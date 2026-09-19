@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  RestaurantOS static sitemap.
+
+  This file lists the fixed public entry points. Restaurant-specific public pages
+  (/r/:slug and /r/:slug/menu) are created dynamically by restaurant owners and can't be
+  enumerated at build time, so on the Cloud Run deployment they are served instead by the
+  dynamic GET /sitemap.xml route added in server.ts, which lists every active
+  publicRestaurants document. On static GitHub Pages hosting this file is the only sitemap
+  available; update it manually if you add new fixed marketing routes.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://restaurantos-xqi52dpwgo-as.a.run.app/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

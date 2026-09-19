@@ -70,7 +70,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   if (isConnection) {
     console.warn('[Firestore Offline/Connection] Backend unavailable or operating in offline mode:', path);
   } else if (isPermission) {
-    console.warn('[Firestore Permission Notice] Permission denied at path:', path, 'Check firestore.rules deployment.');
+    console.warn('[Firestore Permission Notice] Permission denied at path:', path, "Check the signed-in account's restaurant membership/owner access and the deployed Firestore rules.");
     notifyPermissionIssue(path);
   } else {
     console.error('Firestore Error: ', JSON.stringify(errInfo));
@@ -78,7 +78,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
   let cleanMessage: string;
   if (isPermission) {
-    cleanMessage = `Permission restricted for ${path || 'resource'}. Ensure firestore.rules are deployed.`;
+    cleanMessage = `Permission restricted for ${path || 'resource'}. Check the signed-in account's restaurant access and the deployed Firestore rules.`;
   } else if (isConnection) {
     cleanMessage = `Database connection failed. Please check your internet connection or try again.`;
   } else {

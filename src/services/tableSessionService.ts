@@ -210,8 +210,9 @@ export class TableSessionService implements ITableSessionService {
           updatedAt: serverTimestamp() || now
         };
 
-        // 1. Write new session document
-        transaction.set(newDocRef, sessionData);
+        // 1. Write new session document. The Firestore document id is mirrored in `id`
+        // because the deployed rules use it as an explicit tenant/lifecycle invariant.
+        transaction.set(newDocRef, { ...sessionData, id: newDocRef.id });
 
         // 2. Lock physical table document with activeSessionId and status occupied
         transaction.update(tableRef, {
@@ -293,7 +294,10 @@ export class TableSessionService implements ITableSessionService {
     if (!cleanRestaurantId) {
       throw new Error('restaurantId is required to close a session.');
     }
-    await enforcePermission(cleanRestaurantId, 'close_sessions');
+    const trustedServerContext = auth.currentUser?.email === 'system-server@restaurantos.app';
+    if (!trustedServerContext) {
+      await enforcePermission(cleanRestaurantId, 'close_sessions');
+    }
     const cleanSessionId = sessionId?.trim();
     const path = tableSessionDocPath(cleanRestaurantId, cleanSessionId);
 
@@ -492,6 +496,7 @@ export class TableSessionService implements ITableSessionService {
         // Writes phase
         // 1. Update session
         transaction.update(docRef, {
+          id: cleanSessionId,
           status: 'closed',
           closedAt: serverTimestamp() || now,
           closedBy: closedBy || auth.currentUser?.uid || 'system',
@@ -589,7 +594,9 @@ export class TableSessionService implements ITableSessionService {
         }
 
         transaction.update(docRef, {
+          id: cleanSessionId,
           guestCount: newGuestCount,
+          updatedBy: updatedBy || auth.currentUser?.uid || 'system',
           updatedAt: serverTimestamp() || now
         });
       });

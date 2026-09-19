@@ -9,6 +9,8 @@ import {
 import { CustomerCheckoutModal } from '../components/customer/CustomerCheckoutModal';
 import { CustomerCartProvider, useCustomerCart } from '../context/CustomerCartContext';
 import { orderService } from '../services/orderService';
+import * as subscriptionService from '../services/subscriptionService';
+import { getPlanById } from '../config/subscriptionPlans';
 import {
   CustomerCart,
   CustomerCartItem,
@@ -100,6 +102,17 @@ describe('Phase M9-I: Customer Online Order Submission', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
+    vi.spyOn(subscriptionService, 'getActivePlanEntitlements').mockResolvedValue({
+      status: 'active',
+      hasActiveSubscription: true,
+      hasValidTrial: false,
+      isSubscriptionExpired: false,
+      isExpiringSoon: false,
+      daysRemaining: 30,
+      hoursRemaining: 0,
+      canPerformOperationalActions: true,
+      plan: getPlanById('growth')
+    });
   });
 
   describe('mapCustomerCartToCartState', () => {

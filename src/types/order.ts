@@ -57,6 +57,7 @@ export interface Order {
   restaurantId: string;
   orderNumber: string;
   customerId?: string | null; // Milestone 9: Authenticated customer identity (Firebase Auth UID). Null for guest orders.
+  customerTrackingToken?: string | null; // Server-generated opaque bearer token for guest online order tracking.
   tableId?: string | null;
   tableSessionId?: string | null;
   orderType: OrderType;

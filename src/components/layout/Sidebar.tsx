@@ -18,12 +18,16 @@ import {
   UserCheck,
   X,
   ChevronDown,
-  Check
+  Check,
+  Lock,
+  Sliders
 } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 import { getRestaurantOperatingProfile } from '../../config/restaurantOperatingModes';
 import { isViewAllowed } from '../../utils/permissions';
+import { getEffectiveFeatureAccess } from '../../utils/effectiveAccessResolver';
 
 export type AdminView = 'pos' | 'kitchen' | 'captain' | 'dashboard' | 'restaurant' | 'categories' | 'items' | 'settings' | 'reports' | 'audit' | 'orders' | 'payments' | 'staff' | 'inventory' | 'customers' | 'subscription';
 
@@ -46,6 +50,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const resolvedProfile = operatingProfile || getRestaurantOperatingProfile(restaurant);
   const { user, profile, logout } = useAuth();
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
+
+  let entitlements: any = null;
+  try {
+    const subContext = useSubscription();
+    entitlements = subContext?.entitlements;
+  } catch {
+    // Graceful fallback if rendered outside SubscriptionProvider
+  }
 
   // Lock body scroll when mobile drawer is open to prevent accidental background scrolling
   useEffect(() => {
@@ -119,9 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const allowedNavigation = mainNavigation.filter(
-    (item) => isViewOperationallyAllowed(item.id) && isViewAllowed(userRole, item.id)
-  );
+  const allowedNavigation = mainNavigation.filter((item) => isViewAllowed(userRole, item.id));
 
   const futureModules: { label: string; icon: React.ComponentType<{ className?: string }>; milestone: string }[] = [];
 
@@ -261,6 +271,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {allowedNavigation.map((item) => {
                 const Icon = item.icon;
                 const isActive = currentView === item.id;
+                const access = getEffectiveFeatureAccess({
+                  featureOrView: item.id,
+                  entitlements,
+                  operatingProfile: resolvedProfile,
+                  userRole
+                });
+
                 return (
                   <button
                     key={item.id}
@@ -269,14 +286,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onNavigate(item.id);
                       onCloseMobile();
                     }}
-                    className={`w-full min-h-[44px] flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 ${
+                    className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 ${
                       isActive
                         ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/30'
                         : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                    <span className="truncate">{item.label}</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+
+                    {access.reason === 'SUBSCRIPTION_REQUIRED' && (
+                      <span
+                        className="ml-2 flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0"
+                        title={`Requires ${access.requiredPlan} plan`}
+                      >
+                        <Lock className="w-2.5 h-2.5" />
+                        {access.requiredPlan}
+                      </span>
+                    )}
+
+                    {access.reason === 'OPERATING_MODEL_DISABLED' && (
+                      <span
+                        className="ml-2 flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-slate-600 shrink-0"
+                        title="Turned off in Operating Model / Restaurant Setup"
+                      >
+                        <Sliders className="w-2.5 h-2.5 text-slate-400" />
+                        Off
+                      </span>
+                    )}
+
+                    {access.reason === 'EXPIRED_SUBSCRIPTION' && (
+                      <span
+                        className="ml-2 flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 shrink-0"
+                        title="Subscription Expired"
+                      >
+                        <Lock className="w-2.5 h-2.5" />
+                        Expired
+                      </span>
+                    )}
                   </button>
                 );
               })}

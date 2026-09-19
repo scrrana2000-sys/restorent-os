@@ -66,7 +66,11 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       onlineOrdering: true,
       inventoryManagement: true,
       reportsAnalytics: true,
-      voiceAssistant: true
+      voiceAssistant: true,
+      kitchenDisplay: true,
+      captainHandheld: true,
+      customerCrm: true,
+      thermalPrinterRouting: true
     },
     active: true
   },
@@ -96,7 +100,11 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       onlineOrdering: false,
       inventoryManagement: false,
       reportsAnalytics: true,
-      voiceAssistant: false
+      voiceAssistant: false,
+      kitchenDisplay: false,
+      captainHandheld: false,
+      customerCrm: false,
+      thermalPrinterRouting: false
     },
     active: true
   },
@@ -128,7 +136,11 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       onlineOrdering: true,
       inventoryManagement: true,
       reportsAnalytics: true,
-      voiceAssistant: false
+      voiceAssistant: false,
+      kitchenDisplay: true,
+      captainHandheld: true,
+      customerCrm: true,
+      thermalPrinterRouting: true
     },
     active: true
   },
@@ -144,7 +156,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     currencySymbol: '₹',
     billingCycle: 'monthly',
     features: [
-      'Unlimited POS & Captain Handheld Stations',
+      'Multi-Station POS & Captain Handheld Stations',
       'Live Kitchen Display System (KDS) & Routing',
       'Full Recipe-Level Inventory & Batch Tracking',
       'Customer CRM, Loyalty & Lifetime Analytics',
@@ -160,7 +172,11 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       onlineOrdering: true,
       inventoryManagement: true,
       reportsAnalytics: true,
-      voiceAssistant: true
+      voiceAssistant: true,
+      kitchenDisplay: true,
+      captainHandheld: true,
+      customerCrm: true,
+      thermalPrinterRouting: true
     },
     active: true,
     isPopular: true
@@ -178,11 +194,7 @@ export const COMMERCIAL_PLANS: SubscriptionPlan[] = SUBSCRIPTION_PLANS.filter(
 export function getPlanById(planId: string): SubscriptionPlan {
   const plan = SUBSCRIPTION_PLANS.find((p) => p.planId === planId || p.id === planId);
   if (!plan) {
-    if (planId === 'enterprise') {
-      return SUBSCRIPTION_PLANS.find((p) => p.planId === 'pro') || SUBSCRIPTION_PLANS[0];
-    }
-    // Default to Pro if unknown
-    return SUBSCRIPTION_PLANS.find((p) => p.planId === 'pro') || SUBSCRIPTION_PLANS[0];
+    throw new Error(`Unknown subscription plan: ${planId}`);
   }
   return plan;
 }

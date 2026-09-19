@@ -17,13 +17,29 @@ service cloud.firestore {
 
     function isOwnerOfRestaurant(restaurantId) {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/restaurants/$(restaurantId))
         && (
-          get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
-          || (
-            exists(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid))
-            && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid)).data.role == 'owner'
-            && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid)).data.isActive == true
+          (
+            exists(/databases/$(database)/documents/restaurants/$(restaurantId))
+            && (
+              get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
+              || (
+                'createdBy' in get(/databases/$(database)/documents/restaurants/$(restaurantId)).data
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.createdBy == request.auth.uid
+              )
+              || (
+                'userId' in get(/databases/$(database)/documents/restaurants/$(restaurantId)).data
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.userId == request.auth.uid
+              )
+              || (
+                'email' in get(/databases/$(database)/documents/restaurants/$(restaurantId)).data
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.email == request.auth.token.email
+              )
+              || (
+                exists(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid))
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid)).data.role == 'owner'
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.auth.uid)).data.isActive == true
+              )
+            )
           )
         );
     }
@@ -58,12 +74,41 @@ service cloud.firestore {
       return isMemberOfRestaurant(restaurantId) && getMemberRole(restaurantId) in roles;
     }
 
+    function isAllowedOrderStatusTransition(fromStatus, toStatus) {
+      return fromStatus == toStatus
+        || (fromStatus == 'draft' && toStatus == 'confirmed')
+        || (fromStatus == 'confirmed' && toStatus in ['sentToKitchen', 'cancelled'])
+        || (fromStatus == 'sentToKitchen' && toStatus in ['preparing', 'cancelled'])
+        || (fromStatus == 'preparing' && toStatus in ['ready', 'cancelled'])
+        || (fromStatus == 'ready' && toStatus in ['served', 'cancelled'])
+        || (fromStatus == 'served' && toStatus == 'completed')
+        || (fromStatus == 'draft' && toStatus == 'cancelled');
+    }
+
     // ============================================================
     // USERS
     // ============================================================
 
     match /users/{userId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      // User profiles are self-readable, but security-sensitive role fields are never
+      // client-writable. Restaurant membership remains the authoritative RBAC source.
+      allow read: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.userId == userId
+        && request.resource.data.diff({}).affectedKeys().hasOnly([
+          'userId', 'displayName', 'email', 'photoUrl', 'createdAt', 'updatedAt',
+          'restaurantId', 'initialRestaurantId'
+        ]);
+
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'photoUrl', 'updatedAt', 'restaurantId', 'initialRestaurantId'
+        ]);
     }
 
     // ============================================================
@@ -98,6 +143,7 @@ service cloud.firestore {
         resource == null ||
         resource.data.ownerId == request.auth.uid ||
         isMemberOfRestaurant(restaurantId) ||
+        (resource.data.provisioningType == 'initial_owner' && resource.data.createdBy == request.auth.uid) ||
         isServer()
       );
 
@@ -109,31 +155,104 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid;
 
-      allow update: if isSignedIn()
-        && resource.data.ownerId == request.auth.uid
-        && request.resource.data.ownerId == resource.data.ownerId;
+      allow update: if (
+          isSignedIn()
+          && resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerId == resource.data.ownerId
+        )
+        || (
+          isSignedIn()
+          && resource.data.provisioningType == 'initial_owner'
+          && resource.data.createdBy == request.auth.uid
+          && request.resource.data.ownerId == request.auth.uid
+          && request.resource.data.provisioningType == resource.data.provisioningType
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerId', 'updatedAt'])
+        );
 
-      allow delete: if isSignedIn()
-        && resource.data.ownerId == request.auth.uid;
+      // Restaurant deletion is intentionally disabled at the document layer. A future
+      // controlled backend purge can cascade subcollections and revoke access safely.
+      allow delete: if false;
 
       // ==========================================================
       // MEMBERS
       // ==========================================================
 
       match /members/{memberId} {
-        allow read: if isSignedIn() && (
+        allow read: if isServer() || (isSignedIn() && (
           isOwnerOfRestaurant(restaurantId) ||
           isMemberWithRole(restaurantId, 'manager') ||
           request.auth.uid == memberId ||
           (('email' in resource.data) && resource.data.email == request.auth.token.email)
+        ));
+
+        // Owners can create either a pending staff invitation or their own owner membership.
+        allow create: if (
+          isOwnerOfRestaurant(restaurantId)
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.memberId == memberId
+          && (
+            (
+              request.resource.data.role in ['manager', 'cashier', 'kitchen', 'captain', 'accountant']
+              && request.resource.data.userId == ''
+              && request.resource.data.isActive == false
+              && request.resource.data.status == 'pending_setup'
+            )
+            || (
+              request.resource.data.role == 'owner'
+              && memberId == request.auth.uid
+              && request.resource.data.userId == request.auth.uid
+              && request.resource.data.isActive == true
+              && request.resource.data.status == 'active'
+            )
+          )
+        )
+        // An authenticated invitee may create their linked membership only when the
+        // authoritative pending invitation document is for the same email/role/restaurant.
+        || (
+          isSignedIn()
+          && memberId == request.auth.uid
+          && request.resource.data.memberId == memberId
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.isActive == true
+          && request.resource.data.status == 'active'
+          && ('invitationId' in request.resource.data)
+          && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId))
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.restaurantId == restaurantId
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.email == request.auth.token.email
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.role == request.resource.data.role
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.isActive == false
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.invitationStatus in ['pending_setup', 'invitation_sent', 'invitation_failed']
         );
 
-        allow write: if isOwnerOfRestaurant(restaurantId) || (
-          isSignedIn() && (
-            request.auth.uid == memberId ||
-            (('email' in resource.data) && resource.data.email == request.auth.token.email)
-          )
+        allow update: if (
+          isOwnerOfRestaurant(restaurantId)
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.memberId == resource.data.memberId
+        )
+        || (
+          isSignedIn()
+          && request.auth.uid == memberId
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.memberId == resource.data.memberId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoUrl', 'phone', 'updatedAt'])
+        )
+        || (
+          isSignedIn()
+          && ('email' in resource.data)
+          && resource.data.email == request.auth.token.email
+          && resource.data.isActive == false
+          && resource.data.invitationStatus in ['pending_setup', 'invitation_sent', 'invitation_failed']
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId', 'authLinked', 'invitationStatus', 'updatedAt'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.authLinked == true
+          && request.resource.data.invitationStatus == 'active'
         );
+
+        allow delete: if isOwnerOfRestaurant(restaurantId);
       }
 
       // ==========================================================
@@ -141,10 +260,21 @@ service cloud.firestore {
       // ==========================================================
 
       match /categories/{categoryId} {
-        allow read: if canAccessRestaurant(restaurantId)
+        allow read: if isServer()
+          || canAccessRestaurant(restaurantId)
           || exists(/databases/$(database)/documents/publicRestaurants/$(restaurantId));
-        allow write: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRole(restaurantId, 'manager');
+        allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.categoryId == categoryId;
+
+        allow update: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.categoryId == resource.data.categoryId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'description', 'imageUrl', 'sortOrder', 'isActive', 'updatedAt'
+          ]);
+
+        allow delete: if isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager');
       }
 
       // ==========================================================
@@ -152,10 +282,22 @@ service cloud.firestore {
       // ==========================================================
 
       match /items/{itemId} {
-        allow read: if canAccessRestaurant(restaurantId)
+        allow read: if isServer()
+          || canAccessRestaurant(restaurantId)
           || exists(/databases/$(database)/documents/publicRestaurants/$(restaurantId));
-        allow write: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRole(restaurantId, 'manager');
+        allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.itemId == itemId;
+
+        allow update: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.itemId == resource.data.itemId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'categoryId', 'name', 'shortName', 'description', 'imageUrl', 'price', 'taxRate',
+            'taxInclusive', 'foodType', 'isAvailable', 'sku', 'sortOrder', 'updatedAt'
+          ]);
+
+        allow delete: if isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager');
       }
 
       // ==========================================================
@@ -163,17 +305,37 @@ service cloud.firestore {
       // ==========================================================
 
       match /tables/{tableId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
-        allow create, delete: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRole(restaurantId, 'manager');
+        allow create: if (isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == restaurantId;
 
-        allow update: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRole(restaurantId, 'manager')
+        allow delete: if (isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRole(restaurantId, 'manager'))
+          && resource.data.restaurantId == restaurantId;
+
+        allow update: if (isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          || (
+            isServer()
+            && request.resource.data.restaurantId == resource.data.restaurantId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeSessionId', 'status', 'updatedAt'])
+            && ((request.resource.data.status == 'available' && request.resource.data.activeSessionId == null)
+              || (request.resource.data.status == 'occupied' && request.resource.data.activeSessionId is string))
+          )
           || (
             isMemberWithRoles(restaurantId, ['cashier', 'captain'])
+            && request.resource.data.restaurantId == resource.data.restaurantId
             && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['activeSessionId', 'updatedAt'])
+              .hasOnly(['activeSessionId', 'status', 'updatedAt'])
+            && (
+              (request.resource.data.status == 'occupied'
+                && request.resource.data.activeSessionId is string)
+              || (request.resource.data.status == 'available'
+                && request.resource.data.activeSessionId == null)
+            )
           );
       }
 
@@ -182,12 +344,48 @@ service cloud.firestore {
       // ==========================================================
 
       match /tableSessions/{sessionId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
-        allow create, update: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain']);
+        allow create: if (
+          isServer()
+          || isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
+        )
+          && request.resource.data.id == sessionId
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.tableId is string
+          && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/tables/$(request.resource.data.tableId))
+          && request.resource.data.status == 'open'
+          && (isServer() || isOwnerOfRestaurant(restaurantId) || request.resource.data.openedBy == request.auth.uid);
 
-        allow delete: if isOwnerOfRestaurant(restaurantId)
+        allow update: if (
+          isServer()
+          || isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
+        )
+          && request.resource.data.id == sessionId
+          && (!('id' in resource.data) || resource.data.id == sessionId)
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.tableId == resource.data.tableId
+          && (
+            (
+              resource.data.status == 'open'
+              && request.resource.data.status == 'open'
+              && request.resource.data.guestCount is int
+              && request.resource.data.guestCount > 0
+              && (isServer() || isOwnerOfRestaurant(restaurantId) || request.resource.data.updatedBy == request.auth.uid)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['id', 'guestCount', 'updatedBy', 'updatedAt'])
+            )
+            ||
+            (
+              resource.data.status == 'open'
+              && request.resource.data.status == 'closed'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['id', 'status', 'closedAt', 'closedBy', 'updatedAt'])
+              && (isServer() || isOwnerOfRestaurant(restaurantId) || request.resource.data.closedBy == request.auth.uid)
+            )
+          );
+
+        allow delete: if isServer() || isOwnerOfRestaurant(restaurantId)
           || isMemberWithRole(restaurantId, 'manager');
       }
 
@@ -196,46 +394,143 @@ service cloud.firestore {
       // ==========================================================
 
       match /orders/{orderId} {
-        allow read: if canAccessRestaurant(restaurantId)
+        allow read: if isServer() || (
+          // Only staff with order visibility may access order documents.
+          isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain', 'accountant'])
           || (
-            resource != null && (
-              // Authenticated customer reading their own order
-              (
-                isSignedIn()
-                && ('customerId' in resource.data)
-                && resource.data.customerId != null
-                && resource.data.customerId == request.auth.uid
-              )
-              // Guest online order
+            isMemberWithRole(restaurantId, 'kitchen')
+            && resource.data.source == 'online'
+            && resource.data.orderType in ['takeaway', 'delivery']
+          )
+        )
+        || (
+          isSignedIn()
+          && resource != null
+          && ('customerId' in resource.data)
+          && resource.data.customerId != null
+          && resource.data.customerId == request.auth.uid
+        );
+
+        // Orders creation is permitted for trusted server authority or verified restaurant staff/owner.
+        allow create: if (
+          isServer()
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == orderId
+          && request.resource.data.createdBy is string
+        ) || (
+          isSignedIn()
+          && (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain']))
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == orderId
+          && request.resource.data.createdBy == request.auth.uid
+        );
+
+        // Financial/order-total fields are protected. Cashiers may only settle an order when
+        // the same atomic transaction creates the linked Payment record; managers/owners retain
+        // full correction/refund authority. Operational roles are limited to non-financial fields.
+        allow update: if (
+          (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager') || isServer())
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.createdBy == resource.data.createdBy
+        )
+        || (
+          isMemberWithRole(restaurantId, 'cashier')
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && (isServer() || request.resource.data.updatedBy == request.auth.uid)
+          && request.resource.data.status != 'cancelled'
+          && request.resource.data.status != 'completed'
+          && isAllowedOrderStatusTransition(resource.data.status, request.resource.data.status)
+          && (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'acceptedAt', 'acceptedBy', 'estimatedPrepMinutes', 'sentToKitchenAt',
+              'readyAt', 'readyBy', 'servedAt', 'servedBy',
+              'updatedAt', 'updatedBy', 'stockConsumptionStatus', 'stockConsumptionError',
+              'notes', 'customerSnapshot'
+            ])
+            && (
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny(['stockConsumptionStatus'])
               || (
-                resource.data.source == 'online'
-                && (!('customerId' in resource.data) || resource.data.customerId == null)
+                request.resource.data.stockConsumptionStatus in ['consumed', 'not_applicable']
+                && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/order_stock_locks/$(orderId))
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)/order_stock_locks/$(orderId)).data.orderId == orderId
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)/order_stock_locks/$(orderId)).data.actorType == 'server'
+                && get(/databases/$(database)/documents/restaurants/$(restaurantId)/order_stock_locks/$(orderId)).data.status == request.resource.data.stockConsumptionStatus
               )
             )
-          );
-
-        allow create: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
-          || isServer();
-
-        allow update: if isOwnerOfRestaurant(restaurantId)
-          || (
-            isMemberOfRestaurant(restaurantId)
-            && (
-              (
-                request.resource.data.status != 'cancelled'
-                && isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain', 'kitchen'])
-              )
-              || (
-                request.resource.data.status == 'cancelled'
-                && isMemberWithRole(restaurantId, 'manager')
+            || (
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'paidAmountMinor', 'dueAmountMinor', 'paymentStatus', 'lastPaymentId', 'updatedAt', 'updatedBy'
+              ])
+              && ('lastPaymentId' in request.resource.data)
+              && request.resource.data.lastPaymentId is string
+              && request.resource.data.lastPaymentId != ''
+              && !exists(/databases/$(database)/documents/restaurants/$(restaurantId)/payments/$(request.resource.data.lastPaymentId))
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/payments/$(request.resource.data.lastPaymentId)).data.restaurantId == restaurantId
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/payments/$(request.resource.data.lastPaymentId)).data.orderId == orderId
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/payments/$(request.resource.data.lastPaymentId)).data.createdBy == request.auth.uid
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/payments/$(request.resource.data.lastPaymentId)).data.status in ['pending', 'completed', 'failed']
+              && (
+                getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/payments/$(request.resource.data.lastPaymentId)).data.status != 'completed'
+                || (
+                  request.resource.data.paidAmountMinor == resource.data.paidAmountMinor + getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/payments/$(request.resource.data.lastPaymentId)).data.amountMinor
+                  && request.resource.data.dueAmountMinor == (resource.data.grandTotalMinor > request.resource.data.paidAmountMinor ? resource.data.grandTotalMinor - request.resource.data.paidAmountMinor : 0)
+                  && request.resource.data.paymentStatus == (request.resource.data.dueAmountMinor == 0 ? 'paid' : 'partially_paid')
+                )
+                || (
+                  getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/payments/$(request.resource.data.lastPaymentId)).data.status in ['pending', 'failed']
+                  && request.resource.data.paidAmountMinor == resource.data.paidAmountMinor
+                  && request.resource.data.dueAmountMinor == resource.data.dueAmountMinor
+                  && request.resource.data.paymentStatus == resource.data.paymentStatus
+                )
               )
             )
           )
-          || isServer();
+        )
+        || (
+          isMemberWithRole(restaurantId, 'captain')
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && (isServer() || request.resource.data.updatedBy == request.auth.uid)
+          && request.resource.data.status != 'cancelled'
+          && request.resource.data.status != 'completed'
+          && isAllowedOrderStatusTransition(resource.data.status, request.resource.data.status)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'acceptedAt', 'acceptedBy', 'estimatedPrepMinutes', 'sentToKitchenAt',
+            'readyAt', 'readyBy', 'servedAt', 'servedBy', 'updatedAt', 'updatedBy',
+            'stockConsumptionStatus', 'stockConsumptionError', 'notes', 'customerSnapshot'
+          ])
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['stockConsumptionStatus'])
+            || (
+              request.resource.data.stockConsumptionStatus in ['consumed', 'not_applicable']
+              && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/order_stock_locks/$(orderId))
+              && get(/databases/$(database)/documents/restaurants/$(restaurantId)/order_stock_locks/$(orderId)).data.actorType == 'server'
+              && get(/databases/$(database)/documents/restaurants/$(restaurantId)/order_stock_locks/$(orderId)).data.status == request.resource.data.stockConsumptionStatus
+            )
+          )
+        )
+        || (
+          isMemberWithRole(restaurantId, 'kitchen')
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.status != 'cancelled'
+          && isAllowedOrderStatusTransition(resource.data.status, request.resource.data.status)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'sentToKitchenAt', 'readyAt', 'readyBy', 'servedAt', 'servedBy',
+            'updatedAt', 'updatedBy'
+          ])
+        );
 
-        allow delete: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRole(restaurantId, 'manager');
+        allow delete: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+          && resource.data.restaurantId == restaurantId
+          && resource.data.status == 'draft'
+          && (!('paymentStatus' in resource.data) || resource.data.paymentStatus == 'unpaid')
+          && (!('paidAmountMinor' in resource.data) || resource.data.paidAmountMinor == 0)
+          && (!('stockConsumptionStatus' in resource.data) || resource.data.stockConsumptionStatus in ['not_applicable', 'failed']);
       }
 
       // ==========================================================
@@ -243,15 +538,51 @@ service cloud.firestore {
       // ==========================================================
 
       match /kots/{kotId} {
-        allow read: if canAccessRestaurant(restaurantId)
-          || (resource != null && resource.data.orderType in ['takeaway', 'delivery']);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
-        allow create: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain'])
-          || isServer();
+        // KOT creation is permitted for trusted server authority or verified staff/kitchen/owner.
+        allow create: if (
+          isServer()
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == kotId
+          && request.resource.data.orderId is string
+          && request.resource.data.createdBy is string
+          && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId))
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.restaurantId == restaurantId
+        ) || (
+          isSignedIn()
+          && (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'captain', 'kitchen']))
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == kotId
+          && request.resource.data.orderId is string
+          && request.resource.data.createdBy == request.auth.uid
+        );
 
-        allow update: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'kitchen', 'captain']);
+        allow update: if (isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRoles(restaurantId, ['manager', 'kitchen', 'captain']))
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.orderId == resource.data.orderId
+          && request.resource.data.orderId is string
+          && (isServer() || request.resource.data.updatedBy == request.auth.uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'sentToKitchenAt', 'preparingAt', 'readyAt', 'servedAt',
+            'updatedBy', 'updatedAt'
+          ])
+          && isAllowedOrderStatusTransition(resource.data.status, request.resource.data.status)
+        || (
+          (isOwnerOfRestaurant(restaurantId) || isMemberWithRoles(restaurantId, ['manager', 'kitchen', 'captain']))
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.orderId == resource.data.orderId
+          && (isServer() || (request.resource.data.updatedBy == request.auth.uid && request.resource.data.cancelledBy == request.auth.uid))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'items', 'status', 'cancellationReason', 'cancelledAt', 'cancelledBy', 'updatedBy', 'updatedAt'
+          ])
+          && request.resource.data.status == 'cancelled'
+          && resource.data.status != 'served'
+          && isAllowedOrderStatusTransition(resource.data.status, 'cancelled')
+        );
 
         allow delete: if isOwnerOfRestaurant(restaurantId)
           || isMemberWithRole(restaurantId, 'manager');
@@ -262,16 +593,82 @@ service cloud.firestore {
       // ==========================================================
 
       match /payments/{paymentId} {
-        allow read: if isOwnerOfRestaurant(restaurantId)
+        allow read: if isServer() || isOwnerOfRestaurant(restaurantId)
           || isMemberWithRoles(restaurantId, ['manager', 'cashier', 'accountant']);
 
-        allow create: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRoles(restaurantId, ['manager', 'cashier']);
+        allow create: if (
+          (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == paymentId
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.orderId is string
+          && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId))
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.restaurantId == restaurantId
+          && request.resource.data.amountMinor is number
+          && request.resource.data.amountMinor > 0
+          && request.resource.data.amountMinor % 1 == 0
+          && request.resource.data.status in ['pending', 'completed', 'failed']
+          && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.lastPaymentId == paymentId
+          && (
+            request.resource.data.status != 'completed'
+            || (
+              getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor
+                == get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor + request.resource.data.amountMinor
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.dueAmountMinor
+                == (getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.grandTotalMinor > getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor
+                  ? getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.grandTotalMinor - getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor
+                  : 0)
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paymentStatus
+                == (getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.dueAmountMinor == 0 ? 'paid' : 'partially_paid')
+            )
+            || (
+              request.resource.data.status in ['pending', 'failed']
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor == get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.dueAmountMinor == get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.dueAmountMinor
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paymentStatus == get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paymentStatus
+            )
+          )
+        )
+        || (
+          isMemberWithRole(restaurantId, 'cashier')
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == paymentId
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.orderId is string
+          && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId))
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.restaurantId == restaurantId
+          && request.resource.data.amountMinor is number
+          && request.resource.data.amountMinor > 0
+          && request.resource.data.amountMinor % 1 == 0
+          && request.resource.data.status in ['pending', 'completed', 'failed']
+          && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.lastPaymentId == paymentId
+          && (
+            request.resource.data.status != 'completed'
+            || (
+              getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor
+                == get(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor + request.resource.data.amountMinor
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.dueAmountMinor
+                == (getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.grandTotalMinor > getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor
+                  ? getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.grandTotalMinor - getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paidAmountMinor
+                  : 0)
+              && getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.paymentStatus
+                == (getAfter(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(request.resource.data.orderId)).data.dueAmountMinor == 0 ? 'paid' : 'partially_paid')
+            )
+          )
+        );
 
-        allow update: if isOwnerOfRestaurant(restaurantId)
-          || isMemberWithRole(restaurantId, 'manager');
+        allow update: if (
+          (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.orderId == resource.data.orderId
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'refundReason', 'refundedAt', 'refundedBy', 'updatedBy', 'updatedAt'
+          ])
+        );
 
-        allow delete: if isOwnerOfRestaurant(restaurantId);
+        allow delete: if false; // Payment records are append-only; use refund status updates.
       }
 
       // ==========================================================
@@ -285,7 +682,7 @@ service cloud.firestore {
             && request.resource.data.actorUid == request.auth.uid)
           || isServer();
 
-        allow read: if isOwnerOfRestaurant(restaurantId)
+        allow read: if isServer() || isOwnerOfRestaurant(restaurantId)
           || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
 
         allow update, delete: if false;
@@ -296,9 +693,18 @@ service cloud.firestore {
       // ==========================================================
 
       match /devices/{deviceId} {
-        allow read: if canAccessRestaurant(restaurantId);
-        allow create, update: if canAccessRestaurant(restaurantId)
-          && request.resource.data.restaurantId == restaurantId;
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
+        allow create: if (isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRole(restaurantId, 'manager')
+          || isMemberWithRoles(restaurantId, ['cashier', 'captain']))
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.deviceId == deviceId;
+
+        allow update: if (isOwnerOfRestaurant(restaurantId)
+          || isMemberWithRole(restaurantId, 'manager')
+          || isMemberWithRoles(restaurantId, ['cashier', 'captain']))
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.deviceId == resource.data.deviceId;
         allow delete: if isOwnerOfRestaurant(restaurantId)
           || isMemberWithRole(restaurantId, 'manager');
       }
@@ -308,13 +714,69 @@ service cloud.firestore {
       // ==========================================================
  
        match /idempotency/{key} {
-         allow read, write: if canAccessRestaurant(restaurantId)
-           || isServer();
+         allow read: if isServer() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+         allow create: if (
+             isServer()
+             && request.resource.data.restaurantId == restaurantId
+             && request.resource.data.id == key
+             && request.resource.data.createdBy == request.auth.uid
+             && request.resource.data.operation is string
+             && request.resource.data.requestSignature is string
+           ) || (
+             canAccessRestaurant(restaurantId)
+             && request.resource.data.restaurantId == restaurantId
+             && request.resource.data.id == key
+             && request.resource.data.createdBy == request.auth.uid
+             && request.resource.data.operation is string
+             && request.resource.data.requestSignature is string
+           );
+         allow update: if (
+             isServer()
+             && request.resource.data.restaurantId == resource.data.restaurantId
+             && request.resource.data.id == resource.data.id
+             && request.resource.data.createdBy == resource.data.createdBy
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'targetEntityId', 'responseSnapshot', 'errorMessage', 'updatedAt', 'lockedAt'])
+           ) || (
+             canAccessRestaurant(restaurantId)
+             && request.resource.data.restaurantId == resource.data.restaurantId
+             && request.resource.data.id == resource.data.id
+             && request.resource.data.createdBy == resource.data.createdBy
+             && resource.data.createdBy == request.auth.uid
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'targetEntityId', 'responseSnapshot', 'errorMessage', 'updatedAt', 'lockedAt'])
+           );
        }
  
        match /idempotencyKeys/{key} {
-         allow read, write: if canAccessRestaurant(restaurantId)
-           || isServer();
+         allow read: if isServer() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+         allow create: if (
+             isServer()
+             && request.resource.data.restaurantId == restaurantId
+             && request.resource.data.id == key
+             && request.resource.data.createdBy == request.auth.uid
+             && request.resource.data.operation is string
+             && request.resource.data.requestSignature is string
+           ) || (
+             canAccessRestaurant(restaurantId)
+             && request.resource.data.restaurantId == restaurantId
+             && request.resource.data.id == key
+             && request.resource.data.createdBy == request.auth.uid
+             && request.resource.data.operation is string
+             && request.resource.data.requestSignature is string
+           );
+         allow update: if (
+             isServer()
+             && request.resource.data.restaurantId == resource.data.restaurantId
+             && request.resource.data.id == resource.data.id
+             && request.resource.data.createdBy == resource.data.createdBy
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'targetEntityId', 'responseSnapshot', 'errorMessage', 'updatedAt', 'lockedAt'])
+           ) || (
+             canAccessRestaurant(restaurantId)
+             && request.resource.data.restaurantId == resource.data.restaurantId
+             && request.resource.data.id == resource.data.id
+             && request.resource.data.createdBy == resource.data.createdBy
+             && resource.data.createdBy == request.auth.uid
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'targetEntityId', 'responseSnapshot', 'errorMessage', 'updatedAt', 'lockedAt'])
+           );
        }
 
        // ==========================================================
@@ -322,7 +784,21 @@ service cloud.firestore {
        // ==========================================================
 
        match /order_stock_locks/{lockId} {
-         allow read, write: if canAccessRestaurant(restaurantId) || isServer();
+ allow read: if isServer() || canAccessRestaurant(restaurantId);
+         allow create: if isServer()
+           && request.resource.data.restaurantId == restaurantId
+           && request.resource.data.orderId == lockId
+           && request.resource.data.actorUid == request.auth.uid
+           && request.resource.data.actorType == 'server'
+           && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/orders/$(lockId))
+           && request.resource.data.status in ['consumed', 'not_applicable'];
+         allow update: if isServer()
+           && request.resource.data.restaurantId == resource.data.restaurantId
+           && request.resource.data.orderId == resource.data.orderId
+           && request.resource.data.actorUid == resource.data.actorUid
+           && request.resource.data.actorType == resource.data.actorType
+           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reversedAt', 'reversedBy', 'reversalReason', 'updatedAt']);
+         allow delete: if false;
        }
 
       // ==========================================================
@@ -330,14 +806,36 @@ service cloud.firestore {
       // ==========================================================
 
       match /inventoryItems/{itemId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
         allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
-          && request.resource.data.restaurantId == restaurantId;
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == itemId
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.currentQuantity is number
+          && request.resource.data.currentQuantity >= 0;
 
-        allow update: if (canAccessRestaurant(restaurantId) || isServer())
+        // Inventory master-data updates never mutate currentQuantity. Stock balance changes
+        // only through the stock movement / trusted server workflows.
+        allow update: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == resource.data.restaurantId
-          && request.resource.data.id == resource.data.id;
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name', 'normalizedName', 'sku', 'unit', 'minimumQuantity', 'reorderQuantity',
+            'costPerUnitPaise', 'active', 'status', 'updatedBy', 'updatedAt'
+          ])
+          && request.resource.data.updatedBy == request.auth.uid;
+
+        allow update: if isServer()
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.updatedBy is string
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentQuantity', 'updatedAt', 'updatedBy']);
 
         allow delete: if isOwnerOfRestaurant(restaurantId);
       }
@@ -347,12 +845,31 @@ service cloud.firestore {
       // ==========================================================
 
       match /stockMovements/{movementId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
-        allow create: if (canAccessRestaurant(restaurantId) || isServer())
-          && request.resource.data.restaurantId == restaurantId;
+        allow create: if (
+          isServer()
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == movementId
+          && request.resource.data.actorUid is string
+        ) || (
+          (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == movementId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.type == 'opening'
+          && request.resource.data.inventoryItemId is string
+          && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/inventoryItems/$(request.resource.data.inventoryItemId))
+          && get(/databases/$(database)/documents/restaurants/$(restaurantId)/inventoryItems/$(request.resource.data.inventoryItemId)).data.restaurantId == restaurantId
+        );
 
-        allow update, delete: if false; // Historical stock movements are strictly immutable
+        // Historical movements are immutable except for the single server-owned reversal link.
+        allow update: if isServer()
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reversedByMovementId'])
+          && request.resource.data.reversedByMovementId is string;
+        allow delete: if false;
       }
 
       // ==========================================================
@@ -360,7 +877,7 @@ service cloud.firestore {
       // ==========================================================
 
       match /suppliers/{supplierId} {
-        allow read: if isOwnerOfRestaurant(restaurantId)
+        allow read: if isServer() || isOwnerOfRestaurant(restaurantId)
           || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
 
         allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
@@ -378,15 +895,24 @@ service cloud.firestore {
       // ==========================================================
 
       match /purchaseOrders/{purchaseOrderId} {
-        allow read: if isOwnerOfRestaurant(restaurantId)
+        allow read: if isServer() || isOwnerOfRestaurant(restaurantId)
           || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
 
         allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == restaurantId;
 
-        allow update: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+        allow update: if (
+          (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == resource.data.restaurantId
-          && request.resource.data.purchaseOrderId == resource.data.purchaseOrderId;
+          && request.resource.data.purchaseOrderId == resource.data.purchaseOrderId
+        ) || (
+            isServer()
+            && request.resource.data.restaurantId == resource.data.restaurantId
+            && request.resource.data.purchaseOrderId == resource.data.purchaseOrderId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'items', 'updatedAt', 'updatedBy'])
+            && request.resource.data.updatedBy == request.auth.uid
+            && request.resource.data.status in ['submitted', 'partiallyReceived', 'received']
+          );
 
         allow delete: if isOwnerOfRestaurant(restaurantId);
       }
@@ -396,12 +922,21 @@ service cloud.firestore {
       // ==========================================================
 
       match /purchaseReceivings/{receivingId} {
-        allow read: if isOwnerOfRestaurant(restaurantId)
+        allow read: if isServer() || isOwnerOfRestaurant(restaurantId)
           || isMemberWithRoles(restaurantId, ['manager', 'accountant']);
 
-        allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
+        allow create: if (
+          (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == restaurantId
-          && request.resource.data.actorUid == request.auth.uid;
+          && request.resource.data.id == receivingId
+          && request.resource.data.actorUid == request.auth.uid
+        ) || (
+            isServer()
+            && request.resource.data.restaurantId == restaurantId
+            && request.resource.data.id == receivingId
+            && request.resource.data.actorUid == request.auth.uid
+            && request.resource.data.purchaseOrderId is string
+          );
 
         allow update, delete: if false; // Historical receiving records are strictly immutable
       }
@@ -411,14 +946,25 @@ service cloud.firestore {
       // ==========================================================
 
       match /recipes/{recipeId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
         allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
-          && request.resource.data.restaurantId == restaurantId;
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == recipeId
+          && request.resource.data.recipeId == recipeId
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.updatedBy == request.auth.uid;
 
         allow update: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == resource.data.restaurantId
-          && request.resource.data.id == resource.data.id;
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.recipeId == resource.data.recipeId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'ingredients', 'estimatedCostPaise', 'status', 'notes', 'updatedAt', 'updatedBy'
+          ])
+          && request.resource.data.updatedBy == request.auth.uid;
 
         allow delete: if isOwnerOfRestaurant(restaurantId);
       }
@@ -428,15 +974,26 @@ service cloud.firestore {
       // ==========================================================
 
       match /stockConsumptions/{consumptionId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
-        allow create: if (canAccessRestaurant(restaurantId) || isServer())
-          && request.resource.data.restaurantId == restaurantId;
+        allow create: if isServer()
+          && request.resource.data.restaurantId == restaurantId
+          && request.resource.data.id == consumptionId
+          && request.resource.data.consumptionId == consumptionId
+          && request.resource.data.orderId is string
+          && request.resource.data.inventoryItemId is string
+          && request.resource.data.status == 'consumed';
 
-        allow update: if (canAccessRestaurant(restaurantId) || isServer())
-          && request.resource.data.restaurantId == resource.data.restaurantId;
+        // Only the trusted stock-processing backend can reverse/adjust consumption records.
+        allow update: if isServer()
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.consumptionId == resource.data.consumptionId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'reversedAt', 'reversedBy', 'reversalMovementId', 'reversalReason', 'reversedQuantity', 'updatedAt'
+          ]);
 
-        allow delete: if false; // Consumptions cannot be deleted to preserve audit trail
+        allow delete: if false;
       }
 
       // ==========================================================
@@ -444,7 +1001,7 @@ service cloud.firestore {
       // ==========================================================
 
       match /printers/{printerId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
         allow create: if (isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager'))
           && request.resource.data.restaurantId == restaurantId;
@@ -456,7 +1013,7 @@ service cloud.firestore {
       }
 
       match /printJobs/{jobId} {
-        allow read: if canAccessRestaurant(restaurantId);
+        allow read: if isServer() || canAccessRestaurant(restaurantId);
 
         allow create: if canAccessRestaurant(restaurantId)
           && request.resource.data.restaurantId == restaurantId;
@@ -467,6 +1024,7 @@ service cloud.firestore {
         allow delete: if isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager');
       }
 
+
       // ==========================================================
       // SUBSCRIPTION & TRIAL
       // Owner/Server controlled, immutable history, strict tenant scoping
@@ -475,20 +1033,21 @@ service cloud.firestore {
       match /subscription/{subDocId} {
         allow read: if canAccessRestaurant(restaurantId) || isServer();
 
-        allow create, update: if (isOwnerOfRestaurant(restaurantId) || isServer())
+        allow create, update: if (isServer() || isOwnerOfRestaurant(restaurantId))
           && request.resource.data.restaurantId == restaurantId;
 
-        allow delete: if false; // Subscriptions must never be deleted
+        allow delete: if false;
       }
 
       match /subscriptionHistory/{historyId} {
         allow read: if canAccessRestaurant(restaurantId) || isServer();
 
-        allow create: if (isOwnerOfRestaurant(restaurantId) || isServer())
+        allow create: if (isServer() || isOwnerOfRestaurant(restaurantId))
           && request.resource.data.restaurantId == restaurantId;
 
-        allow update, delete: if false; // Billing history is strictly immutable
+        allow update, delete: if false;
       }
+
     }
 
     // ============================================================
@@ -498,9 +1057,12 @@ service cloud.firestore {
     // ============================================================
     match /publicRestaurants/{restaurantId} {
       allow read: if true;
-      allow write: if isSignedIn() && (
+      allow create: if isSignedIn() && (
         isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager')
-      );
+      ) && request.resource.data.restaurantId == restaurantId;
+      allow update: if isSignedIn() && (
+        isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager')
+      ) && request.resource.data.restaurantId == resource.data.restaurantId;
     }
 
     // ============================================================

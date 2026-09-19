@@ -12,6 +12,7 @@
 import { BillingCycle, PaymentProviderType } from '../types/subscription';
 import { getPlanById } from '../config/subscriptionPlans';
 import { auth } from '../config/firebase';
+import { getApiUrl } from '../utils/apiConfig';
 
 export interface PaymentOrderParams {
   restaurantId: string;
@@ -109,7 +110,7 @@ export class RazorpaySubscriptionPaymentProvider implements SubscriptionPaymentP
       const token = user ? await user.getIdToken() : '';
 
       if (token && typeof window !== 'undefined' && window.fetch) {
-        const res = await fetch('/api/subscription/create-order', {
+        const res = await fetch(getApiUrl('/api/subscription/create-order'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -151,22 +152,10 @@ export class RazorpaySubscriptionPaymentProvider implements SubscriptionPaymentP
       if (err.message && (err.message.includes('Invalid plan') || err.message.includes('PRICE_MISMATCH'))) {
         throw err;
       }
-      console.warn('[Razorpay Provider] Falling back to client-safe sandbox order:', err?.message || err);
+      throw new Error(`Razorpay checkout unavailable: ${err?.message || 'server error'}`);
     }
 
-    // Local / Sandbox / Test fallback
-    const simulatedOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    return {
-      providerOrderId: simulatedOrderId,
-      amountPaise,
-      currency: plan.currency,
-      currencySymbol: plan.currencySymbol,
-      provider: this.type,
-      checkoutToken: simulatedOrderId,
-      keyId: 'rzp_test_placeholder',
-      planId: params.planId,
-      billingCycle: params.billingCycle
-    };
+    throw new Error('Razorpay checkout unavailable. No payment order was created.');
   }
 
   async verifyPayment(params: PaymentVerificationParams): Promise<PaymentVerificationResult> {
@@ -183,8 +172,9 @@ export class RazorpaySubscriptionPaymentProvider implements SubscriptionPaymentP
       const user = auth.currentUser;
       const token = user ? await user.getIdToken() : '';
 
-      if (token && typeof window !== 'undefined' && window.fetch) {
-        const res = await fetch('/api/subscription/verify-and-activate', {
+      const isTest = typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
+      if (token && typeof window !== 'undefined' && window.fetch && !isTest) {
+        const res = await fetch(getApiUrl('/api/subscription/verify-and-activate'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -222,23 +212,6 @@ export class RazorpaySubscriptionPaymentProvider implements SubscriptionPaymentP
       console.warn('[Razorpay Provider] Server verification endpoint call failed:', err);
     }
 
-    // Simulation / test environment verification
-    const isValidFormat =
-      params.signature.length >= 8 &&
-      (params.signature.startsWith('sig_') ||
-        params.signature.startsWith('valid_') ||
-        params.signature.includes('valid') ||
-        params.signature.includes('test') ||
-        params.signature.length === 64);
-
-    if (isValidFormat) {
-      return {
-        verified: true,
-        subscriptionId: params.providerOrderId,
-        transactionId: params.paymentId
-      };
-    }
-
     return {
       verified: false,
       subscriptionId: '',
@@ -256,6 +229,10 @@ export class MockSubscriptionGatewayProvider implements SubscriptionPaymentProvi
   type: PaymentProviderType = 'mock_gateway';
 
   async createPaymentOrder(params: PaymentOrderParams): Promise<PaymentOrderResult> {
+    const isTestRuntime = typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
+    if (!isTestRuntime) {
+      throw new Error('Mock payment provider is disabled outside test environments.');
+    }
     const plan = getPlanById(params.planId);
     const amountPaise =
       params.billingCycle === 'annual' ? plan.priceAnnualPaise : plan.priceMonthlyPaise;
@@ -275,6 +252,15 @@ export class MockSubscriptionGatewayProvider implements SubscriptionPaymentProvi
   }
 
   async verifyPayment(params: PaymentVerificationParams): Promise<PaymentVerificationResult> {
+    const isTestRuntime = typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
+    if (!isTestRuntime) {
+      return {
+        verified: false,
+        subscriptionId: '',
+        transactionId: '',
+        error: 'Mock payment provider is disabled outside test environments.'
+      };
+    }
     if (!params.signature || params.signature.trim() === '') {
       return {
         verified: false,

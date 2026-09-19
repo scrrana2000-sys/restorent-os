@@ -27,10 +27,12 @@ import {
   QrCode,
   Eye,
   EyeOff,
-  Printer
+  Printer,
+  Lock
 } from 'lucide-react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { staffService } from '../services/staffService';
 import { getPublicAppOrigin, buildInvitationUrl, buildPublicUrl } from '../utils/urlUtils';
 import { RestaurantMember, StaffRole } from '../types/auth';
@@ -90,11 +92,26 @@ export const StaffPage: React.FC = () => {
   const { restaurant } = useRestaurant();
   const { user, profile } = useAuth();
 
+  let entitlements: any = null;
+  let openPaymentModal: any = null;
+  try {
+    const subContext = useSubscription();
+    entitlements = subContext?.entitlements;
+    openPaymentModal = subContext?.openPaymentModal;
+  } catch {
+    // Fallback
+  }
+
+  const maxStaff = entitlements?.plan?.limits?.maxStaff || 5;
+  const planName = entitlements?.plan?.name || 'Starter';
+
   const [staffList, setStaffList] = useState<RestaurantMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const isStaffLimitReached = staffList.length >= maxStaff;
 
   // Notification banners
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -326,7 +343,20 @@ export const StaffPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div
+            id="staff-quota-badge"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 ${
+              isStaffLimitReached
+                ? 'bg-amber-50 text-amber-900 border-amber-300'
+                : 'bg-slate-50 text-slate-700 border-slate-200'
+            }`}
+          >
+            <span>Staff:</span>
+            <span className="font-mono">{staffList.length} / {maxStaff}</span>
+            <span className="text-[10px] text-slate-500 font-medium">({planName})</span>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -339,15 +369,33 @@ export const StaffPage: React.FC = () => {
           </Button>
 
           {canManageStaff && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              <UserPlus className="w-4 h-4" />
-              Add Staff Member
-            </Button>
+            isStaffLimitReached ? (
+              <button
+                type="button"
+                id="upgrade-staff-limit-btn"
+                onClick={() => {
+                  if (openPaymentModal) {
+                    const nextPlan = maxStaff <= 5 ? 'growth' : 'pro';
+                    openPaymentModal(nextPlan, 'annual');
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
+                title={`Staff limit of ${maxStaff} reached on ${planName} plan. Upgrade to add more.`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Upgrade for More Staff</span>
+              </button>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsAddModalOpen(true)}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                <UserPlus className="w-4 h-4" />
+                Add Staff Member
+              </Button>
+            )
           )}
         </div>
       </div>

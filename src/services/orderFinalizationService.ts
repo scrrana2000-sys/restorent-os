@@ -43,6 +43,26 @@ export class OrderFinalizationService {
     }
 
     const resolvedUserId = actorUid || auth.currentUser?.uid || 'system';
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to finalize an order.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch((await import('../utils/apiConfig')).getApiUrl('/api/orders/finalize'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ restaurantId: cleanRestaurantId, orderId: cleanOrderId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.result) {
+        throw new Error(payload?.message || 'Order finalization failed.');
+      }
+      return payload.result as { orderCompleted: boolean; sessionClosed: boolean };
+    }
+
     let orderCompleted = false;
     let sessionClosed = false;
 

@@ -18,7 +18,8 @@ import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { OrderStatusTimeline } from './OrderStatusTimeline';
 import {
   getOrderForTracking,
-  subscribeToOrderTracking
+  subscribeToOrderTracking,
+  getTrackedOrders
 } from '../../services/customerOrderTrackingService';
 import { formatMoney } from '../../utils/money';
 import { useModalBackHandler } from '../../hooks/useModalBackHandler';
@@ -51,6 +52,11 @@ export const CustomerOrderTrackingModal: React.FC<CustomerOrderTrackingModalProp
 
   const effectiveRestaurantId = propRestaurantId || initialOrder?.restaurantId;
   const effectiveOrderId = propOrderId || initialOrder?.id;
+  const trackingToken = effectiveRestaurantId && effectiveOrderId
+    ? (getTrackedOrders(currentUid).find((ref) => ref.restaurantId === effectiveRestaurantId && ref.orderId === effectiveOrderId)?.trackingToken
+      || getTrackedOrders(null).find((ref) => ref.restaurantId === effectiveRestaurantId && ref.orderId === effectiveOrderId)?.trackingToken
+      || null)
+    : null;
 
   // Realtime subscription setup
   useEffect(() => {
@@ -63,7 +69,7 @@ export const CustomerOrderTrackingModal: React.FC<CustomerOrderTrackingModalProp
     setErrorMessage(null);
 
     // 1. Initial direct fetch for immediate display
-    getOrderForTracking(effectiveRestaurantId, effectiveOrderId, currentUid)
+    getOrderForTracking(effectiveRestaurantId, effectiveOrderId, currentUid, trackingToken)
       .then((loadedOrder) => {
         if (isMounted) {
           setOrder(loadedOrder);
@@ -99,14 +105,15 @@ export const CustomerOrderTrackingModal: React.FC<CustomerOrderTrackingModalProp
           setIsLiveActive(false);
         }
       },
-      currentUid
+      currentUid,
+      trackingToken
     );
 
     return () => {
       isMounted = false;
       unsubscribe();
     };
-  }, [isOpen, effectiveRestaurantId, effectiveOrderId, currentUid]);
+  }, [isOpen, effectiveRestaurantId, effectiveOrderId, currentUid, trackingToken]);
 
   // Back button handling
   useModalBackHandler(isOpen, onClose, 'customer-order-tracking-modal');
@@ -115,7 +122,8 @@ export const CustomerOrderTrackingModal: React.FC<CustomerOrderTrackingModalProp
 
   const handleOpenInvoice = () => {
     if (!order) return;
-    const url = buildPublicUrl(`?bill=${order.id}&rest=${order.restaurantId}`);
+    const accessToken = trackingToken || order.customerTrackingToken || null;
+    const url = buildPublicUrl(`?bill=${encodeURIComponent(order.id)}&rest=${encodeURIComponent(order.restaurantId)}${accessToken ? `&accessToken=${encodeURIComponent(accessToken)}` : ''}`);
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -189,7 +197,7 @@ export const CustomerOrderTrackingModal: React.FC<CustomerOrderTrackingModalProp
                   setIsLoading(true);
                   setErrorMessage(null);
                   if (effectiveRestaurantId && effectiveOrderId) {
-                    getOrderForTracking(effectiveRestaurantId, effectiveOrderId, currentUid)
+                    getOrderForTracking(effectiveRestaurantId, effectiveOrderId, currentUid, trackingToken)
                       .then(setOrder)
                       .catch((e) => setErrorMessage(e.message))
                       .finally(() => setIsLoading(false));

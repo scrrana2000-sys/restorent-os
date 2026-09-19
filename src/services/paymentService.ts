@@ -187,7 +187,10 @@ export class PaymentService implements IPaymentService {
 
     const resolvedStatus: PaymentStatus = paymentInput.status || 'completed';
     const resolvedIdempotencyKey = idempotencyKey || paymentInput.idempotencyKey || null;
-    const resolvedUserId = paymentInput.createdBy || auth.currentUser?.uid || 'system';
+    const resolvedUserId = auth.currentUser?.uid;
+    if (!resolvedUserId) {
+      throw new Error('Authenticated user is required to record a payment.');
+    }
 
     // Validate payment fields
     const validation = validatePayment({
@@ -312,6 +315,7 @@ export class PaymentService implements IPaymentService {
               paidAmountMinor: newPaidAmountMinor,
               dueAmountMinor: newDueAmountMinor,
               paymentStatus: orderPaymentStatus,
+              lastPaymentId: newPaymentRef.id,
               updatedBy: resolvedUserId,
               updatedAt: serverTimestamp()
             };

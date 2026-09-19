@@ -504,9 +504,7 @@ describe('Role & Permission Foundation — M6 Phase 6A', () => {
 
         case 'orders':
           if (operation === 'get' || operation === 'list') return 'ALLOW';
-          if (operation === 'create') {
-            return isOwner || ['manager', 'cashier', 'captain'].includes(role || '') ? 'ALLOW' : 'DENY';
-          }
+          if (operation === 'create') return 'DENY'; // direct Firestore order creation is server-only
           if (operation === 'update') {
             if (data?.status === 'cancelled') {
               return isOwner || role === 'manager' ? 'ALLOW' : 'DENY';
@@ -623,19 +621,19 @@ describe('Role & Permission Foundation — M6 Phase 6A', () => {
 
       // Owner can do all operations
       expect(evaluateRules('restaurants', 'update', ownerUser, 'REST_1')).toBe('ALLOW');
-      expect(evaluateRules('orders', 'create', ownerUser, 'REST_1')).toBe('ALLOW');
+      expect(evaluateRules('orders', 'create', ownerUser, 'REST_1')).toBe('DENY');
       expect(evaluateRules('payments', 'create', ownerUser, 'REST_1')).toBe('ALLOW');
 
       // Manager can manage menu and cancel orders
       expect(evaluateRules('items', 'create', managerUser, 'REST_1')).toBe('ALLOW');
       expect(evaluateRules('orders', 'update', managerUser, 'REST_1', { status: 'cancelled' })).toBe('ALLOW');
 
-      // Cashier can create orders and process payments
-      expect(evaluateRules('orders', 'create', cashierUser, 'REST_1')).toBe('ALLOW');
+      // Cashier requests orders through the trusted API and can process payments
+      expect(evaluateRules('orders', 'create', cashierUser, 'REST_1')).toBe('DENY');
       expect(evaluateRules('payments', 'create', cashierUser, 'REST_1')).toBe('ALLOW');
 
-      // Captain can create orders and update table session link
-      expect(evaluateRules('orders', 'create', captainUser, 'REST_1')).toBe('ALLOW');
+      // Captain requests orders through the trusted API and can update table session link
+      expect(evaluateRules('orders', 'create', captainUser, 'REST_1')).toBe('DENY');
       expect(evaluateRules('tables', 'update', captainUser, 'REST_1', { onlySessionKeys: true })).toBe('ALLOW');
 
       // Kitchen can update KOT status

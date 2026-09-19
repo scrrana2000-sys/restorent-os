@@ -359,6 +359,11 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
   const user = auth.currentUser;
   if (!user) return false;
 
+  // Trusted backend requests are already authorized at the HTTP boundary and run
+  // under the dedicated server account. Do not force those requests through the
+  // browser staff-membership matrix.
+  if (user.email === 'system-server@restaurantos.app') return true;
+
   try {
     // 1. Fetch restaurant to check ownerId
     const restRef = doc(db, 'restaurants', cleanRestaurantId);

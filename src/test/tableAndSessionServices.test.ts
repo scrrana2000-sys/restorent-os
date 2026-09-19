@@ -54,6 +54,11 @@ vi.mock('../config/firebase', () => ({
   auth: { currentUser: { uid: 'TEST_AUTH_USER_999' } }
 }));
 
+vi.mock('../services/subscriptionService', () => ({
+  checkTableLimit: vi.fn(async () => ({ allowed: true, currentTables: 0, maxTables: 10, planName: 'Test' })),
+  ensureRestaurantTrial: vi.fn(async () => ({ isTrial: true, isActive: true }))
+}));
+
 import * as firestore from 'firebase/firestore';
 
 describe('TableService & TableSessionService (Phase 2C Service Tests)', () => {

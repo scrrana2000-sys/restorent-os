@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { RestaurantProvider, useRestaurant } from '../context/RestaurantContext';
-import { SubscriptionProvider } from '../context/SubscriptionContext';
+import { SubscriptionProvider, useSubscription } from '../context/SubscriptionContext';
 import { AdminLayout } from '../components/layout/AdminLayout';
 import { AdminView } from '../components/layout/Sidebar';
 import { LoginPage } from './LoginPage';
 import { PosPage } from './PosPage';
 import { SubscriptionView } from '../components/subscription/SubscriptionView';
 import { SubscriptionStatusBanner } from '../components/subscription/SubscriptionStatusBanner';
+import { PlanFeatureGate } from '../components/subscription/PlanFeatureGate';
+import { isViewPlanEntitled } from '../utils/subscriptionEntitlements';
+import { getEffectiveFeatureAccess } from '../utils/effectiveAccessResolver';
+import { getRestaurantOperatingProfile } from '../config/restaurantOperatingModes';
 import { lazy, Suspense } from 'react';
 import {
   UtensilsCrossed,
@@ -68,6 +72,7 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
   } = useRestaurant();
   const [currentView, setCurrentView] = useState<AdminView>('pos');
   const [showMultiSelector, setShowMultiSelector] = useState<boolean>(false);
+  const { entitlements } = useSubscription();
 
   // Onboarding form state
   const cleanOwnerFirstName = user?.displayName ? user.displayName.split(' ')[0] : user?.email ? user.email.split('@')[0] : 'Owner';
@@ -361,7 +366,14 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
     );
   }
 
+  const operatingProfile = getRestaurantOperatingProfile(restaurant);
   const allowedToView = isViewAllowed(userRole, currentView);
+  const effectiveAccess = getEffectiveFeatureAccess({
+    featureOrView: currentView,
+    entitlements,
+    operatingProfile,
+    userRole
+  });
 
   return (
     <AdminLayout
@@ -373,7 +385,24 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
       onBackToCustomerHome={handleBackToCustomer}
     >
       <SubscriptionStatusBanner onOpenPlans={() => setCurrentView('subscription')} />
-      {allowedToView ? (
+      {!allowedToView ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center max-w-md mx-auto my-12 shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4 border border-red-200/60">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900 mb-1.5">Unauthorized View</h2>
+          <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+            Your staff role ({userRole}) does not have permission to access the "{currentView}" panel.
+          </p>
+        </div>
+      ) : !effectiveAccess.allowed ? (
+        <PlanFeatureGate
+          featureId={currentView}
+          onNavigateToSubscription={() => setCurrentView('subscription')}
+          onBackToPos={() => setCurrentView('pos')}
+          onNavigateToRestaurantSetup={() => setCurrentView('restaurant')}
+        />
+      ) : (
         <Suspense fallback={<ViewFallback />}>
           {currentView === 'pos' && <PosPage onNavigate={setCurrentView} />}
           {currentView === 'captain' && <CaptainPage onNavigate={setCurrentView} />}
@@ -394,16 +423,6 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
           {currentView === 'audit' && <AuditPage />}
           {currentView === 'settings' && <RestaurantSetupPage />}
         </Suspense>
-      ) : (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center max-w-md mx-auto my-12 shadow-sm">
-          <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4 border border-red-200/60">
-            <ShieldAlert className="w-6 h-6" />
-          </div>
-          <h2 className="text-base font-bold text-slate-900 mb-1.5">Unauthorized View</h2>
-          <p className="text-xs text-slate-600 mb-6 leading-relaxed">
-            Your staff role ({userRole}) does not have permission to access the "{currentView}" panel.
-          </p>
-        </div>
       )}
     </AdminLayout>
   );

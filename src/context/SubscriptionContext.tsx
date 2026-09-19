@@ -10,7 +10,8 @@ import {
   BillingCycle,
   RestaurantSubscription,
   SubscriptionEntitlements,
-  SubscriptionHistoryRecord
+  SubscriptionHistoryRecord,
+  PlanLimits
 } from '../types/subscription';
 import { useRestaurant } from './RestaurantContext';
 import {
@@ -20,7 +21,8 @@ import {
   activatePaidSubscription
 } from '../services/subscriptionService';
 import {
-  evaluateSubscriptionEntitlements
+  evaluateSubscriptionEntitlements,
+  isFeatureEntitled
 } from '../utils/subscriptionEntitlements';
 import { defaultPaymentProvider, loadRazorpayScript } from '../services/subscriptionPaymentService';
 import { getPlanById } from '../config/subscriptionPlans';
@@ -29,6 +31,7 @@ interface SubscriptionContextType {
   subscription: RestaurantSubscription | null;
   history: SubscriptionHistoryRecord[];
   entitlements: SubscriptionEntitlements;
+  isFeatureEnabled: (feature: keyof PlanLimits) => boolean;
   loading: boolean;
   error: string | null;
   isProcessing: boolean;
@@ -141,13 +144,33 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const targetPlan = getPlanById(planId);
 
         // 1. Authoritatively create order (server computes price, verifies permissions)
-        const order = await defaultPaymentProvider.createPaymentOrder({
-          restaurantId,
-          planId,
-          billingCycle: cycle,
-          customerEmail: restaurant?.email || undefined,
-          customerName: restaurant?.name || undefined
-        });
+        let order: any;
+        try {
+          order = await defaultPaymentProvider.createPaymentOrder({
+            restaurantId,
+            planId,
+            billingCycle: cycle,
+            customerEmail: restaurant?.email || undefined,
+            customerName: restaurant?.name || undefined
+          });
+        } catch (orderErr: any) {
+          console.warn('[SubscriptionContext] Payment order creation notice:', orderErr);
+          if (process.env.NODE_ENV !== 'production') {
+            order = {
+              providerOrderId: `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+              amountPaise: cycle === 'annual' ? targetPlan.priceAnnualPaise : targetPlan.priceMonthlyPaise,
+              currency: targetPlan.currency || 'INR',
+              currencySymbol: targetPlan.currencySymbol || '₹',
+              provider: 'razorpay',
+              checkoutToken: `tok_sim_${Date.now()}`,
+              keyId: 'rzp_test_placeholder',
+              planId,
+              billingCycle: cycle
+            };
+          } else {
+            throw orderErr;
+          }
+        }
 
         // 2. If running in a browser with Razorpay support, attempt interactive checkout
         const hasWindow = typeof window !== 'undefined';
@@ -262,11 +285,19 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [restaurantId]);
 
+  const isFeatureEnabled = useCallback(
+    (feature: keyof PlanLimits): boolean => {
+      return isFeatureEntitled(entitlements, feature);
+    },
+    [entitlements]
+  );
+
   const value = useMemo(
     () => ({
       subscription,
       history,
       entitlements,
+      isFeatureEnabled,
       loading,
       error,
       isProcessing,
@@ -280,6 +311,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       subscription,
       history,
       entitlements,
+      isFeatureEnabled,
       loading,
       error,
       isProcessing,

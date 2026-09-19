@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Order } from '../types/order';
 import { Restaurant } from '../types/restaurant';
-import { orderService } from '../services/orderService';
-import { getRestaurantById } from '../services/restaurantService';
+import { getApiUrl } from '../utils/apiConfig';
 import { formatMoney } from '../utils/money';
 import { downloadBillPdf } from '../utils/pdfBillGenerator';
 import { extractBillParamsFromUrl } from '../utils/urlUtils';
@@ -39,23 +38,24 @@ export const PublicBillPage: React.FC = () => {
     async function loadBillData() {
       try {
         setLoading(true);
-        const { orderId, restaurantId, autoDownload } = params!;
-
-        let loadedOrder: Order | null = null;
-        let loadedRestaurant: Restaurant | null = null;
-
-        // If restaurantId is known
-        if (restaurantId) {
-          loadedRestaurant = await getRestaurantById(restaurantId);
-          loadedOrder = await orderService.getOrderById(restaurantId, orderId);
+        const { orderId, restaurantId, autoDownload, accessToken } = params! as any;
+        if (!restaurantId || !accessToken) {
+          throw new Error('This invoice link is missing its secure access token. Please request a new invoice link from the order confirmation screen.');
         }
 
-        if (!loadedOrder) {
-          setError(`Invoice #${orderId} could not be located. It may have been archived or removed.`);
-          setLoading(false);
-          return;
+        const response = await fetch(getApiUrl('/api/orders/public-bill'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'omit',
+          body: JSON.stringify({ restaurantId, orderId, accessToken })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload?.success || !payload?.order) {
+          throw new Error(payload?.message || 'Invoice could not be verified.');
         }
 
+        const loadedOrder = payload.order as Order;
+        const loadedRestaurant = (payload.restaurant || null) as Restaurant | null;
         setOrder(loadedOrder);
         setRestaurant(loadedRestaurant);
 

@@ -49,6 +49,8 @@ export interface PrintJob {
   status: PrintJobStatus;
   attemptCount: number;
   idempotencyKey: string;
+  createdBy?: string;
+  updatedBy?: string;
   errorMessage?: string;
   createdAt: Date | Timestamp | string;
   updatedAt: Date | Timestamp | string;

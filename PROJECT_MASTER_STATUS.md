@@ -1,3 +1,5 @@
+> **Release-candidate update — September 18, 2026:** The source has undergone additional production hardening after the historical status below. Current release gates include server-authoritative order/KOT creation, tokenized guest access, webhook retry-safe idempotency, server-only stock locks, stricter POS API validation, and CI-enforced security/typecheck/test/build verification. Fresh dependency-backed verification could not be executed in the sandbox because npm dependency installation timed out; use the CI gate before deployment.
+
 # RestaurantOS — Master Project Status & Governance
 
 ## 1. Master System Status

@@ -16,7 +16,9 @@ import { KOT } from '../types/kot';
 import { CartState, CartItem } from '../types/cart';
 import { RestaurantOperatingProfile } from '../config/restaurantOperatingModes';
 import { getApiUrl } from '../utils/apiConfig';
-import { auth } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import { getActivePlanEntitlements } from './subscriptionService';
+import { doc, getDoc } from 'firebase/firestore';
 
 export type { CheckoutValidationResult };
 
@@ -45,6 +47,7 @@ export interface SubmitCustomerOnlineOrderInput {
   operatingProfile?: RestaurantOperatingProfile;
   customerId?: string | null;
   customerEmail?: string | null;
+  customerTrackingToken?: string | null;
   idToken?: string;
 }
 
@@ -76,6 +79,84 @@ export function isValidPostalCode(postalCode: string): boolean {
 /**
  * Converts customer cart items into canonical CartState for OrderService.
  */
+async function buildAuthoritativeCustomerCartState(cart: CustomerCart, notes?: string): Promise<CartState> {
+  const cleanRestaurantId = String(cart.restaurantId || '').trim();
+  if (!cleanRestaurantId) throw new Error('Invalid restaurantId.');
+  if (!Array.isArray(cart.items) || cart.items.length === 0) throw new Error('Cart is empty.');
+  if (cart.items.length > 30) throw new Error('Maximum 30 unique items allowed per order.');
+
+  const items: CartItem[] = [];
+  for (const clientItem of cart.items) {
+    if (!Number.isInteger(Number(clientItem.quantity)) || Number(clientItem.quantity) < 1 || Number(clientItem.quantity) > 100) {
+      throw new Error(`Invalid quantity for item "${clientItem.name || clientItem.itemId}".`);
+    }
+
+    const itemRef = doc(db, 'restaurants', cleanRestaurantId, 'items', String(clientItem.itemId).trim());
+    const snap = await getDoc(itemRef);
+    if (!snap.exists()) throw new Error(`Item "${clientItem.name || clientItem.itemId}" is no longer available.`);
+    const data = snap.data() as MenuItem;
+    if (data.itemId && data.itemId !== snap.id) throw new Error(`Menu item identity mismatch for "${snap.id}".`);
+    if (data.restaurantId && data.restaurantId !== cleanRestaurantId) throw new Error('Item tenant mismatch.');
+    if (data.isActive === false || data.isAvailable === false) throw new Error(`"${data.name}" is no longer available.`);
+
+    const catalogPrice = Number(data.price);
+    const catalogTaxRate = Number(data.taxRate);
+    if (!Number.isFinite(catalogPrice) || catalogPrice < 0 || catalogPrice > 10000000) throw new Error(`Invalid price for "${data.name}".`);
+    if (!Number.isFinite(catalogTaxRate) || catalogTaxRate < 0 || catalogTaxRate > 100) throw new Error(`Invalid tax rate for "${data.name}".`);
+    let unitPriceMinor = Math.round(catalogPrice * 100);
+    let variantId: string | undefined;
+    let variantName: string | undefined;
+    if (clientItem.selectedVariantId || clientItem.selectedVariantName) {
+      const variants = Array.isArray(data.variants) ? data.variants : [];
+      const variant = variants.find((v) =>
+        (clientItem.selectedVariantId && v.id === clientItem.selectedVariantId) ||
+        (!clientItem.selectedVariantId && clientItem.selectedVariantName && v.name === clientItem.selectedVariantName)
+      );
+      if (!variant || variant.isAvailable === false) throw new Error(`Selected option for "${data.name}" is unavailable.`);
+      const variantPrice = Number(variant.price);
+      if (!Number.isFinite(variantPrice) || variantPrice < 0 || variantPrice > 10000000) throw new Error(`Invalid selected option price for "${data.name}".`);
+      unitPriceMinor = Math.round(variantPrice * 100);
+      variantId = variant.id;
+      variantName = variant.name;
+    }
+
+    const addons = Array.isArray(clientItem.selectedAddons) ? clientItem.selectedAddons : [];
+    const sourceAddons = Array.isArray(data.addons) ? data.addons : (Array.isArray(data.addOns) ? data.addOns : []);
+    const modifiers: OrderItemModifier[] = [];
+    for (const clientAddon of addons) {
+      const addon = sourceAddons.find((a) => a.id === clientAddon.addonId);
+      if (!addon || addon.isAvailable === false) throw new Error(`Selected add-on for "${data.name}" is unavailable.`);
+      const addonPrice = Number(addon.price);
+      if (!Number.isFinite(addonPrice) || addonPrice < 0 || addonPrice > 10000000) throw new Error(`Invalid selected add-on price for "${data.name}".`);
+      modifiers.push({ id: addon.id, name: addon.name, priceMinor: Math.round(addonPrice * 100) });
+    }
+
+    items.push({
+      cartItemId: clientItem.cartItemId || `cart-item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      itemId: snap.id,
+      nameSnapshot: data.name,
+      shortNameSnapshot: data.shortName || data.name,
+      imageUrlSnapshot: data.imageUrl || null,
+      foodTypeSnapshot: data.foodType || null,
+      unitPriceMinor,
+      taxRate: catalogTaxRate,
+      taxInclusive: Boolean(data.taxInclusive),
+      quantity: Number(clientItem.quantity),
+      notes: clientItem.itemNotes || '',
+      modifiers: modifiers.length ? modifiers : undefined
+    });
+
+    // Preserve the selected variant in the snapshot without trusting client pricing.
+    if (variantId && variantName && items[items.length - 1]) {
+      items[items.length - 1].modifiers = [
+        { id: variantId, name: `Option: ${variantName}`, priceMinor: 0 },
+        ...(items[items.length - 1].modifiers || [])
+      ];
+    }
+  }
+  return { items, notes: notes || '' };
+}
+
 export function mapCustomerCartToCartState(items: CustomerCartItem[], notes?: string): CartState {
   if (!items || items.length === 0) {
     return { items: [], notes: notes || '' };
@@ -370,7 +451,7 @@ export async function submitCustomerOnlineOrder(
     const response = await fetch(getApiUrl('/api/submit-online-order'), {
       method: 'POST',
       headers,
-      credentials: 'include',
+      credentials: 'omit',
       body: JSON.stringify({
         ...input,
         customerId: customerId || (auth.currentUser ? auth.currentUser.uid : null),
@@ -434,7 +515,7 @@ export async function submitCustomerOnlineOrder(
   let calculatedSubtotal = 0;
   for (const item of cart.items) {
     const qty = Number(item.quantity);
-    if (isNaN(qty) || qty <= 0) {
+    if (!Number.isInteger(qty) || isNaN(qty) || qty <= 0) {
       throw new Error(`Order Submission Failed: Invalid quantity for item "${item.name}".`);
     }
     if (qty > 100) {
@@ -460,7 +541,13 @@ export async function submitCustomerOnlineOrder(
   }
 
   // 3. Map Customer Cart to canonical CartState
-  const cartState = mapCustomerCartToCartState(cart!.items);
+  const restId = cart!.restaurantId;
+  const entitlements = await getActivePlanEntitlements(restId);
+  if (!entitlements.plan.limits.onlineOrdering) {
+    throw new Error(`Online ordering is not enabled on this restaurant's ${entitlements.plan.name} plan.`);
+  }
+
+  const cartState = await buildAuthoritativeCustomerCartState(cart!, undefined);
 
   // 4. Build CustomerSnapshot (historical checkout snapshot at order time)
   const customerSnapshot: CustomerSnapshot = {
@@ -502,6 +589,7 @@ export async function submitCustomerOnlineOrder(
     customerSnapshot,
     notes,
     clientRequestId,
+    customerTrackingToken: input.customerTrackingToken || null,
     operatingProfile: input.operatingProfile,
     restaurant: null
   });

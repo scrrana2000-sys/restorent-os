@@ -176,6 +176,11 @@ export class IdempotencyService {
     const docPath = idempotencyDocPath(cleanRestaurantId, cleanKey);
     const docRef = doc(db, docPath);
     const signature = createRequestSignature(payload);
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      throw new Error('Authenticated user is required for idempotency operations.');
+    }
+    const staleLeaseMs = 15 * 60 * 1000;
 
     if (transaction) {
       const snap = await transaction.get(docRef);
@@ -212,6 +217,16 @@ export class IdempotencyService {
         }
 
         if (record.status === 'pending') {
+          const lockedAt = typeof (record as any).lockedAt === 'number' ? (record as any).lockedAt : 0;
+          if (lockedAt > 0 && Date.now() - lockedAt > staleLeaseMs) {
+            transaction.set(docRef, {
+              status: 'pending',
+              lockedAt: Date.now(),
+              createdBy: userId,
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+            return { action: 'execute', recordRef: docRef };
+          }
           return { action: 'in_flight' };
         }
 
@@ -226,43 +241,57 @@ export class IdempotencyService {
       // via recordSuccess or recordFailure.
       return { action: 'execute', recordRef: docRef };
     } else {
-      // Non-transactional standalone read
-      let snap;
+      // Standalone calls atomically acquire the key before executing business logic.
+      // This closes the race where two independent browser retries both observe 'missing'.
       try {
-        snap = await getDoc(docRef);
+        return await runTransaction(db, async (tx) => {
+          const snap = await tx.get(docRef);
+          if (snap.exists()) {
+            const record = snap.data() as IdempotencyRecord;
+            if (record.restaurantId && record.restaurantId !== cleanRestaurantId) {
+              throw new Error('Cross-tenant idempotency violation.');
+            }
+            if (record.operation && record.operation !== operation) {
+              throw new Error('Idempotency operation mismatch.');
+            }
+            if (record.requestSignature && record.requestSignature !== signature) {
+              throw new Error('Idempotency payload divergence: payload tampering or signature mismatch detected.');
+            }
+            if (record.status === 'completed') {
+              return { action: 'return_cached', cachedResult: ((record.responseSnapshot ?? (record as any).result)) as TResult, record };
+            }
+            if (record.status === 'pending' || (record.status as any) === 'in_progress' || (record as any).in_flight) {
+              const lockedAt = typeof (record as any).lockedAt === 'number' ? (record as any).lockedAt : 0;
+              if (lockedAt > 0 && Date.now() - lockedAt > staleLeaseMs) {
+                tx.set(docRef, { status: 'pending', lockedAt: Date.now(), createdBy: userId, updatedAt: serverTimestamp() }, { merge: true });
+                return { action: 'execute', recordRef: docRef };
+              }
+              return { action: 'in_flight' };
+            }
+            if (record.status === 'failed') {
+              throw new Error(`Previous request with key "${cleanKey}" failed: ${record.errorMessage}`);
+            }
+          }
+
+          tx.set(docRef, {
+            id: cleanKey,
+            restaurantId: cleanRestaurantId,
+            operation,
+            requestSignature: signature,
+            status: 'pending',
+            targetEntityId: null,
+            responseSnapshot: null,
+            errorMessage: null,
+            createdBy: userId,
+            lockedAt: Date.now(),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          }, { merge: false });
+          return { action: 'execute', recordRef: docRef };
+        });
       } catch (err) {
-        throw handleFirestoreError(err, OperationType.GET, docPath);
+        throw handleFirestoreError(err, OperationType.CREATE, docPath);
       }
-
-      if (snap.exists()) {
-        const record = snap.data() as IdempotencyRecord;
-
-        if (record.restaurantId && record.restaurantId !== cleanRestaurantId) {
-          throw new Error(`Cross-tenant idempotency violation.`);
-        }
-        if (record.operation && record.operation !== operation) {
-          throw new Error(`Idempotency operation mismatch.`);
-        }
-        if (record.requestSignature && record.requestSignature !== signature) {
-          throw new Error(`Idempotency payload divergence: payload tampering or signature mismatch detected.`);
-        }
-
-        if (record.status === 'completed') {
-          return {
-            action: 'return_cached',
-            cachedResult: ((record.responseSnapshot ?? (record as any).result)) as TResult,
-            record
-          };
-        }
-        if (record.status === 'pending' || (record.status as any) === 'in_progress' || (record as any).in_flight) {
-          throw new Error('Request with this clientRequestId is currently in progress.');
-        }
-        if (record.status === 'failed') {
-          throw new Error(`Previous request with key "${cleanKey}" failed: ${record.errorMessage}`);
-        }
-      }
-
-      return { action: 'execute', recordRef: docRef };
     }
   }
 

@@ -19,6 +19,7 @@ import { validateTable } from '../utils/transactionValidation';
 import { tablesPath, tableDocPath } from '../utils/paths';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { auditService } from './auditService';
+import { checkTableLimit } from './subscriptionService';
 
 /**
  * Deterministically sorts tables:
@@ -96,7 +97,8 @@ export class TableService implements ITableService {
    * Creates a new physical Table in the restaurant.
    */
   async createTable(restaurantId: string, data: TableFormData, createdBy: string): Promise<Table> {
-    const path = tablesPath(restaurantId);
+    const cleanId = restaurantId.trim();
+    const path = tablesPath(cleanId);
     
     // Domain validation
     const validation = validateTable(data);
@@ -104,13 +106,19 @@ export class TableService implements ITableService {
       throw new Error(`Table validation failed: ${validation.error}`);
     }
 
+    // Active Plan Table Limit Enforcement
+    const quotaCheck = await checkTableLimit(cleanId);
+    if (!quotaCheck.allowed) {
+      throw new Error(quotaCheck.reason || `Table limit reached (${quotaCheck.maxTables} on ${quotaCheck.planName} plan). Please upgrade your plan to add more tables.`);
+    }
+
     try {
-      const colRef = collection(db, 'restaurants', restaurantId.trim(), 'tables');
+      const colRef = collection(db, 'restaurants', cleanId, 'tables');
       const newDocRef = doc(colRef);
       const now = new Date();
 
       const tableData: Omit<Table, 'id'> = {
-        restaurantId: restaurantId.trim(),
+        restaurantId: cleanId,
         name: data.name.trim(),
         tableNumber: data.tableNumber.trim(),
         floorOrArea: (data.floorOrArea || '').trim(),
@@ -125,8 +133,8 @@ export class TableService implements ITableService {
 
       await setDoc(newDocRef, tableData);
 
-      await auditService.logEvent(restaurantId.trim(), {
-        restaurantId: restaurantId.trim(),
+      await auditService.logEvent(cleanId, {
+        restaurantId: cleanId,
         entityType: 'table',
         entityId: newDocRef.id,
         action: 'table_created',

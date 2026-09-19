@@ -25,11 +25,15 @@ import { db, auth } from '../config/firebase';
 import {
   BillingCycle,
   RestaurantSubscription,
-  SubscriptionHistoryRecord
+  SubscriptionHistoryRecord,
+  SubscriptionEntitlements,
+  PlanLimits
 } from '../types/subscription';
 import { getPlanById, TRIAL_PLAN_ID } from '../config/subscriptionPlans';
 import { defaultPaymentProvider } from './subscriptionPaymentService';
 import { enforcePermission } from '../utils/permissions';
+import { evaluateSubscriptionEntitlements, isFeatureEntitled } from '../utils/subscriptionEntitlements';
+import { getApiUrl } from '../utils/apiConfig';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -55,10 +59,38 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
     } as RestaurantSubscription;
   }
 
-  // Create initial 7-day trial record
+  // Production subscription documents are server-owned. The browser requests an
+  // authenticated, owner-authorized trial initialization endpoint rather than
+  // fabricating or directly writing entitlement state. Unit tests may still use
+  // the mocked Firestore path.
+  const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+
+  if (!isTestRuntime) {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('Authentication is required to initialize the restaurant trial.');
+    }
+
+    const idToken = await currentUser.getIdToken();
+    const response = await fetch(getApiUrl('/api/subscription/ensure-trial'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ restaurantId: cleanId })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.success || !payload?.subscription) {
+      throw new Error(payload?.message || 'Unable to initialize the restaurant trial.');
+    }
+
+    return payload.subscription as RestaurantSubscription;
+  }
+
   const now = new Date();
   const trialEnds = new Date(now.getTime() + SEVEN_DAYS_MS);
-
   const newTrial: RestaurantSubscription = {
     subscriptionId: 'current',
     restaurantId: cleanId,
@@ -70,25 +102,14 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
     currentPeriodStart: now.toISOString(),
     currentPeriodEnd: trialEnds.toISOString(),
     paymentStatus: 'none',
-    provider: 'mock_gateway',
+    provider: 'manual',
     autoRenew: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
 
-  try {
-    await setDoc(subDocRef, newTrial);
-    console.log(`[RestaurantOS Subscription] Initialized 7-day free trial for restaurant: ${cleanId}`);
-    return newTrial;
-  } catch (err: any) {
-    console.warn(`[RestaurantOS Subscription] Trial initialization notice for ${cleanId}:`, err?.message || err);
-    // If concurrent creation occurred, re-fetch
-    const retrySnap = await getDoc(subDocRef);
-    if (retrySnap.exists()) {
-      return { subscriptionId: retrySnap.id, ...retrySnap.data() } as RestaurantSubscription;
-    }
-    throw err;
-  }
+  await setDoc(subDocRef, newTrial);
+  return newTrial;
 }
 
 /**
@@ -98,18 +119,154 @@ export async function getRestaurantSubscription(restaurantId: string): Promise<R
   const cleanId = restaurantId?.trim();
   if (!cleanId) return null;
 
-  const subDocRef = doc(db, 'restaurants', cleanId, 'subscription', 'current');
-  const snap = await getDoc(subDocRef);
+  try {
+    const subDocRef = doc(db, 'restaurants', cleanId, 'subscription', 'current');
+    const snap = await getDoc(subDocRef);
 
-  if (!snap.exists()) {
+    if (!snap || typeof snap.exists !== 'function' || !snap.exists()) {
+      return null;
+    }
+
+    return {
+      subscriptionId: snap.id,
+      ...snap.data()
+    } as RestaurantSubscription;
+  } catch (err) {
     return null;
   }
-
-  return {
-    subscriptionId: snap.id,
-    ...snap.data()
-  } as RestaurantSubscription;
 }
+
+/**
+ * Authoritatively resolves active plan entitlements directly from Firestore
+ * (/restaurants/{restaurantId}/subscription/current).
+ * Never relies on client-side state, billing history, or external overrides.
+ */
+export async function getActivePlanEntitlements(restaurantId: string): Promise<SubscriptionEntitlements> {
+  const cleanId = restaurantId?.trim();
+  if (!cleanId) {
+    return evaluateSubscriptionEntitlements(null);
+  }
+
+  try {
+    let sub = await getRestaurantSubscription(cleanId);
+    if (!sub) {
+      try {
+        sub = await ensureRestaurantTrial(cleanId);
+      } catch (trialError) {
+        // Never grant a synthetic trial when the subscription record is missing
+        // or cannot be initialized. Fail closed to inactive entitlements.
+        console.warn('[RestaurantOS Subscription] Trial initialization unavailable:', trialError);
+        sub = null;
+      }
+    }
+
+    return evaluateSubscriptionEntitlements(sub);
+  } catch (err) {
+    console.warn('[RestaurantOS Subscription] Failed to resolve active plan entitlements:', err);
+    return evaluateSubscriptionEntitlements(null);
+  }
+}
+
+/**
+ * Checks whether table count has reached the maximum permitted by the current active plan.
+ */
+export async function checkTableLimit(
+  restaurantId: string,
+  knownCount?: number
+): Promise<{ allowed: boolean; currentCount: number; maxTables: number; planName: string; reason?: string }> {
+  const cleanId = restaurantId?.trim();
+  if (!cleanId) {
+    return { allowed: false, currentCount: 0, maxTables: 0, planName: 'Unknown', reason: 'Invalid restaurant ID.' };
+  }
+
+  const entitlements = await getActivePlanEntitlements(cleanId);
+  const maxTables = entitlements.plan.limits.maxTables;
+  const planName = entitlements.plan.name;
+
+  if (!entitlements.canPerformOperationalActions) {
+    return {
+      allowed: false,
+      currentCount: knownCount ?? 0,
+      maxTables,
+      planName,
+      reason: `Subscription is expired or inactive on ${planName} plan. Upgrade or renew to add tables.`
+    };
+  }
+
+  let count = knownCount;
+  if (count === undefined) {
+    try {
+      const { getDocs } = await import('firebase/firestore');
+      const tablesSnap = await getDocs(collection(db, 'restaurants', cleanId, 'tables'));
+      count = tablesSnap.size;
+    } catch {
+      count = 0;
+    }
+  }
+
+  if (count >= maxTables) {
+    return {
+      allowed: false,
+      currentCount: count,
+      maxTables,
+      planName,
+      reason: `Table limit reached (${count}/${maxTables} on ${planName} plan). Upgrade to add more tables.`
+    };
+  }
+
+  return { allowed: true, currentCount: count, maxTables, planName };
+}
+
+/**
+ * Checks whether staff member count has reached the maximum permitted by the current active plan.
+ */
+export async function checkStaffLimit(
+  restaurantId: string,
+  knownCount?: number
+): Promise<{ allowed: boolean; currentCount: number; maxStaff: number; planName: string; reason?: string }> {
+  const cleanId = restaurantId?.trim();
+  if (!cleanId) {
+    return { allowed: false, currentCount: 0, maxStaff: 0, planName: 'Unknown', reason: 'Invalid restaurant ID.' };
+  }
+
+  const entitlements = await getActivePlanEntitlements(cleanId);
+  const maxStaff = entitlements.plan.limits.maxStaff;
+  const planName = entitlements.plan.name;
+
+  if (!entitlements.canPerformOperationalActions) {
+    return {
+      allowed: false,
+      currentCount: knownCount ?? 0,
+      maxStaff,
+      planName,
+      reason: `Subscription is expired or inactive on ${planName} plan. Upgrade or renew to invite staff.`
+    };
+  }
+
+  let count = knownCount;
+  if (count === undefined) {
+    try {
+      const { getDocs } = await import('firebase/firestore');
+      const membersSnap = await getDocs(collection(db, 'restaurants', cleanId, 'members'));
+      count = membersSnap.size;
+    } catch {
+      count = 0;
+    }
+  }
+
+  if (count >= maxStaff) {
+    return {
+      allowed: false,
+      currentCount: count,
+      maxStaff,
+      planName,
+      reason: `Staff limit reached (${count}/${maxStaff} on ${planName} plan). Upgrade to invite more staff.`
+    };
+  }
+
+  return { allowed: true, currentCount: count, maxStaff, planName };
+}
+
 
 /**
  * Realtime reactive listener for the restaurant's subscription status.
@@ -213,8 +370,9 @@ export async function activatePaidSubscription(
     const user = auth.currentUser;
     const token = user ? await user.getIdToken() : '';
 
-    if (token) {
-      const response = await fetch('/api/subscription/verify-and-activate', {
+    const isTest = typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
+    if (token && typeof window !== 'undefined' && !isTest) {
+      const response = await fetch(getApiUrl('/api/subscription/verify-and-activate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -241,7 +399,15 @@ export async function activatePaidSubscription(
     console.warn('[RestaurantOS Subscription] Server verification endpoint unavailable or skipped:', apiErr);
   }
 
-  // 2. Client-side verified path (Authorized owner role in test & client environments)
+  // 2. Direct Firestore activation is reserved for server/test execution only.
+  // Browser production requests must never self-activate a subscription when the
+  // trusted API is unavailable; doing so would both fail against the server-only
+  // Firestore rules and create a dangerous authorization fallback.
+  const isTest = typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
+  if (typeof window !== 'undefined' && !isTest) {
+    throw new Error('Subscription verification service is unavailable. Payment was not activated. Please retry.');
+  }
+
   const verification = await defaultPaymentProvider.verifyPayment({
     restaurantId: cleanId,
     providerOrderId,

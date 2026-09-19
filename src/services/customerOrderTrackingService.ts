@@ -1,4 +1,6 @@
 import { doc, getDoc, collection, query, where, getDocs, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { getApiUrl } from '../utils/apiConfig';
+import { auth } from '../config/firebase';
 import { db } from '../config/firebase';
 import { Order, OrderItem, OrderStatus, OrderType } from '../types/order';
 
@@ -34,6 +36,7 @@ export interface TrackedOrderReference {
   itemCount: number;
   placedAt: string; // ISO string
   customerId?: string | null;
+  trackingToken?: string | null;
 }
 
 const GUEST_STORAGE_KEY = 'restaurantos_guest_tracked_orders';
@@ -268,19 +271,66 @@ export function sanitizeCustomerOrder(order: Order): Order {
   };
 }
 
+function isTestRuntime(): boolean {
+  return typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
+}
+
+function getGuestTrackingToken(restaurantId: string, orderId: string): string | null {
+  const match = getTrackedOrders(null).find(
+    (item) => item.restaurantId === restaurantId && item.orderId === orderId
+  );
+  return match?.trackingToken || null;
+}
+
+async function getTrackingBearerToken(): Promise<string | null> {
+  if (!auth?.currentUser) return null;
+  try {
+    return await auth.currentUser.getIdToken();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchGuestTrackedOrder(restaurantId: string, orderId: string, trackingToken: string): Promise<Order> {
+  const response = await fetch(getApiUrl('/api/orders/track'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'omit',
+    body: JSON.stringify({ restaurantId, orderId, trackingToken })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.success || !payload?.order) {
+    throw new Error(payload?.message || 'Unable to load guest order tracking.');
+  }
+  return payload.order as Order;
+}
+
 /**
  * Single fetch of an order for tracking with customer authorization check
  */
 export async function getOrderForTracking(
   restaurantId: string,
   orderId: string,
-  customerUid?: string | null
+  customerUid?: string | null,
+  trackingToken?: string | null
 ): Promise<Order> {
   const cleanRestaurantId = (restaurantId || '').trim();
   const cleanOrderId = (orderId || '').trim();
 
   if (!cleanRestaurantId || !cleanOrderId) {
     throw new Error('Invalid order tracking parameters. Restaurant ID and Order ID are required.');
+  }
+
+  // Guest orders must use the opaque tracking token via the trusted API boundary.
+  if (!customerUid) {
+    const token = trackingToken || getGuestTrackingToken(cleanRestaurantId, cleanOrderId);
+    if (!token && !isTestRuntime()) {
+      throw new Error('Order tracking access token is missing. Please reopen the confirmation page from the device where the order was placed.');
+    }
+    if (token && !isTestRuntime()) {
+      return fetchGuestTrackedOrder(cleanRestaurantId, cleanOrderId, token);
+    }
   }
 
   const orderDocRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
@@ -306,7 +356,8 @@ export function subscribeToOrderTracking(
   orderId: string,
   onUpdate: (order: Order) => void,
   onError: (err: Error) => void,
-  customerUid?: string | null
+  customerUid?: string | null,
+  trackingToken?: string | null
 ): Unsubscribe {
   const cleanRestaurantId = (restaurantId || '').trim();
   const cleanOrderId = (orderId || '').trim();
@@ -314,6 +365,60 @@ export function subscribeToOrderTracking(
   if (!cleanRestaurantId || !cleanOrderId) {
     onError(new Error('Invalid order parameters for tracking subscription.'));
     return () => {};
+  }
+
+  if (!customerUid && !isTestRuntime()) {
+    const token = trackingToken || getGuestTrackingToken(cleanRestaurantId, cleanOrderId);
+    if (!token) {
+      onError(new Error('Order tracking access token is missing.'));
+      return () => {};
+    }
+
+    let stopped = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let requestInFlight = false;
+
+    const poll = async () => {
+      if (stopped || requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const order = await fetchGuestTrackedOrder(cleanRestaurantId, cleanOrderId, token);
+        if (!stopped) {
+          saveTrackedOrder({
+            orderId: order.id,
+            restaurantId: order.restaurantId,
+            orderNumber: order.orderNumber || order.id,
+            orderType: order.orderType,
+            status: order.status,
+            grandTotalMinor: order.grandTotalMinor,
+            itemCount: order.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
+            placedAt: typeof order.createdAt === 'string' ? order.createdAt : new Date().toISOString(),
+            customerId: order.customerId,
+            trackingToken: token
+          });
+          onUpdate(order);
+          setActivePollingInterval();
+        }
+      } catch (err: any) {
+        if (!stopped) onError(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    const setActivePollingInterval = () => {
+      if (timer || stopped) return;
+      timer = setInterval(poll, 5000);
+    };
+
+    void poll();
+    setActivePollingInterval();
+
+    return () => {
+      stopped = true;
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
   }
 
   const orderDocRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
@@ -331,7 +436,6 @@ export function subscribeToOrderTracking(
         validateCustomerOrderAccess(order, customerUid);
         const cleanOrder = sanitizeCustomerOrder(order);
 
-        // Update local cache status
         saveTrackedOrder({
           orderId: cleanOrder.id,
           restaurantId: cleanOrder.restaurantId,
@@ -353,7 +457,7 @@ export function subscribeToOrderTracking(
     },
     (firestoreError) => {
       console.warn('[CustomerOrderTracking] Realtime listener error:', firestoreError);
-      onError(new Error(firestoreError.message || 'Realtime tracking connection lost. Retrying...'));
+      onError(new Error(firestoreError.message || 'Realtime tracking connection lost.'));
     }
   );
 }

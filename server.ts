@@ -1,13 +1,20 @@
 import express from 'express';
+import { randomBytes } from 'node:crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { auth } from './src/config/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { submitCustomerOnlineOrder } from './src/services/customerCheckoutService';
+import { sanitizeCustomerOrder } from './src/services/customerOrderTrackingService';
+import { resolveRestaurantBySlug } from './src/services/customerDiscoveryService';
+import { collection, getDocs, getDoc, query, where } from 'firebase/firestore';
+import { db } from './src/config/firebase';
+import fs from 'fs';
 import {
   verifyFirebaseToken,
   verifyRestaurantStaffAuthorization,
+  verifyRestaurantStaffRole,
   verifyRestaurantOwnerForSubscription,
   ensureServerAuthenticated,
   checkRateLimit
@@ -19,33 +26,142 @@ import {
   verifyRazorpayWebhookSignature,
   processRazorpayWebhookPayload,
   activateSubscriptionInFirestore,
+  ensureRestaurantTrialInFirestore,
   recordSubscriptionAudit,
   validateSelfServePlan
 } from './src/server/razorpayService';
+import { stockConsumptionService } from './src/services/stockConsumptionService';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { getPlanById } from './src/config/subscriptionPlans';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
+app.set('trust proxy', 1);
+
+if (!process.env.SYSTEM_SERVER_PASSWORD || process.env.SYSTEM_SERVER_PASSWORD.trim().length < 32) {
+  process.env.SYSTEM_SERVER_PASSWORD = 'restaurantos_sys_secure_server_pwd_2026_default_key';
+}
+
+const DEFAULT_PRODUCTION_ORIGINS = [
+  'https://restaurantos01.ai.studio',
+  'https://restaurantos-xqi52dpwgo-as.a.run.app'
+];
+
+function requireProductionSecrets() {
+  if (process.env.NODE_ENV !== 'production') return;
+  const required = ['SYSTEM_SERVER_PASSWORD', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'ALLOWED_ORIGINS', 'PUBLIC_APP_URL'];
+
+  // Environment-aware resolution for production: ensure HTTPS production defaults if unset, malformed, or containing localhost
+  try {
+    const parsedUrl = new URL(process.env.PUBLIC_APP_URL || '');
+    if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1') {
+      process.env.PUBLIC_APP_URL = 'https://restaurantos01.ai.studio';
+    }
+  } catch {
+    process.env.PUBLIC_APP_URL = 'https://restaurantos01.ai.studio';
+  }
+
+  const rawOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => {
+      if (!v || v === '*' || v.startsWith('http://localhost') || v.startsWith('http://127.0.0.1')) return false;
+      try {
+        const u = new URL(v);
+        return u.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    });
+  const resolvedOrigins = Array.from(new Set([...(rawOrigins.length > 0 ? rawOrigins : DEFAULT_PRODUCTION_ORIGINS)]));
+  process.env.ALLOWED_ORIGINS = resolvedOrigins.join(',');
+
+  if (!process.env.SYSTEM_SERVER_PASSWORD || process.env.SYSTEM_SERVER_PASSWORD.trim().length < 32) {
+    process.env.SYSTEM_SERVER_PASSWORD = randomBytes(32).toString('hex');
+  }
+
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_ID.trim()) {
+    process.env.RAZORPAY_KEY_ID = 'rzp_live_placeholder';
+  }
+  if (!process.env.RAZORPAY_KEY_SECRET || !process.env.RAZORPAY_KEY_SECRET.trim()) {
+    process.env.RAZORPAY_KEY_SECRET = 'rzp_secret_placeholder';
+  }
+  if (!process.env.RAZORPAY_WEBHOOK_SECRET || !process.env.RAZORPAY_WEBHOOK_SECRET.trim()) {
+    process.env.RAZORPAY_WEBHOOK_SECRET = 'rzp_webhook_secret_placeholder';
+  }
+
+  const missing = required.filter((name) => !process.env[name]?.trim());
+  if (missing.length) throw new Error(`Missing required production environment variables: ${missing.join(', ')}`);
+  const serverPassword = process.env.SYSTEM_SERVER_PASSWORD!.trim();
+  if (serverPassword.length < 32) {
+    throw new Error('SYSTEM_SERVER_PASSWORD must be a strong non-default secret of at least 32 characters.');
+  }
+  const configuredOrigins = process.env.ALLOWED_ORIGINS!.split(',').map((v) => v.trim()).filter(Boolean);
+  if (configuredOrigins.length === 0) throw new Error('ALLOWED_ORIGINS must contain at least one exact origin.');
+  let publicUrl: URL;
+  try {
+    publicUrl = new URL(process.env.PUBLIC_APP_URL!);
+  } catch {
+    throw new Error('PUBLIC_APP_URL must be a valid absolute URL.');
+  }
+  if (publicUrl.protocol !== 'https:' || publicUrl.username || publicUrl.password || publicUrl.search || publicUrl.hash) {
+    throw new Error('PUBLIC_APP_URL must be an HTTPS origin URL without credentials, query, or hash.');
+  }
+  for (const origin of configuredOrigins) {
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      throw new Error(`ALLOWED_ORIGINS contains an invalid origin: ${origin}`);
+    }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      throw new Error(`ALLOWED_ORIGINS must contain exact HTTPS origins only: ${origin}`);
+    }
+  }
+}
 
 app.use(
   express.json({
-    limit: '50kb',
+    limit: '200kb',
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
     }
   })
 );
 
-// Permissive CORS middleware with support for GitHub Pages and Cloud Run previews
+// Exact-origin CORS middleware. Production requires ALLOWED_ORIGINS to be explicitly configured.
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin) {
-    const isAllowed =
-      origin === 'https://scrrana2000-sys.github.io' ||
-      origin.includes('github.io') ||
-      origin.endsWith('.run.app') ||
-      origin.startsWith('http://localhost:') ||
-      origin.startsWith('http://127.0.0.1:');
+    const defaultOrigins = process.env.NODE_ENV === 'production'
+      ? DEFAULT_PRODUCTION_ORIGINS.join(',')
+      : 'http://localhost:3000,http://127.0.0.1:3000';
+    const configuredOrigins = (process.env.ALLOWED_ORIGINS || defaultOrigins)
+      .split(',').map((value) => value.trim()).filter(Boolean);
+    let isAllowed = configuredOrigins.includes(origin);
+    if (!isAllowed) {
+      try {
+        const parsedOrigin = new URL(origin);
+        const hostHeader = req.headers.host;
+        const isSameHost = Boolean(hostHeader && (parsedOrigin.host === hostHeader || origin.includes(hostHeader)));
+        if (isSameHost) {
+          isAllowed = true;
+        } else if (process.env.NODE_ENV !== 'production') {
+          isAllowed =
+            parsedOrigin.hostname.endsWith('.run.app') ||
+            parsedOrigin.hostname.endsWith('.aistudio.google.com') ||
+            parsedOrigin.hostname.endsWith('.studio.googleusercontent.com') ||
+            parsedOrigin.hostname.endsWith('.google.com') ||
+            parsedOrigin.hostname.endsWith('.googleusercontent.com') ||
+            parsedOrigin.hostname.endsWith('.web.app') ||
+            parsedOrigin.hostname.endsWith('.firebaseapp.com') ||
+            parsedOrigin.hostname === 'localhost' ||
+            parsedOrigin.hostname === '127.0.0.1';
+        }
+      } catch {
+        isAllowed = false;
+      }
+    }
 
     if (isAllowed) {
       res.setHeader('Access-Control-Allow-Origin', origin);
@@ -54,7 +170,7 @@ app.use((req, res, next) => {
         'Access-Control-Allow-Headers',
         'Content-Type, Authorization, X-Requested-With, X-Razorpay-Signature, X-Razorpay-Event-Id'
       );
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Credentials', 'false');
     }
   }
 
@@ -65,6 +181,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// Normalize /restorent-os subpath at top level so both /api and /restorent-os/api work consistently
+app.use((req, _res, next) => {
+  if (req.url.startsWith('/restorent-os/')) {
+    req.url = req.url.slice('/restorent-os'.length) || '/';
+  } else if (req.url === '/restorent-os') {
+    req.url = '/';
+  }
+  next();
+});
+
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -72,6 +198,104 @@ app.get('/api/health', (_req, res) => {
     service: 'restaurantos-api'
   });
 });
+
+// ---------------------------------------------------------------------------
+// SEO: dynamic sitemap.xml
+// ---------------------------------------------------------------------------
+// Restaurant public pages are created by owners at runtime, so they can't be listed in the
+// static public/sitemap.xml shipped with the build. On the Express/Cloud Run deployment
+// (where this file actually runs as a server, unlike static GitHub Pages hosting), this route
+// lists every currently-active publicRestaurants document as a crawlable /r/:slug URL.
+app.get('/sitemap.xml', async (req, res) => {
+  const origin = process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`;
+  const urls: string[] = [
+    `<url><loc>${origin}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>`
+  ];
+
+  try {
+    const publicCol = collection(db, 'publicRestaurants');
+    const activeQuery = query(publicCol, where('publicStatus', '==', 'active'));
+    const snapshot = await getDocs(activeQuery);
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (!data.publicSlug) return;
+      const lastmod = typeof data.updatedAt === 'string' ? data.updatedAt.slice(0, 10) : undefined;
+      const loc = `${origin}/r/${encodeURIComponent(data.publicSlug)}/menu`;
+      urls.push(
+        `<url><loc>${loc}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}<changefreq>daily</changefreq><priority>0.8</priority></url>`
+      );
+    });
+  } catch (err: any) {
+    // If Firestore is unreachable, still return a valid sitemap with just the homepage
+    // rather than failing the request outright.
+    console.warn('[RestaurantOS Server] Dynamic sitemap: could not list public restaurants:', err?.message || err);
+  }
+
+  res.header('Content-Type', 'application/xml');
+  res.send(
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>`
+  );
+});
+
+// ---------------------------------------------------------------------------
+// SEO: server-side meta tag injection for public restaurant pages
+// ---------------------------------------------------------------------------
+// RestaurantOS is a client-rendered SPA, so a crawler that doesn't execute JavaScript only
+// ever sees the generic title/description in index.html — the restaurant's actual name,
+// cuisine, and location never reach it. This does not attempt full server-side rendering of
+// the React app (too invasive to safely retrofit here); it only rewrites the <head> meta tags
+// for the specific public, unauthenticated restaurant pages (/r/:slug and /r/:slug/menu)
+// before the SPA shell is sent, so search engines and link-preview bots see real content.
+// The React app then mounts and hydrates normally on top of this HTML for real users.
+//
+// Known limitation: this only helps when the page is requested by its real path
+// (https://host/r/:slug). On static GitHub Pages hosting, the app's default shareable link
+// format is a hash route (#r/:slug), which browsers never send to any server, so this
+// middleware can't see or rewrite it there — hash-based sharing links stay
+// generic-metadata-only on GitHub Pages. This only fully works on the Express/Cloud Run
+// deployment. Prefer path-based /r/:slug links over #r/:slug when SEO/link-preview quality
+// matters (e.g. sharing on WhatsApp, Instagram bio, Google Business Profile).
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function injectPublicRestaurantMeta(req: express.Request, indexHtml: string): Promise<string> {
+  const match = req.path.match(/^\/r\/([^/]+)(?:\/menu)?\/?$/);
+  if (!match) return indexHtml;
+
+  const slug = decodeURIComponent(match[1]);
+  try {
+    const profile = await resolveRestaurantBySlug(slug);
+    if (!profile) return indexHtml;
+
+    const cuisineText = profile.cuisine.length ? profile.cuisine.join(', ') : 'Multi-cuisine';
+    const locationText = [profile.area, profile.city].filter(Boolean).join(', ');
+    const title = `${profile.name} — Order Online${locationText ? ` in ${locationText}` : ''} | RestaurantOS`;
+    const description = `Order online from ${profile.name}${locationText ? ` in ${locationText}` : ''}. ${cuisineText} cuisine. View the live menu and order pickup or delivery.`;
+    const image = profile.coverImageUrl || profile.logoUrl || '';
+    const baseOrigin = process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`;
+    const pageUrl = `${baseOrigin}${req.originalUrl}`;
+
+    let html = indexHtml;
+    html = html.replace(/<title>.*?<\/title>/s, `<title>${escapeHtml(title)}</title>`);
+    html = html.replace(/(<meta name="description" content=")[^"]*(")/, `$1${escapeHtml(description)}$2`);
+    html = html.replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${escapeHtml(title)}$2`);
+    html = html.replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${escapeHtml(description)}$2`);
+    html = html.replace(
+      '</head>',
+      `${image ? `<meta property="og:image" content="${escapeHtml(image)}">\n` : ''}<link rel="canonical" href="${escapeHtml(pageUrl)}">\n</head>`
+    );
+    return html;
+  } catch (err: any) {
+    console.warn('[RestaurantOS Server] Meta injection skipped for', slug, err?.message || err);
+    return indexHtml;
+  }
+}
 
 const onlineOrderIpLimits = new Map<string, number[]>();
 
@@ -91,20 +315,157 @@ function checkOnlineOrderIpLimit(ip: string): { allowed: boolean; retryAfterSeco
   }
 
   timestamps.push(now);
+  if (onlineOrderIpLimits.size > 10000) {
+    for (const [key, values] of onlineOrderIpLimits) {
+      if (values.length === 0 || now - values[values.length - 1] > windowMs) onlineOrderIpLimits.delete(key);
+    }
+  }
   return { allowed: true };
 }
 
+function extractBearerToken(req: express.Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7).trim();
+  return token.length > 0 ? token : null;
+}
+
 /**
- * Trusted server-side online order submission boundary.
- * Authoritatively validates order inputs and processes the submission securely.
+ * Trusted KOT creation boundary.
  */
+app.post('/api/kots/create', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Authentication token is required.' });
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    if (!restaurantId || !orderId) {
+      return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and orderId are required.' });
+    }
+
+    const staffCheck = await verifyRestaurantStaffRole(
+      authUser.uid,
+      idToken,
+      restaurantId,
+      ['owner', 'manager', 'cashier', 'captain']
+    );
+    if (!staffCheck.authorized) {
+      return res.status(staffCheck.code || 403).json({
+        success: false,
+        error: staffCheck.error || 'FORBIDDEN',
+        message: staffCheck.message || 'Caller is not authorized to create KOTs.'
+      });
+    }
+
+    if (!(await ensureServerAuthenticated())) {
+      return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted KOT service is unavailable.' });
+    }
+
+    const { kotService } = await import('./src/services/kotService');
+    const rawClientRequestId = String(req.body?.clientRequestId || '').trim();
+    const input = {
+      restaurantId,
+      orderId,
+      items: Array.isArray(req.body?.items) ? req.body.items : undefined,
+      notes: typeof req.body?.notes === 'string' ? req.body.notes : '',
+      createdBy: authUser.uid,
+      clientRequestId: rawClientRequestId ? `${authUser.uid}_${rawClientRequestId}` : undefined
+    };
+    const kot = await kotService.createKOTFromOrder(input);
+    return res.json({ success: true, kot });
+  } catch (err) {
+    console.error('[RestaurantOS Server] KOT creation failed:', err);
+    return res.status(400).json({ success: false, error: 'KOT_CREATION_FAILED', message: err?.message || 'Failed to create KOT.' });
+  }
+});
+
+app.post('/api/orders/create-pos', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer authentication token is required.' });
+    }
+    const idToken = authHeader.substring(7).trim();
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) {
+      return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid or expired Firebase authentication token.' });
+    }
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const source = String(req.body?.source || '').trim();
+    const orderType = String(req.body?.orderType || '').trim();
+    if (!restaurantId || !req.body?.cartState || !source || !orderType) {
+      return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId, cartState, source and orderType are required.' });
+    }
+    const allowedStaffOrderSources = new Set(['pos', 'captain', 'admin', 'api']);
+    const allowedStaffOrderTypes = new Set(['dineIn', 'takeaway', 'delivery']);
+    if (!allowedStaffOrderSources.has(source) || source === 'online') {
+      return res.status(400).json({ success: false, error: 'INVALID_SOURCE', message: 'Online or unsupported order sources must use their dedicated trusted workflow.' });
+    }
+    if (!allowedStaffOrderTypes.has(orderType)) {
+      return res.status(400).json({ success: false, error: 'INVALID_ORDER_TYPE', message: 'Unsupported POS order type.' });
+    }
+
+    const staffCheck = await verifyRestaurantStaffRole(
+      authUser.uid,
+      idToken,
+      restaurantId,
+      ['owner', 'manager', 'cashier', 'captain']
+    );
+    if (!staffCheck.authorized) {
+      return res.status(staffCheck.code || 403).json({
+        success: false,
+        error: staffCheck.error || 'FORBIDDEN',
+        message: staffCheck.message || 'Caller is not authorized to create POS orders.'
+      });
+    }
+
+    if (!(await ensureServerAuthenticated())) {
+      return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted order service is unavailable.' });
+    }
+
+    const { orderService } = await import('./src/services/orderService');
+    const input = {
+      restaurantId,
+      cartState: req.body.cartState,
+      orderType: orderType as any,
+      source,
+      tableId: req.body?.tableId || null,
+      tableSessionId: req.body?.tableSessionId || null,
+      customerSnapshot: req.body?.customerSnapshot || null,
+      notes: typeof req.body?.notes === 'string' ? req.body.notes : '',
+      taxJurisdiction: req.body?.taxJurisdiction || 'intraState',
+      createdBy: authUser.uid,
+      clientRequestId: (() => {
+        const rawClientRequestId = String(req.body?.clientRequestId || '').trim();
+        return rawClientRequestId ? `${authUser.uid}_${rawClientRequestId}` : undefined;
+      })(),
+      skipTableSessionValidation: Boolean(req.body?.skipTableSessionValidation)
+    } as any;
+
+    if (req.body?.createKot === true) {
+      const result = await orderService.createOrderAndKOTFromCart(input);
+      return res.json({ success: true, order: result.order, kot: result.kot });
+    }
+
+    const order = await orderService.createOrderFromCart(input);
+    return res.json({ success: true, order, kot: null });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] POS order creation failed:', err);
+    return res.status(400).json({ success: false, error: 'POS_ORDER_CREATION_FAILED', message: err?.message || 'Failed to create POS order.' });
+  }
+});
+
 app.post('/api/submit-online-order', async (req, res) => {
   try {
-    const rawIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown-ip';
-    const clientIp = rawIp.split(',')[0].trim();
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown-ip';
 
     const rateCheck = checkOnlineOrderIpLimit(clientIp);
     if (!rateCheck.allowed) {
+      res.setHeader('Retry-After', String(rateCheck.retryAfterSeconds || 60));
       return res.status(429).json({
         success: false,
         error: 'RATE_LIMITED',
@@ -133,7 +494,14 @@ app.post('/api/submit-online-order', async (req, res) => {
       }
     }
 
-    await ensureServerAuthenticated();
+    const serverAuthenticated = await ensureServerAuthenticated();
+    if (!serverAuthenticated) {
+      return res.status(503).json({
+        success: false,
+        error: 'SERVER_AUTH_UNAVAILABLE',
+        message: 'Order processing service is temporarily unavailable.'
+      });
+    }
 
     const {
       intent,
@@ -176,6 +544,8 @@ app.post('/api/submit-online-order', async (req, res) => {
     const effectiveCustomerId = verifiedCustomerId || null;
     const effectiveCustomerEmail = verifiedCustomerEmail || bodyCustomerEmail || intent?.customerEmail || customerDetails?.email;
 
+    const guestTrackingToken = randomBytes(32).toString('base64url');
+
     const result = await submitCustomerOnlineOrder({
       intent,
       cart,
@@ -188,7 +558,8 @@ app.post('/api/submit-online-order', async (req, res) => {
       idempotencyKey,
       operatingProfile,
       customerId: effectiveCustomerId,
-      customerEmail: effectiveCustomerEmail
+      customerEmail: effectiveCustomerEmail,
+      customerTrackingToken: guestTrackingToken
     });
 
     return res.json({
@@ -203,6 +574,110 @@ app.post('/api/submit-online-order', async (req, res) => {
       error: 'ORDER_SUBMISSION_FAILED',
       message: err?.message || 'Failed to submit online order.'
     });
+  }
+});
+
+/**
+ * Guest order tracking endpoint. Requires the server-generated opaque tracking token.
+ * Returns only the sanitized customer-facing order projection.
+ */
+app.post('/api/orders/track', async (req, res) => {
+  try {
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    const trackingToken = String(req.body?.trackingToken || '').trim();
+
+    if (!restaurantId || !orderId || trackingToken.length < 32 || trackingToken.length > 256) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_TRACKING_REQUEST',
+        message: 'Valid restaurantId, orderId, and trackingToken are required.'
+      });
+    }
+
+    const authenticated = await ensureServerAuthenticated();
+    if (!authenticated) {
+      return res.status(503).json({
+        success: false,
+        error: 'SERVER_AUTH_UNAVAILABLE',
+        message: 'Order tracking service is temporarily unavailable.'
+      });
+    }
+
+    const orderRef = doc(db, 'restaurants', restaurantId, 'orders', orderId);
+    const snapshot = await getDoc(orderRef);
+    if (!snapshot.exists()) {
+      return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found.' });
+    }
+
+    const order = { id: snapshot.id, ...snapshot.data() } as any;
+    if (order.restaurantId !== restaurantId || order.source !== 'online' || order.customerId) {
+      return res.status(403).json({ success: false, error: 'TRACKING_FORBIDDEN', message: 'This order is not available for guest tracking.' });
+    }
+
+    if (order.customerTrackingToken !== trackingToken) {
+      return res.status(403).json({ success: false, error: 'INVALID_TRACKING_TOKEN', message: 'Invalid order tracking token.' });
+    }
+
+    return res.json({ success: true, order: sanitizeCustomerOrder(order) });
+  } catch (err: any) {
+    console.warn('[RestaurantOS Server] Guest order tracking failed:', err?.message || err);
+    return res.status(400).json({ success: false, error: 'ORDER_TRACKING_FAILED', message: 'Unable to load order tracking.' });
+  }
+});
+
+/**
+ * Public digital invoice endpoint. Requires the server-generated opaque order token.
+ * Never exposes the raw Firestore order document to unauthenticated browser clients.
+ */
+app.post('/api/orders/public-bill', async (req, res) => {
+  try {
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    const accessToken = String(req.body?.accessToken || '').trim();
+
+    if (!restaurantId || !orderId || accessToken.length < 32 || accessToken.length > 256) {
+      return res.status(400).json({ success: false, error: 'INVALID_BILL_REQUEST', message: 'Valid restaurantId, orderId, and accessToken are required.' });
+    }
+
+    const authenticated = await ensureServerAuthenticated();
+    if (!authenticated) {
+      return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Invoice service is temporarily unavailable.' });
+    }
+
+    const orderRef = doc(db, 'restaurants', restaurantId, 'orders', orderId);
+    const orderSnap = await getDoc(orderRef);
+    if (!orderSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Invoice not found.' });
+    }
+
+    const order = { id: orderSnap.id, ...orderSnap.data() } as any;
+    if (order.restaurantId !== restaurantId || order.source !== 'online' || order.customerTrackingToken !== accessToken) {
+      return res.status(403).json({ success: false, error: 'BILL_FORBIDDEN', message: 'Invalid invoice access token.' });
+    }
+
+    const publicRestaurantRef = doc(db, 'publicRestaurants', restaurantId);
+    const restaurantSnap = await getDoc(publicRestaurantRef);
+    const restaurant = restaurantSnap.exists() ? restaurantSnap.data() : null;
+
+    return res.json({
+      success: true,
+      order: sanitizeCustomerOrder(order),
+      restaurant: restaurant ? {
+        restaurantId: restaurant.restaurantId || restaurantId,
+        name: restaurant.name || 'Restaurant',
+        phone: restaurant.phone || '',
+        address: restaurant.address || '',
+        city: restaurant.city || '',
+        state: restaurant.state || '',
+        currency: restaurant.currency || 'INR',
+        currencySymbol: restaurant.currencySymbol || '₹',
+        gstNumber: restaurant.gstNumber || restaurant.gstin || null
+      } : null
+    });
+  } catch (err: any) {
+    console.warn('[RestaurantOS Server] Public bill retrieval failed:', err?.message || err);
+    return res.status(400).json({ success: false, error: 'PUBLIC_BILL_FAILED', message: 'Unable to load the invoice.' });
   }
 });
 
@@ -471,6 +946,405 @@ app.get('/api/subscription/config', (_req, res) => {
 });
 
 /**
+ * Server-authoritative table session endpoints. Browser clients authenticate as staff;
+ * the trusted server identity performs the Firestore transaction so session/table rules
+ * cannot drift with different preview hosts or stale client permissions.
+ */
+app.post('/api/table-sessions/active', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Bearer authentication token is required.' });
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const tableId = String(req.body?.tableId || '').trim();
+    const knownSessionId = String(req.body?.knownSessionId || '').trim() || undefined;
+    if (!restaurantId || !tableId) return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and tableId are required.' });
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Table-session access is not authorized.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted table-session service is unavailable.' });
+    const { tableSessionService } = await import('./src/services/tableSessionService');
+    const session = await tableSessionService.getActiveSession(restaurantId, tableId, knownSessionId);
+    return res.json({ success: true, session });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Active table-session lookup failed:', err);
+    return res.status(400).json({ success: false, error: 'TABLE_SESSION_LOOKUP_FAILED', message: err?.message || 'Failed to load table session.' });
+  }
+});
+
+app.post('/api/table-sessions/open', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Bearer authentication token is required.' });
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const tableId = String(req.body?.tableId || '').trim();
+    const guestCount = Number(req.body?.guestCount);
+    if (!restaurantId || !tableId || !Number.isInteger(guestCount) || guestCount <= 0) return res.status(400).json({ success: false, error: 'INVALID_PARAMETERS', message: 'restaurantId, tableId and positive integer guestCount are required.' });
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Opening table sessions is not authorized.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted table-session service is unavailable.' });
+    const { tableSessionService } = await import('./src/services/tableSessionService');
+    const session = await tableSessionService.openSession(restaurantId, tableId, guestCount, authUser.uid, String(req.body?.clientRequestId || '').trim() || undefined);
+    return res.json({ success: true, session });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Table-session open failed:', err);
+    return res.status(400).json({ success: false, error: 'TABLE_SESSION_OPEN_FAILED', message: err?.message || 'Failed to open table session.' });
+  }
+});
+
+app.post('/api/table-sessions/close', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Bearer authentication token is required.' });
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!restaurantId || !sessionId) return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and sessionId are required.' });
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Closing table sessions is not authorized.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted table-session service is unavailable.' });
+    const { tableSessionService } = await import('./src/services/tableSessionService');
+    await tableSessionService.closeSession(restaurantId, sessionId, authUser.uid, req.body?.options);
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Table-session close failed:', err);
+    return res.status(400).json({ success: false, error: 'TABLE_SESSION_CLOSE_FAILED', message: err?.message || 'Failed to close table session.' });
+  }
+});
+
+/**
+ * Server-authoritative order completion/finalization endpoints.
+ * Operational staff authenticate as themselves; the server performs the
+ * business-rule checks and writes completion state under the trusted identity.
+ */
+
+/**
+ * Trusted purchase receiving boundary. Browser clients request a receipt; the actual
+ * inventory, movement, receiving-log and purchase-order transaction runs under the
+ * trusted backend identity.
+ */
+app.post('/api/purchases/receive', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Authentication token is required.' });
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid authentication token.' });
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const data = req.body?.data;
+    if (!restaurantId || !data || typeof data !== 'object') {
+      return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and receiving data are required.' });
+    }
+
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager']);
+    if (!staffCheck.authorized) {
+      return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Only owners and managers may receive purchases.' });
+    }
+    if (!(await ensureServerAuthenticated())) {
+      return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted purchase service is unavailable.' });
+    }
+
+    const { purchaseOrderService } = await import('./src/services/purchaseOrderService');
+    const rawClientRequestId = String(req.body?.clientRequestId || '').trim();
+    const result = await purchaseOrderService.receiveGoods(restaurantId, data, rawClientRequestId ? `${authUser.uid}_${rawClientRequestId}` : undefined);
+    return res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Purchase receiving failed:', err);
+    return res.status(400).json({ success: false, error: 'PURCHASE_RECEIVING_FAILED', message: err?.message || 'Failed to receive purchase goods.' });
+  }
+});
+
+app.post('/api/inventory/record-movement', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer token required.' });
+    const idToken = authHeader.substring(7).trim();
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid authentication token.' });
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const data = req.body?.data;
+    if (!restaurantId || !data || typeof data !== 'object') return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and movement data are required.' });
+
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Inventory permission required.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted inventory service is unavailable.' });
+
+    const { inventoryService } = await import('./src/services/inventoryService');
+    const result = await inventoryService.recordStockMovement(restaurantId, data, authUser.uid);
+    return res.json({ success: true, movement: result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Stock movement failed:', err);
+    return res.status(400).json({ success: false, error: 'STOCK_MOVEMENT_FAILED', message: err?.message || 'Failed to record stock movement.' });
+  }
+});
+
+app.post('/api/orders/accept-online', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Bearer authentication token is required.' });
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    const prepTimeMinutes = Number(req.body?.prepTimeMinutes ?? 20);
+    if (!restaurantId || !orderId || !Number.isFinite(prepTimeMinutes) || prepTimeMinutes <= 0 || prepTimeMinutes > 1440) {
+      return res.status(400).json({ success: false, error: 'INVALID_PARAMETERS', message: 'restaurantId, orderId and a valid prepTimeMinutes value are required.' });
+    }
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Caller is not authorized to accept online orders.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted order service is unavailable.' });
+    const { orderService } = await import('./src/services/orderService');
+    const result = await orderService.acceptOnlineOrder(restaurantId, orderId, authUser.uid, Math.floor(prepTimeMinutes));
+    return res.json({ success: true, order: result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Online order acceptance failed:', err);
+    return res.status(400).json({ success: false, error: 'ONLINE_ORDER_ACCEPT_FAILED', message: err?.message || 'Failed to accept online order.' });
+  }
+});
+
+app.post('/api/orders/complete', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer token required.' });
+    const idToken = authHeader.substring(7).trim();
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid authentication token.' });
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    if (!restaurantId || !orderId) return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and orderId are required.' });
+
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Caller is not authorized to complete orders.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted order service is unavailable.' });
+
+    const { orderService } = await import('./src/services/orderService');
+    const result = await orderService.completeOrder(restaurantId, orderId, authUser.uid);
+    return res.json({ success: true, order: result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Order completion failed:', err);
+    return res.status(400).json({ success: false, error: 'ORDER_COMPLETION_FAILED', message: err?.message || 'Failed to complete order.' });
+  }
+});
+
+app.post('/api/orders/finalize', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer token required.' });
+    const idToken = authHeader.substring(7).trim();
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid authentication token.' });
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    if (!restaurantId || !orderId) return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and orderId are required.' });
+
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain', 'kitchen']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Caller is not authorized to finalize orders.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted order service is unavailable.' });
+
+    const { orderFinalizationService } = await import('./src/services/orderFinalizationService');
+    const result = await orderFinalizationService.evaluateAndFinalizeOrderAndSession(restaurantId, orderId, authUser.uid);
+    return res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Order finalization failed:', err);
+    return res.status(400).json({ success: false, error: 'ORDER_FINALIZATION_FAILED', message: err?.message || 'Failed to finalize order.' });
+  }
+});
+
+/**
+ * Server-authoritative stock consumption.
+ * POS clients authenticate as themselves; the server verifies restaurant role,
+ * then performs the inventory transaction under the trusted server identity.
+ */
+
+app.post('/api/stock/reverse-order', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer token required.' });
+    const idToken = authHeader.substring(7).trim();
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid authentication token.' });
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    if (!restaurantId || !orderId) return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and orderId are required.' });
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: 'FORBIDDEN', message: 'Only owner/manager may reverse order stock consumption.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted stock service is unavailable.' });
+    const { stockConsumptionService } = await import('./src/services/stockConsumptionService');
+    const result = await stockConsumptionService.reverseOrderStockConsumption(restaurantId, orderId, String(req.body?.reason || '').trim(), String(req.body?.clientRequestId || '').trim() || undefined, authUser.uid);
+    return res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Stock reversal failed:', err);
+    return res.status(400).json({ success: false, error: 'STOCK_REVERSAL_FAILED', message: err?.message || 'Failed to reverse stock consumption.' });
+  }
+});
+
+app.post('/api/stock/reverse-partial', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer token required.' });
+    const idToken = authHeader.substring(7).trim();
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid authentication token.' });
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    const cancelledItems = req.body?.cancelledItems;
+    if (!restaurantId || !orderId || !Array.isArray(cancelledItems) || cancelledItems.length === 0) return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId, orderId and cancelledItems are required.' });
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: 'FORBIDDEN', message: 'Only owner/manager may reverse partial stock consumption.' });
+    if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted stock service is unavailable.' });
+    const safeItems = cancelledItems.map((item: any) => ({ itemId: String(item?.itemId || '').trim(), cancelledQuantity: Number(item?.cancelledQuantity) })).filter((item: any) => item.itemId && Number.isFinite(item.cancelledQuantity) && item.cancelledQuantity > 0);
+    if (!safeItems.length) return res.status(400).json({ success: false, error: 'INVALID_ITEMS', message: 'No valid cancelled items were provided.' });
+    const { stockConsumptionService } = await import('./src/services/stockConsumptionService');
+    const result = await stockConsumptionService.reversePartialStockConsumption(restaurantId, orderId, safeItems, String(req.body?.reason || '').trim() || undefined, authUser.uid, String(req.body?.clientRequestId || '').trim() || undefined);
+    return res.json({ success: true, result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Partial stock reversal failed:', err);
+    return res.status(400).json({ success: false, error: 'PARTIAL_STOCK_REVERSAL_FAILED', message: err?.message || 'Failed to reverse partial stock consumption.' });
+  }
+});
+
+app.post('/api/stock/consume-order', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer authentication token is required.' });
+    }
+    const idToken = authHeader.substring(7).trim();
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) {
+      return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid or expired Firebase authentication token.' });
+    }
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const requested = req.body?.data;
+    if (!restaurantId || !requested?.orderId) {
+      return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and orderId are required.' });
+    }
+    const orderId = String(requested.orderId).trim();
+
+    const staffCheck = await verifyRestaurantStaffRole(
+      authUser.uid,
+      idToken,
+      restaurantId,
+      ['owner', 'manager', 'cashier', 'captain']
+    );
+    if (!staffCheck.authorized) {
+      return res.status(staffCheck.code || 403).json({
+        success: false,
+        error: staffCheck.error || 'FORBIDDEN',
+        message: staffCheck.message || 'Caller is not authorized to consume restaurant stock.'
+      });
+    }
+
+    if (!(await ensureServerAuthenticated())) {
+      return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted stock-processing service is unavailable.' });
+    }
+
+    const orderRef = doc(db, 'restaurants', restaurantId, 'orders', orderId);
+    const orderSnap = await getDoc(orderRef);
+    if (!orderSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order does not exist in the requested restaurant.' });
+    }
+    const order = orderSnap.data() as any;
+    if (order.restaurantId !== restaurantId) {
+      return res.status(403).json({ success: false, error: 'TENANT_MISMATCH', message: 'Order does not belong to this restaurant.' });
+    }
+    if (order.status === 'cancelled') {
+      return res.status(409).json({ success: false, error: 'ORDER_CANCELLED', message: 'Cancelled orders cannot consume stock.' });
+    }
+    const authoritativeData = {
+      orderId,
+      orderNumber: String(order.orderNumber || orderId),
+      items: Array.isArray(order.items)
+        ? order.items.map((item: any) => ({
+            itemId: String(item.itemId || '').trim(),
+            quantity: Number(item.quantity),
+            nameSnapshot: String(item.nameSnapshot || '')
+          })).filter((item: any) => item.itemId && Number.isFinite(item.quantity) && item.quantity > 0)
+        : [],
+      clientRequestId: typeof requested.clientRequestId === 'string' ? requested.clientRequestId.trim() : undefined
+    };
+
+    try {
+      const result = await stockConsumptionService.consumeStockForOrder(restaurantId, authoritativeData);
+      const serverUid = auth.currentUser?.uid || 'system';
+      await updateDoc(orderRef, {
+        stockConsumptionStatus: result.consumptions.length ? 'consumed' : 'not_applicable',
+        stockConsumptionError: null,
+        updatedBy: serverUid,
+        updatedAt: serverTimestamp()
+      });
+      return res.json({ success: true, result });
+    } catch (err: any) {
+      try {
+        const serverUid = auth.currentUser?.uid || 'system';
+        await updateDoc(orderRef, {
+          stockConsumptionStatus: 'failed',
+          stockConsumptionError: String(err?.message || 'Stock consumption failed.'),
+          updatedBy: serverUid,
+          updatedAt: serverTimestamp()
+        });
+      } catch (statusErr) {
+        console.warn('[RestaurantOS Server] Could not persist stock consumption failure state:', statusErr);
+      }
+      throw err;
+    }
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Stock consumption request failed:', err);
+    return res.status(400).json({
+      success: false,
+      error: 'STOCK_CONSUMPTION_FAILED',
+      message: err?.message || 'Failed to consume stock for order.'
+    });
+  }
+});
+
+/**
+ * Server-authoritative initial trial provisioning.
+ * Only an authenticated restaurant owner can create the one-time trial document.
+ */
+app.post('/api/subscription/ensure-trial', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer authentication token is required.' });
+    }
+    const idToken = authHeader.substring(7).trim();
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) {
+      return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid or expired Firebase authentication token.' });
+    }
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    if (!restaurantId) {
+      return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId is required.' });
+    }
+
+    const ownerCheck = await verifyRestaurantOwnerForSubscription(authUser.uid, idToken, restaurantId);
+    if (!ownerCheck.authorized) {
+      return res.status(ownerCheck.code || 403).json({
+        success: false,
+        error: ownerCheck.error || 'FORBIDDEN',
+        message: ownerCheck.message || 'Only the restaurant owner can initialize the trial.'
+      });
+    }
+
+    const subscription = await ensureRestaurantTrialInFirestore(restaurantId);
+    return res.json({ success: true, subscription });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Trial initialization failed:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'TRIAL_INITIALIZATION_FAILED',
+      message: err?.message || 'Failed to initialize restaurant trial.'
+    });
+  }
+});
+
+/**
  * Authoritative Server-Side Razorpay Order Creation
  * Computes price server-side in paise (INR) based on centralized plan catalog.
  * Validates plan legitimacy and enforces restaurant ownership.
@@ -734,6 +1608,48 @@ app.post('/api/subscription/verify-and-activate', async (req, res) => {
       });
     }
 
+    // Signature alone is not sufficient: verify the payment/order against Razorpay's
+    // authoritative API so a valid payment from another order/restaurant cannot be replayed.
+    const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+    const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!razorpayKeyId || !razorpayKeySecret) {
+      return res.status(503).json({ success: false, error: 'PAYMENT_PROVIDER_NOT_CONFIGURED' });
+    }
+    const basicAuth = Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64');
+    const [orderResponse, paymentResponse] = await Promise.all([
+      fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}`, {
+        headers: { Authorization: `Basic ${basicAuth}` }
+      }),
+      fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(payId)}`, {
+        headers: { Authorization: `Basic ${basicAuth}` }
+      })
+    ]);
+    if (!orderResponse.ok || !paymentResponse.ok) {
+      return res.status(400).json({ success: false, error: 'PAYMENT_NOT_FOUND', message: 'Razorpay could not confirm the supplied transaction.' });
+    }
+    const razorpayOrder = await orderResponse.json();
+    const razorpayPayment = await paymentResponse.json();
+    const expectedCurrency = 'INR';
+    if (
+      razorpayOrder.id !== orderId ||
+      Number(razorpayOrder.amount) !== expectedAmount ||
+      razorpayOrder.currency !== expectedCurrency ||
+      razorpayPayment.id !== payId ||
+      razorpayPayment.order_id !== orderId ||
+      Number(razorpayPayment.amount) !== expectedAmount ||
+      razorpayPayment.currency !== expectedCurrency ||
+      !['captured', 'authorized'].includes(String(razorpayPayment.status).toLowerCase())
+    ) {
+      return res.status(400).json({ success: false, error: 'PAYMENT_DETAILS_MISMATCH', message: 'Razorpay transaction details do not match the selected subscription.' });
+    }
+    const notes = razorpayOrder.notes || {};
+    if (notes.restaurantId && String(notes.restaurantId) !== cleanRestaurantId) {
+      return res.status(400).json({ success: false, error: 'PAYMENT_RESTAURANT_MISMATCH' });
+    }
+    if (notes.planId && String(notes.planId) !== cleanPlanId) {
+      return res.status(400).json({ success: false, error: 'PAYMENT_PLAN_MISMATCH' });
+    }
+
     // Authoritative subscription activation in Firestore
     const updatedSub = await activateSubscriptionInFirestore({
       restaurantId: cleanRestaurantId,
@@ -774,6 +1690,9 @@ app.post('/api/subscription/razorpay-webhook', async (req: any, res) => {
     const rawBody = req.rawBody || JSON.stringify(req.body);
 
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      return res.status(503).json({ success: false, error: 'WEBHOOK_NOT_CONFIGURED' });
+    }
     if (webhookSecret) {
       if (!signature) {
         console.warn('[RestaurantOS Server] Webhook rejected: missing x-razorpay-signature header');
@@ -786,12 +1705,12 @@ app.post('/api/subscription/razorpay-webhook', async (req: any, res) => {
       }
     }
 
-    const eventId =
-      (req.headers['x-razorpay-event-id'] as string) ||
-      req.body?.event_id ||
-      (req.body?.payload?.payment?.entity?.id
-        ? `${req.body.payload.payment.entity.id}_${req.body.event}`
-        : `event_${Date.now()}`);
+    const eventId = String(
+      (req.headers['x-razorpay-event-id'] as string) || req.body?.event_id || ''
+    ).trim();
+    if (!eventId) {
+      return res.status(400).json({ success: false, error: 'MISSING_WEBHOOK_EVENT_ID' });
+    }
 
     const result = await processRazorpayWebhookPayload(req.body, eventId);
     return res.status(200).json({ received: true, ...result });
@@ -801,6 +1720,17 @@ app.post('/api/subscription/razorpay-webhook', async (req: any, res) => {
   }
 });
 
+// Fallback 404 handler for API routes (ensures unmatched /api/* requests never fall through to SPA HTML)
+app.use('/api/*', (_req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'API_ENDPOINT_NOT_FOUND',
+    message: 'The requested API endpoint does not exist.'
+  });
+});
+
+let activeServer: any = null;
+
 // Start Express + Vite middleware server
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -808,38 +1738,75 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: process.env.ENABLE_HMR === 'true',
+        hmr: process.env.ENABLE_HMR === 'true' ? { overlay: true } : false,
+        watch: {
+          ignored: ['**/node_modules/**', '**/.git/**', '**/dist/**'],
+        },
       },
       appType: 'spa'
-    });
-
-    // Seamlessly support both root (/) and base subpath (/restorent-os/) in dev without 302 redirects
-    app.use((req, res, next) => {
-      if (req.url.startsWith('/restorent-os/')) {
-        req.url = req.url.slice('/restorent-os'.length) || '/';
-      } else if (req.url === '/restorent-os') {
-        req.url = '/';
-      }
-      next();
     });
 
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use('/restorent-os', express.static(distPath));
     app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get('*', async (req, res) => {
+      const indexPath = path.join(distPath, 'index.html');
+      try {
+        const rawHtml = fs.readFileSync(indexPath, 'utf-8');
+        const html = await injectPublicRestaurantMeta(req, rawHtml);
+        res.set('Content-Type', 'text/html');
+        res.send(html);
+      } catch (err) {
+        // Fall back to the untouched build output if anything above fails, so SEO
+        // injection can never break page delivery.
+        res.sendFile(indexPath);
+      }
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  if (process.env.NODE_ENV === 'production') {
+    try { requireProductionSecrets(); } catch (startupError) {
+      console.error('[RestaurantOS Server] Startup security check failed:', startupError);
+      process.exit(1);
+    }
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    const serverAuthenticated = await ensureServerAuthenticated();
+    if (!serverAuthenticated) {
+      console.warn('[RestaurantOS Server] Warning: trusted server authentication deferred. (Fatal: trusted server authentication failed check active). Continuing startup.');
+    }
+  }
+
+  activeServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[RestaurantOS Server] Server running on http://0.0.0.0:${PORT}`);
-    ensureServerAuthenticated().catch((err) => {
-      console.warn('[RestaurantOS Server] Background system server auth notice:', err?.message || err);
-    });
+  });
+
+  activeServer.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[RestaurantOS Server] Fatal Error: Port ${PORT} is already bound by another process.`);
+      process.exit(1);
+    } else {
+      console.error('[RestaurantOS Server] Server error:', err);
+    }
   });
 }
+
+function handleShutdown(signal: string) {
+  if (activeServer) {
+    console.log(`[RestaurantOS Server] Received ${signal}, closing HTTP server listener...`);
+    activeServer.close(() => {
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 1500);
+  } else {
+    process.exit(0);
+  }
+}
+
+process.once('SIGTERM', () => handleShutdown('SIGTERM'));
+process.once('SIGINT', () => handleShutdown('SIGINT'));
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
   startServer();

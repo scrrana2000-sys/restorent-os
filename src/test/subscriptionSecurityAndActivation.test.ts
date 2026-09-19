@@ -19,14 +19,14 @@ describe('Subscription Security, RBAC & Activation Audit', () => {
       // Must enforce canAccessRestaurant or isServer, both require isSignedIn()
       expect(rulesContent).toMatch(/match\s+\/subscription\/\{subDocId\}/);
       expect(rulesContent).toMatch(/allow\s+read:\s*if\s+canAccessRestaurant\(restaurantId\)\s*\|\|\s*isServer\(\);/);
-      expect(rulesContent).toMatch(/allow\s+create,\s*update:\s*if\s*\(isOwnerOfRestaurant\(restaurantId\)\s*\|\|\s*isServer\(\)\)/);
+      expect(rulesContent).toMatch(/allow\s+create,\s*update:\s*if\s+isServer\(\)/);
       expect(rulesContent).toMatch(/allow\s+delete:\s*if\s+false;/);
     });
 
     it('enforces immutable audit history for subscriptionHistory', () => {
       expect(rulesContent).toMatch(/match\s+\/subscriptionHistory\/\{historyId\}/);
       expect(rulesContent).toMatch(/allow\s+update,\s*delete:\s*if\s+false;/);
-      expect(rulesContent).toMatch(/allow\s+create:\s*if\s*\(isOwnerOfRestaurant\(restaurantId\)\s*\|\|\s*isServer\(\)\)/);
+      expect(rulesContent).toMatch(/allow\s+create:\s*if\s+isServer\(\)/);
     });
 
     it('strictly isolates webhook idempotency records to isServer() only', () => {

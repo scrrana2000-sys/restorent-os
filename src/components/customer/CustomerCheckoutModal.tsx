@@ -257,7 +257,8 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
         grandTotalMinor: res.order.grandTotalMinor,
         itemCount: res.order.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 0,
         placedAt: new Date().toISOString(),
-        customerId: res.order.customerId
+        customerId: res.order.customerId,
+        trackingToken: res.order.customerTrackingToken || null
       });
 
       // Clear customer cart upon canonical success

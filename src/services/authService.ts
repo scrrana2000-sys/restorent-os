@@ -11,7 +11,7 @@ import {
   User as FirebaseUser,
   updateProfile
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, firebaseConfig } from '../config/firebase';
 import { AppUser, UserProfile } from '../types/auth';
 
@@ -293,14 +293,25 @@ export async function updateUserProfileRestaurantId(
 ): Promise<void> {
   try {
     const userRef = doc(db, 'users', userId);
-    await setDoc(
-      userRef,
-      {
+    const existing = await getDoc(userRef);
+    if (existing.exists()) {
+      await updateDoc(userRef, {
         restaurantId,
         updatedAt: serverTimestamp()
-      },
-      { merge: true }
-    );
+      });
+    } else {
+      const firebaseUser = auth.currentUser;
+      await setDoc(userRef, {
+        userId,
+        displayName: firebaseUser?.displayName || firebaseUser?.email?.split('@')[0] || 'Admin',
+        email: firebaseUser?.email || '',
+        photoUrl: firebaseUser?.photoURL || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        restaurantId,
+        initialRestaurantId: restaurantId
+      });
+    }
     console.log('[RestaurantOS Debug] Successfully linked restaurantId to user profile:', {
       userId,
       restaurantId

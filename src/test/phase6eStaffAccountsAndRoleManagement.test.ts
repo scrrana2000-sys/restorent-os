@@ -336,6 +336,22 @@ describe('M6-6E: Staff Accounts + Employee Login + Restaurant Assignment + Role 
             data: () => ({ ownerId: OWNER_UID, name: 'Harisha Restaurant' })
           } as any;
         }
+        if (docRef.path?.includes('subscription/current')) {
+          return {
+            exists: () => true,
+            id: 'current',
+            data: () => ({
+              subscriptionId: 'sub_active_test',
+              restaurantId: RESTAURANT_A,
+              status: 'active',
+              planId: 'pro',
+              billingCycle: 'annual',
+              currentPeriodStart: new Date().toISOString(),
+              currentPeriodEnd: new Date(Date.now() + 864000000).toISOString(),
+              autoRenew: true
+            })
+          } as any;
+        }
         return { exists: () => true, id: docRef.id, data: () => ({ role: 'cashier', isActive: true }) } as any;
       });
     });
@@ -508,6 +524,22 @@ describe('M6-6E: Staff Accounts + Employee Login + Restaurant Assignment + Role 
             data: () => ({ ownerId: OWNER_UID, name: 'Harisha' })
           } as any;
         }
+        if (docRef.path?.includes('subscription/current')) {
+          return {
+            exists: () => true,
+            id: 'current',
+            data: () => ({
+              subscriptionId: 'sub_active_test',
+              restaurantId: RESTAURANT_A,
+              status: 'active',
+              planId: 'pro',
+              billingCycle: 'annual',
+              currentPeriodStart: new Date().toISOString(),
+              currentPeriodEnd: new Date(Date.now() + 864000000).toISOString(),
+              autoRenew: true
+            })
+          } as any;
+        }
         return { exists: () => true, id: docRef.id, data: () => ({ role: 'cashier', isActive: true }) } as any;
       });
 
@@ -582,6 +614,35 @@ describe('M6-6E: Staff Accounts + Employee Login + Restaurant Assignment + Role 
   // 6. MULTI-TENANT LOGIN & INVITATION CLAIMING (RAHUL & SIDDHANT SCENARIOS)
   // =========================================================================
   describe('6. Multi-Tenant Login, Invitation Claiming & Restaurant Resolution', () => {
+    beforeEach(() => {
+      const getDocMock = vi.mocked(firestore.getDoc);
+      getDocMock.mockImplementation(async (docRef: any) => {
+        if (docRef.path === `restaurants/${RESTAURANT_A}`) {
+          return {
+            exists: () => true,
+            id: RESTAURANT_A,
+            data: () => ({ ownerId: OWNER_UID, name: 'Harisha' })
+          } as any;
+        }
+        if (docRef.path?.includes('subscription/current')) {
+          return {
+            exists: () => true,
+            id: 'current',
+            data: () => ({
+              subscriptionId: 'sub_active_test',
+              restaurantId: RESTAURANT_A,
+              status: 'active',
+              planId: 'pro',
+              billingCycle: 'annual',
+              currentPeriodStart: new Date().toISOString(),
+              currentPeriodEnd: new Date(Date.now() + 864000000).toISOString(),
+              autoRenew: true
+            })
+          } as any;
+        }
+        return { exists: () => true, id: docRef.id, data: () => ({ role: 'cashier', isActive: true }) } as any;
+      });
+    });
     it('Scenario 33: Adding staff creates a pending invitation record when auth profile is not yet present', async () => {
       const setDocMock = vi.mocked(firestore.setDoc);
 

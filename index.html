@@ -4,10 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>RestaurantOS — Modern Restaurant Management Platform</title>
-    <meta name="description" content="Production-grade restaurant management platform and Web Admin Dashboard" />
+    <meta name="description" content="Production-grade restaurant management platform: POS, KOT & kitchen display, inventory, staff management, online ordering and analytics for restaurants, cafes and cloud kitchens." />
+    <meta name="keywords" content="restaurant management software, restaurant POS, KOT system, kitchen display system, restaurant inventory management, online ordering platform, restaurant billing software" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://restaurantos-xqi52dpwgo-as.a.run.app/" />
     <meta property="og:title" content="RestaurantOS — Modern Restaurant Management Platform" />
-    <meta property="og:description" content="Production-grade restaurant management platform and Web Admin Dashboard" />
+    <meta property="og:description" content="Production-grade restaurant management platform: POS, KOT & kitchen display, inventory, staff management, online ordering and analytics." />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://restaurantos-xqi52dpwgo-as.a.run.app/" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,22 +20,57 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "RestaurantOS",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "description": "Production-grade restaurant management platform with POS, KOT and kitchen display, inventory, staff management, online ordering and analytics for restaurants, cafes and cloud kitchens.",
+      "offers": {
+        "@type": "AggregateOffer",
+        "priceCurrency": "INR",
+        "lowPrice": "299",
+        "highPrice": "999",
+        "offerCount": "3"
+      }
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      Fallback content for crawlers and clients that do not execute JavaScript.
+      RestaurantOS renders entirely client-side, so without this block a non-JS crawler
+      would see an empty page. This text is hidden by CSS once the app mounts and is not
+      shown to normal users with JavaScript enabled.
+    -->
+    <noscript>
+      <div style="font-family: sans-serif; max-width: 640px; margin: 48px auto; padding: 0 24px; color: #0f172a;">
+        <h1>RestaurantOS — Modern Restaurant Management Platform</h1>
+        <p>
+          RestaurantOS is a production-grade restaurant management platform covering point of
+          sale, kitchen order tickets and live kitchen display, raw-material inventory and
+          recipe consumption, staff and role management, customer online ordering, and business
+          analytics — built for restaurants, cafes and cloud kitchens.
+        </p>
+        <p>This app requires JavaScript to run. Please enable JavaScript in your browser to continue.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       (function() {
         if ('serviceWorker' in navigator) {
-          var isDevHost =
-            window.location.hostname.includes('ais-dev') ||
-            window.location.hostname.includes('run.app') ||
-            window.location.hostname === 'localhost' ||
-            window.location.hostname === '127.0.0.1' ||
-            window.location.port === '3000';
+          var isProdHosted =
+            window.location.protocol === 'https:' &&
+            (window.location.hostname === 'scrrana2000-sys.github.io' ||
+              window.location.hostname.endsWith('.github.io') ||
+              window.location.hostname === 'restaurantos-xqi52dpwgo-as.a.run.app' ||
+              window.location.hostname.endsWith('.run.app'));
 
-          if (isDevHost) {
-            // In development sandbox / AI Studio preview, unregister any stale workers and purge cache
+          if (!isProdHosted) {
+            // In development / AI Studio preview sandboxes, purge all Service Workers and Caches
             navigator.serviceWorker.getRegistrations().then(function(registrations) {
               for (var i = 0; i < registrations.length; i++) {
                 registrations[i].unregister();
@@ -44,8 +83,8 @@
                 }
               }).catch(function() {});
             }
-          } else if (window.location.protocol === 'https:' && window.location.hostname.includes('github.io')) {
-            // Register PWA service worker only in official production hosted environment
+          } else {
+            // Register PWA service worker strictly in official production hosted environment
             window.addEventListener('load', function() {
               navigator.serviceWorker.register('./sw.js').catch(function(err) {
                 console.warn('[RestaurantOS PWA] Service worker registration deferred:', err);

@@ -1,0 +1,18 @@
+# RestaurantOS — robots.txt
+# Public customer-facing pages (restaurant profiles, menus, discovery) are open to crawling.
+# Internal operational surfaces (POS, KOT, Kitchen, Inventory, Owner Center, invitations,
+# bill links, API routes) are staff/customer-session tools, not content pages, and are excluded.
+
+User-agent: *
+Allow: /
+Allow: /r/
+Disallow: /api/
+Disallow: /owner
+Disallow: /accept-invitation
+Disallow: /bill/
+
+Sitemap: https://restaurantos-xqi52dpwgo-as.a.run.app/sitemap.xml
+
+# Note: on static (GitHub Pages) hosting, client-side hash routes (e.g. #r/slug) are not
+# separate URLs from a crawler's perspective — only path-based public URLs (/r/slug,
+# /r/slug/menu) are independently crawlable and indexable. See sitemap.xml.

@@ -6,8 +6,11 @@ import fs from 'fs';
 import {defineConfig} from 'vite';
 
 export default defineConfig(({ command, mode }) => {
-  const isBuild = command === 'build' || mode === 'production';
-  const base = process.env.VITE_BASE_PATH || (isBuild ? '/restorent-os/' : '/');
+  // Default base is root ('/') for the Cloud Run deployment, where the Express server in
+  // server.ts serves the built app from the domain root. The GitHub Pages workflow
+  // (.github/workflows/deploy.yml) explicitly overrides this with VITE_BASE_PATH=/restorent-os/
+  // for that project-subpage build, so it is unaffected by this default.
+  const base = process.env.VITE_BASE_PATH || '/';
 
   return {
     base,
@@ -42,11 +45,11 @@ export default defineConfig(({ command, mode }) => {
       setupFiles: './src/test/setup.ts',
     },
     server: {
-      // Disable HMR WebSocket in AI Studio preview to prevent unhandled WebSocket closed exceptions
-      // across sandboxed reverse-proxy environments. Set ENABLE_HMR=true if local HMR is desired.
-      hmr: process.env.ENABLE_HMR === 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      middlewareMode: true,
+      hmr: process.env.ENABLE_HMR === 'true' ? { overlay: true } : false,
+      watch: {
+        ignored: ['**/node_modules/**', '**/.git/**', '**/dist/**'],
+      },
     },
   };
 });

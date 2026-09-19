@@ -420,8 +420,8 @@ describe('Milestone 9 — Phase 2: Customer ↔ Order Linking Foundation Verific
     expect(ordersBlock).toMatch(/canAccessRestaurant\(restaurantId\)/);
     // Authenticated customer can read their own order
     expect(ordersBlock).toMatch(/resource\.data\.customerId\s*==\s*request\.auth\.uid/);
-    // Guest online orders can still be read
-    expect(ordersBlock).toMatch(/resource\.data\.source\s*==\s*'online'/);
+    // Guest online orders are tokenized through the trusted API and are no longer directly readable.
+    expect(ordersBlock).not.toMatch(/resource\.data\.source\s*==\s*'online'/);
     // Unrestricted public reads are prohibited for orders
     expect(ordersBlock).not.toMatch(/allow\s+read:\s*if\s+true;/);
   });

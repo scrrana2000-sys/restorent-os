@@ -12,7 +12,8 @@ import {
   limit,
   onSnapshot,
   serverTimestamp,
-  runTransaction
+  runTransaction,
+  writeBatch
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { Order, OrderItem, OrderStatus, OrderType, OrderSource, CustomerSnapshot } from '../types/order';
@@ -50,6 +51,7 @@ export interface CreateOrderFromCartInput {
   taxJurisdiction?: TaxJurisdiction;
   createdBy?: string;
   clientRequestId?: string; // Phase 2G idempotency preparation
+  customerTrackingToken?: string | null; // Server-generated opaque token for guest online tracking
   skipTableSessionValidation?: boolean;
 }
 
@@ -107,7 +109,7 @@ async function validatePublicCustomerOrderingEligibility(
     throw new Error('Dine-in ordering is not available via online customer checkout.');
   }
 
-  // 3. Verify Cart Menu Items availability and check for price tampering
+  // 3. Verify Cart Menu Items availability and check for price/tax integrity
   if (cartState && Array.isArray(cartState.items)) {
     for (const item of cartState.items) {
       const itemRef = doc(db, 'restaurants', cleanRestaurantId, 'items', item.itemId);
@@ -122,9 +124,42 @@ async function validatePublicCustomerOrderingEligibility(
       }
 
       // Check for price tampering (minor unit match)
-      const expectedPriceMinor = Math.round(Number(itemData.price) * 100);
+      const catalogPrice = Number(itemData.price);
+      const catalogTaxRate = Number(itemData.taxRate);
+      if (!Number.isFinite(catalogPrice) || catalogPrice < 0 || catalogPrice > 10000000) {
+        throw new Error(`Catalog price is invalid for "${itemData.name}".`);
+      }
+      if (!Number.isFinite(catalogTaxRate) || catalogTaxRate < 0 || catalogTaxRate > 100) {
+        throw new Error(`Catalog tax rate is invalid for "${itemData.name}".`);
+      }
+      const expectedPriceMinor = Math.round(catalogPrice * 100);
       if (item.unitPriceMinor !== expectedPriceMinor) {
         throw new Error(`Price verification failed for "${itemData.name}".`);
+      }
+      if (item.taxRate !== catalogTaxRate || Boolean(item.taxInclusive) !== Boolean(itemData.taxInclusive)) {
+        throw new Error(`Tax verification failed for "${itemData.name}".`);
+      }
+
+      // Client modifiers must exactly match authoritative catalog pricing/configuration.
+      const catalogVariants = Array.isArray(itemData.variants) ? itemData.variants : [];
+      const catalogAddons = Array.isArray(itemData.addons) ? itemData.addons : (Array.isArray(itemData.addOns) ? itemData.addOns : []);
+      const selectedModifiers = Array.isArray(item.modifiers) ? item.modifiers : [];
+      for (const modifier of selectedModifiers) {
+        if (modifier.id === item.itemId) continue;
+        const variant = catalogVariants.find((v: any) => v.id === modifier.id);
+        const addon = catalogAddons.find((a: any) => a.id === modifier.id);
+        const authoritative = variant || addon;
+        if (!authoritative || authoritative.isAvailable === false) {
+          throw new Error(`Selected option is no longer available for "${itemData.name}".`);
+        }
+        const expectedModifierPriceMinor = Math.round(Number(authoritative.price) * 100);
+        if (!Number.isFinite(expectedModifierPriceMinor) || modifier.priceMinor !== expectedModifierPriceMinor && !(variant && modifier.priceMinor === 0)) {
+          // Variants are represented as a zero-price modifier because their authoritative
+          // selected price is already the line unit price. Add-ons must carry their own price.
+          if (!variant || modifier.priceMinor !== 0) {
+            throw new Error(`Selected option price verification failed for "${itemData.name}".`);
+          }
+        }
       }
     }
   }
@@ -259,7 +294,8 @@ export class OrderService implements IOrderService {
       customerSnapshot,
       notes,
       taxJurisdiction = 'intraState',
-      createdBy
+      createdBy,
+      customerTrackingToken
     } = input;
 
     if (!restaurantId || typeof restaurantId !== 'string' || restaurantId.trim() === '') {
@@ -267,6 +303,35 @@ export class OrderService implements IOrderService {
     }
 
     const cleanRestaurantId = restaurantId.trim();
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+
+    if (source !== 'online' && typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to create a restaurant order.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch((await import('../utils/apiConfig')).getApiUrl('/api/orders/create-pos'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          restaurantId: cleanRestaurantId,
+          cartState,
+          orderType,
+          source,
+          tableId,
+          tableSessionId,
+          customerSnapshot,
+          notes,
+          taxJurisdiction,
+          clientRequestId: input.clientRequestId,
+          skipTableSessionValidation: input.skipTableSessionValidation
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.order) {
+        throw new Error(payload?.message || 'Order creation failed.');
+      }
+      return payload.order as Order;
+    }
 
     if (source === 'online') {
       await validatePublicCustomerOrderingEligibility(cleanRestaurantId, cartState, orderType);
@@ -489,6 +554,7 @@ export class OrderService implements IOrderService {
       dueAmountMinor,
       notes: notes || cartState.notes,
       customerSnapshot: customerSnapshot || null,
+      customerTrackingToken: source === 'online' ? (customerTrackingToken || null) : null,
       createdBy: resolvedUserId,
       updatedBy: resolvedUserId
     };
@@ -531,6 +597,35 @@ export class OrderService implements IOrderService {
     }
 
     const cleanRestaurantId = restaurantId.trim();
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (source !== 'online' && typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to create a restaurant order.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch((await import('../utils/apiConfig')).getApiUrl('/api/orders/create-pos'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          restaurantId: cleanRestaurantId,
+          cartState,
+          orderType,
+          source,
+          tableId,
+          tableSessionId,
+          customerSnapshot,
+          notes,
+          taxJurisdiction,
+          clientRequestId: input.clientRequestId,
+          skipTableSessionValidation: input.skipTableSessionValidation,
+          createKot: true
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.order || !payload?.kot) {
+        throw new Error(payload?.message || 'Order and KOT creation failed.');
+      }
+      return { order: payload.order as Order, kot: payload.kot as KOT };
+    }
     if (source === 'online') {
       await validatePublicCustomerOrderingEligibility(cleanRestaurantId, cartState, orderType);
     } else {
@@ -730,8 +825,10 @@ export class OrderService implements IOrderService {
         updatedAt: serverTimestamp()
       });
 
-      await updateDoc(existingOrderDocRef, sanitizedOrderUpdate);
-      await setDoc(kotDocRef, sanitizedKotDoc);
+      const mergeBatch = writeBatch(db);
+      mergeBatch.update(existingOrderDocRef, sanitizedOrderUpdate);
+      mergeBatch.set(kotDocRef, sanitizedKotDoc);
+      await mergeBatch.commit();
 
       const updatedOrder: Order = {
         ...existingActiveOrder,
@@ -873,6 +970,7 @@ export class OrderService implements IOrderService {
       dueAmountMinor,
       notes: notes || cartState.notes,
       customerSnapshot: customerSnapshot || null,
+      customerTrackingToken: source === 'online' ? (input.customerTrackingToken || null) : null,
       createdBy: resolvedUserId,
       updatedBy: resolvedUserId
     };
@@ -920,6 +1018,7 @@ export class OrderService implements IOrderService {
 
       const orderFirestoreDoc = sanitizeFirestoreData({
         ...orderPayload,
+        id: orderDocRef.id,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -931,9 +1030,11 @@ export class OrderService implements IOrderService {
         updatedAt: serverTimestamp()
       });
 
-      // Write Order and KOT
-      await setDoc(orderDocRef, orderFirestoreDoc);
-      await setDoc(kotDocRef, kotFirestoreDoc);
+      // Write Order and KOT atomically so a successful order can never exist without its KOT.
+      const orderKotBatch = writeBatch(db);
+      orderKotBatch.set(orderDocRef, orderFirestoreDoc);
+      orderKotBatch.set(kotDocRef, kotFirestoreDoc);
+      await orderKotBatch.commit();
 
       const createdOrder: Order = {
         id: orderDocRef.id,
@@ -1131,6 +1232,7 @@ export class OrderService implements IOrderService {
 
       const docPayload = sanitizeFirestoreData({
         ...orderData,
+        id: newDocRef.id,
         createdAt: serverTimestamp() || now,
         updatedAt: serverTimestamp() || now
       });
@@ -1243,6 +1345,20 @@ export class OrderService implements IOrderService {
     cancellationReason?: string
   ): Promise<void> {
     const cleanRestaurantId = restaurantId.trim();
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (newStatus === 'completed' && typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to complete an order.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch((await import('../utils/apiConfig')).getApiUrl('/api/orders/complete'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ restaurantId: cleanRestaurantId, orderId: orderId.trim() })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success) throw new Error(payload?.message || 'Order completion failed.');
+      return;
+    }
 
     if (newStatus === 'cancelled') {
       await enforcePermission(cleanRestaurantId, 'cancel_orders');
@@ -1550,7 +1666,7 @@ export class OrderService implements IOrderService {
       throw new Error('itemCancellations array must not be empty.');
     }
 
-    await enforcePermission(cleanRestaurantId, 'create_orders');
+    await enforcePermission(cleanRestaurantId, 'cancel_orders');
 
     const cleanKey = clientRequestId?.trim();
     if (cleanKey) {
@@ -1683,7 +1799,13 @@ export class OrderService implements IOrderService {
     }
 
     const paidAmountMinor = currentOrder.paidAmountMinor || 0;
-    const dueAmountMinor = Math.max(0, grandTotalMinor - paidAmountMinor);
+    if (!Number.isInteger(paidAmountMinor) || paidAmountMinor < 0) {
+      throw new Error(`Invalid paid amount on order "${cleanOrderId}".`);
+    }
+    if (paidAmountMinor > grandTotalMinor) {
+      throw new Error(`Cannot cancel these items because the resulting order total (₹${(grandTotalMinor / 100).toFixed(2)}) would be below the amount already paid (₹${(paidAmountMinor / 100).toFixed(2)}). Process the required refund before reducing the order total.`);
+    }
+    const dueAmountMinor = grandTotalMinor - paidAmountMinor;
 
     const isAllCancelled = activeItems.length === 0;
     const newStatus: OrderStatus = isAllCancelled ? 'cancelled' : currentOrder.status;
@@ -1969,6 +2091,26 @@ export class OrderService implements IOrderService {
     const resolvedUserId = actorUid || auth.currentUser?.uid || 'staff';
 
     await enforcePermission(cleanRestaurantId, 'modify_orders');
+
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to complete an order.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch((await import('../utils/apiConfig')).getApiUrl('/api/orders/accept-online'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ restaurantId: cleanRestaurantId, orderId: cleanOrderId, prepTimeMinutes })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.order) {
+        throw new Error(payload?.message || 'Online order acceptance failed.');
+      }
+      return payload.order as Order;
+    }
 
     const path = orderDocPath(cleanRestaurantId, cleanOrderId);
     const orderDocRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
@@ -2440,7 +2582,7 @@ export class OrderService implements IOrderService {
       throw new Error('restaurantId and orderId are required to reopen order.');
     }
 
-    await enforcePermission(cleanRestaurantId, 'modify_orders');
+    await enforcePermission(cleanRestaurantId, 'cancel_orders');
 
     const path = orderDocPath(cleanRestaurantId, cleanOrderId);
     try {
@@ -2511,29 +2653,27 @@ export class OrderService implements IOrderService {
       if (!order) {
         throw new Error(`Order "${cleanOrderId}" not found in restaurant "${cleanRestaurantId}".`);
       }
-
-      // 1. Delete associated payments so they don't corrupt payments analytics or history
-      try {
-        const paymentsCol = collection(db, 'restaurants', cleanRestaurantId, 'payments');
-        const payQuery = query(paymentsCol, where('orderId', '==', cleanOrderId));
-        const paySnap = await getDocs(payQuery);
-        for (const payDoc of paySnap.docs) {
-          await deleteDoc(doc(db, 'restaurants', cleanRestaurantId, 'payments', payDoc.id));
-        }
-      } catch (payErr) {
-        console.warn('[RestaurantOS] Failed to delete associated payments for deleted order:', payErr);
+      if (order.status !== 'draft') {
+        throw new Error(`Only draft orders without operational history may be physically deleted. Order "${cleanOrderId}" is currently "${order.status}".`);
       }
 
-      // 2. Delete associated KOTs to avoid orphaned kitchen tickets
-      try {
-        const kotsCol = collection(db, 'restaurants', cleanRestaurantId, 'kots');
-        const kotQuery = query(kotsCol, where('orderId', '==', cleanOrderId));
-        const kotSnap = await getDocs(kotQuery);
-        for (const kotDoc of kotSnap.docs) {
-          await deleteDoc(doc(db, 'restaurants', cleanRestaurantId, 'kots', kotDoc.id));
-        }
-      } catch (kotErr) {
-        console.warn('[RestaurantOS] Failed to delete associated KOTs for deleted order:', kotErr);
+      // Financial, inventory, or kitchen history makes an order non-deletable.
+      const paymentsCol = collection(db, 'restaurants', cleanRestaurantId, 'payments');
+      const payQuery = query(paymentsCol, where('orderId', '==', cleanOrderId));
+      const paySnap = await getDocs(payQuery);
+      if (!paySnap.empty || (order.paidAmountMinor || 0) > 0 || (order.paymentStatus && order.paymentStatus !== 'unpaid')) {
+        throw new Error(`Order "${cleanOrderId}" cannot be deleted because financial settlement/history exists. Use cancellation and refund workflows instead.`);
+      }
+
+      if (order.stockConsumptionStatus === 'consumed' || order.stockConsumptionStatus === 'reversed') {
+        throw new Error(`Order "${cleanOrderId}" cannot be deleted because inventory history exists.`);
+      }
+
+      const kotsCol = collection(db, 'restaurants', cleanRestaurantId, 'kots');
+      const kotQuery = query(kotsCol, where('orderId', '==', cleanOrderId));
+      const kotSnap = await getDocs(kotQuery);
+      if (!kotSnap.empty) {
+        throw new Error(`Order "${cleanOrderId}" cannot be deleted because kitchen ticket history exists.`);
       }
 
       const docRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', cleanOrderId);
@@ -2544,7 +2684,7 @@ export class OrderService implements IOrderService {
         entityType: 'order',
         entityId: cleanOrderId,
         action: 'order_deleted',
-        actorUid: deletedBy,
+        actorUid: auth.currentUser?.uid || deletedBy,
         metadata: {
           orderNumber: order.orderNumber,
           grandTotalMinor: order.grandTotalMinor,
@@ -2578,7 +2718,27 @@ export class OrderService implements IOrderService {
       throw new Error('restaurantId and orderId are required to complete an order.');
     }
 
-    await enforcePermission(cleanRestaurantId, 'modify_orders');
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to complete an order.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch((await import('../utils/apiConfig')).getApiUrl('/api/orders/complete'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ restaurantId: cleanRestaurantId, orderId: cleanOrderId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.order) {
+        throw new Error(payload?.message || 'Order completion failed.');
+      }
+      return payload.order as Order;
+    }
+
+    const trustedServerContext = auth.currentUser?.email === 'system-server@restaurantos.app';
+    if (!trustedServerContext) {
+      await enforcePermission(cleanRestaurantId, 'modify_orders');
+    }
 
     const path = orderDocPath(cleanRestaurantId, cleanOrderId);
     try {

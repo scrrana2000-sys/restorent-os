@@ -1,5 +1,14 @@
 # Changelog — RestaurantOS
 
+## [Production Candidate Security & Pipeline Hardening] - 2026-09-18
+
+- Made Firestore order and KOT creation server-authoritative; browser workflows use authenticated API boundaries.
+- Made order stock-lock mutations server-only.
+- Hardened Razorpay webhook idempotency so failed deliveries retry and stale processing claims can be reclaimed after 10 minutes.
+- Added strict POS source/order-type validation and fixed omitted client-request IDs from becoming shared idempotency keys.
+- Disabled direct restaurant document deletion to prevent orphaned tenant subcollections; controlled backend purge can be added later.
+- Updated release/security documentation to distinguish static verification from dependency-backed CI verification.
+
 All notable changes to RestaurantOS will be documented in this file.
 
 ## [Cloud Run Deployment Readiness & Public Webhook Verification] - 2026-09-17

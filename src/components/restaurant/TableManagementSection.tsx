@@ -13,12 +13,15 @@ import {
   ShieldAlert,
   WifiOff,
   MapPin,
-  Check
+  Check,
+  Sparkles,
+  Lock
 } from 'lucide-react';
 import { Table, TableFormData } from '../../types/table';
 import { tableService } from '../../services/tableService';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 import { validateTable } from '../../utils/transactionValidation';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
@@ -30,15 +33,29 @@ export const TableManagementSection: React.FC = () => {
   const { user, profile } = useAuth();
   const restaurantId = restaurant?.restaurantId || '';
 
-  // Authorization check: Owner or Manager only
-  const userRole = profile?.role;
-  const canManageTables = userRole === 'owner' || userRole === 'manager';
-
   // Data states
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [retryTrigger, setRetryTrigger] = useState<number>(0);
+
+  let entitlements: any = null;
+  let openPaymentModal: any = null;
+  try {
+    const subContext = useSubscription();
+    entitlements = subContext?.entitlements;
+    openPaymentModal = subContext?.openPaymentModal;
+  } catch {
+    // Fallback
+  }
+
+  const maxTables = entitlements?.plan?.limits?.maxTables || 15;
+  const planName = entitlements?.plan?.name || 'Starter';
+  const isTableLimitReached = tables.length >= maxTables;
+
+  // Authorization check: Owner or Manager only
+  const userRole = profile?.role;
+  const canManageTables = userRole === 'owner' || userRole === 'manager';
 
   // Modal & Form states
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -321,7 +338,20 @@ export const TableManagementSection: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div
+            id="table-quota-badge"
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 ${
+              isTableLimitReached
+                ? 'bg-amber-50 text-amber-900 border-amber-300'
+                : 'bg-slate-50 text-slate-700 border-slate-200'
+            }`}
+          >
+            <span>Tables:</span>
+            <span className="font-mono">{tables.length} / {maxTables}</span>
+            <span className="text-[10px] text-slate-500 font-medium">({planName})</span>
+          </div>
+
           <Button
             type="button"
             variant="outline"
@@ -335,16 +365,34 @@ export const TableManagementSection: React.FC = () => {
           </Button>
 
           {canManageTables && (
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={handleOpenAddModal}
-              leftIcon={<Plus className="w-4 h-4" />}
-              id="add-table-btn"
-            >
-              Add Table
-            </Button>
+            isTableLimitReached ? (
+              <button
+                type="button"
+                id="upgrade-tables-limit-btn"
+                onClick={() => {
+                  if (openPaymentModal) {
+                    const nextPlan = maxTables <= 15 ? 'growth' : 'pro';
+                    openPaymentModal(nextPlan, 'annual');
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
+                title={`Table limit of ${maxTables} reached on ${planName} plan. Upgrade to add more.`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Upgrade for More Tables</span>
+              </button>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={handleOpenAddModal}
+                leftIcon={<Plus className="w-4 h-4" />}
+                id="add-table-btn"
+              >
+                Add Table
+              </Button>
+            )
           )}
         </div>
       </div>

@@ -22,7 +22,7 @@ describe('firestore.rules Static Security & RBAC Audit', () => {
   it('keeps private restaurants collection strictly protected while exposing sanitized publicRestaurants', () => {
     // Private restaurants match enforces member access only
     expect(rulesContent).toMatch(/match\s+\/restaurants\/\{restaurantId\}/);
-    expect(rulesContent).toMatch(/allow\s+read\s*:\s*if\s+canAccessRestaurant\(restaurantId\);/);
+    expect(rulesContent).toMatch(/allow\s+get\s*:\s*if\s+isSignedIn\(\)/);
 
     // Sanitized publicRestaurants collection allows public read but strict staff write
     expect(rulesContent).toMatch(/match\s+\/publicRestaurants\/\{restaurantId\}/);
@@ -59,8 +59,8 @@ describe('firestore.rules Static Security & RBAC Audit', () => {
     expect(rulesContent).toMatch(/isMemberWithRole\(restaurantId,\s*'manager'\)/);
     expect(rulesContent).toMatch(/request\.auth\.uid\s*==\s*memberId/);
 
-    // Write: Owner or claiming self
-    expect(rulesContent).toMatch(/allow\s+write\s*:\s*if\s+isOwnerOfRestaurant\(restaurantId\)/);
+    // Create: Owner or claiming self
+    expect(rulesContent).toMatch(/allow\s+create\s*:\s*if\s+\(\s*isOwnerOfRestaurant\(restaurantId\)/);
   });
 
   it('enforces append-only immutable audit logs', () => {

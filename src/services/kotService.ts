@@ -24,6 +24,7 @@ import { auditService } from './auditService';
 import { orderFinalizationService } from './orderFinalizationService';
 import { enforcePermission } from '../utils/permissions';
 import { sanitizeFirestoreData } from '../utils/sanitize';
+import { getApiUrl } from '../utils/apiConfig';
 
 export interface CreateKOTFromOrderInput {
   restaurantId: string;
@@ -297,6 +298,32 @@ export class KOTService implements IKOTService {
 
     if (!cleanRestaurantId || !cleanOrderId) {
       throw new Error('restaurantId and orderId are required to create a KOT from an order.');
+    }
+
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication required to create a KOT.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/kots/create'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          restaurantId: cleanRestaurantId,
+          orderId: cleanOrderId,
+          items: selectedItems || undefined,
+          notes: notes || '',
+          clientRequestId: clientRequestId || undefined
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || data?.error || `KOT creation failed with status ${response.status}`);
+      }
+      return data.kot as KOT;
     }
 
     await enforcePermission(cleanRestaurantId, 'create_orders');

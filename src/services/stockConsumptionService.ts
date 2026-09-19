@@ -47,6 +47,7 @@ import {
 import { enforcePermission } from '../utils/permissions';
 import { auditService } from './auditService';
 import { IdempotencyService } from './idempotencyService';
+import { getApiUrl } from '../utils/apiConfig';
 
 export class StockConsumptionService {
   private idempotency = new IdempotencyService();
@@ -58,7 +59,8 @@ export class StockConsumptionService {
    */
   async consumeStockForOrder(
     restaurantId: string,
-    data: ConsumeStockForOrderDTO
+    data: ConsumeStockForOrderDTO,
+    actorUidOverride?: string
   ): Promise<{ consumptions: StockConsumption[]; movements: StockMovement[] }> {
     const cleanRestId = restaurantId?.trim();
     if (!cleanRestId) {
@@ -74,7 +76,27 @@ export class StockConsumptionService {
       return { consumptions: [], movements: [] };
     }
 
-    const actorUid = auth.currentUser?.uid || 'system';
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required for stock consumption.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/stock/consume-order'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ restaurantId: cleanRestId, data })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.result) {
+        throw new Error(payload?.message || 'Server-side stock consumption failed.');
+      }
+      return payload.result as { consumptions: StockConsumption[]; movements: StockMovement[] };
+    }
+
+    const actorUid = actorUidOverride?.trim() || auth.currentUser?.uid || 'system';
     const idempotencyKey = data.clientRequestId?.trim() || `${cleanRestId}_consumption_${orderId}`;
 
     // 1. Check existing consumption records to prevent duplicate consumption
@@ -113,9 +135,23 @@ export class StockConsumptionService {
       }
     }
 
-    // If no ordered items have active recipes, no stock to consume
+    // If no ordered items have active recipes, record a server-owned no-op lock so
+    // the caller can safely persist an explicit `not_applicable` state without
+    // being able to manufacture that state directly in Firestore.
     const hasAnyRecipes = data.items.some((item) => activeRecipesMap.has(item.itemId.trim()));
     if (!hasAnyRecipes) {
+      const orderStockLockRef = doc(db, 'restaurants', cleanRestId, 'order_stock_locks', orderId);
+      const now = new Date();
+      await setDoc(orderStockLockRef, {
+        restaurantId: cleanRestId,
+        orderId,
+        status: 'not_applicable',
+        actorUid: auth.currentUser?.uid || 'system',
+        actorType: 'server',
+        idempotencyKey,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
       return { consumptions: [], movements: [] };
     }
 
@@ -136,7 +172,7 @@ export class StockConsumptionService {
     const result = await runTransaction(db, async (tx) => {
       // Step A0: Read order lock inside transaction to prevent concurrent duplicate deductions
       const lockSnap = await tx.get(orderStockLockRef);
-      if (lockSnap.exists() && lockSnap.data()?.status === 'consumed') {
+      if (lockSnap.exists() && ['consumed', 'not_applicable'].includes(lockSnap.data()?.status)) {
         return { consumptions: [], movements: [], alreadyConsumed: true };
       }
 
@@ -330,6 +366,7 @@ export class StockConsumptionService {
         status: 'consumed',
         consumedAt: serverTimestamp(),
         actorUid,
+        actorType: 'server',
         idempotencyKey
       });
 
@@ -363,12 +400,28 @@ export class StockConsumptionService {
     restaurantId: string,
     orderId: string,
     reason?: string,
-    clientRequestId?: string
+    clientRequestId?: string,
+    actorUidOverride?: string
   ): Promise<{ reversedConsumptions: StockConsumption[]; compensatingMovements: StockMovement[] }> {
     const cleanRestId = restaurantId?.trim();
     const cleanOrderId = orderId?.trim();
     if (!cleanRestId || !cleanOrderId) {
       throw new Error('restaurantId and orderId are required to reverse consumption');
+    }
+
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to reverse stock consumption.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/stock/reverse-order'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ restaurantId: cleanRestId, orderId: cleanOrderId, reason, clientRequestId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.result) throw new Error(payload?.message || 'Stock reversal failed.');
+      return payload.result as { reversedConsumptions: StockConsumption[]; compensatingMovements: StockMovement[] };
     }
 
     const actorUid = auth.currentUser?.uid || 'system';
@@ -564,6 +617,21 @@ export class StockConsumptionService {
 
     if (!cancelledItems || cancelledItems.length === 0) {
       return { reversedMovements: [], affectedConsumptions: [] };
+    }
+
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to reverse partial stock consumption.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/stock/reverse-partial'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ restaurantId: cleanRestId, orderId: cleanOrderId, cancelledItems, reason, clientRequestId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.result) throw new Error(payload?.message || 'Partial stock reversal failed.');
+      return payload.result as { reversedMovements: StockMovement[]; affectedConsumptions: StockConsumption[] };
     }
 
     const resolvedActorUid = actorUid || auth.currentUser?.uid || 'system';

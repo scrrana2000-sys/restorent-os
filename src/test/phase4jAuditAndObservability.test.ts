@@ -326,6 +326,29 @@ describe('Phase 4J: Audit & Observability Verification Suite', () => {
     it('creates an audit log when a physical table is created', async () => {
       const logEventSpy = vi.spyOn(auditService, 'logEvent').mockResolvedValue({ id: 'log_128' } as any);
       vi.mocked(firestore.setDoc).mockResolvedValue(undefined);
+      vi.mocked(firestore.getDoc).mockImplementation(async (docRef: any) => {
+        const path = docRef?.path || '';
+        if (path.includes('subscription')) {
+          return {
+            exists: () => true,
+            data: () => ({
+              subscriptionId: 'current',
+              restaurantId,
+              status: 'active',
+              planId: 'growth_monthly',
+              currentPeriodEnd: new Date(Date.now() + 864000000).toISOString()
+            })
+          } as any;
+        }
+        return {
+          exists: () => true,
+          data: () => ({ name: 'Test Restaurant' })
+        } as any;
+      });
+      vi.mocked(firestore.getDocs).mockResolvedValue({
+        size: 1,
+        docs: []
+      } as any);
 
       const table = await tableService.createTable(restaurantId, {
         name: 'Garden Table A',

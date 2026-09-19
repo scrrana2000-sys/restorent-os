@@ -85,6 +85,24 @@ export async function getRestaurantsForUser(userId: string): Promise<Restaurant[
   }
 }
 
+async function ensureOwnerMembership(restaurant: Restaurant, userId: string, ownerEmail: string, ownerName: string): Promise<void> {
+  if (!restaurant?.restaurantId || restaurant.ownerId !== userId) return;
+  try {
+    const memberRef = doc(db, 'restaurants', restaurant.restaurantId, 'members', userId);
+    const memberSnap = await getDoc(memberRef);
+    const payload = {
+      memberId: userId, userId, restaurantId: restaurant.restaurantId, role: 'owner',
+      displayName: ownerName || restaurant.name || 'Restaurant Owner',
+      email: ownerEmail || restaurant.email || '', isActive: true, status: 'active',
+      authLinked: true, updatedAt: serverTimestamp()
+    };
+    if (memberSnap.exists()) await updateDoc(memberRef, payload);
+    else await setDoc(memberRef, { ...payload, createdAt: serverTimestamp() });
+  } catch (err) {
+    console.warn('[RestaurantOS Owner Bootstrap] Failed to reconcile owner membership:', err);
+  }
+}
+
 export async function getOrCreateInitialRestaurant(
   userId: string,
   userEmail: string,
@@ -114,10 +132,20 @@ export async function getOrCreateInitialRestaurant(
         ownerId: userId
       });
       try {
-        await setDoc(userRef, { restaurantId: existing.restaurantId, initialRestaurantId: existing.restaurantId }, { merge: true });
+        await setDoc(
+          userRef,
+          {
+            userId,
+            restaurantId: existing.restaurantId,
+            initialRestaurantId: existing.restaurantId,
+            updatedAt: serverTimestamp()
+          },
+          { merge: true }
+        );
       } catch (linkErr) {
         console.warn('[RestaurantOS Idempotency] Failed to reconcile user profile pointer:', linkErr);
       }
+      await ensureOwnerMembership(existing, userId, userEmail, ownerName);
       return existing;
     }
   } catch (queryErr) {
@@ -146,8 +174,20 @@ export async function getOrCreateInitialRestaurant(
       const initRestSnap = await transaction.get(initRestRef);
       if (initRestSnap.exists()) {
         console.log('[RestaurantOS Idempotency] Transaction resolved existing deterministic restaurant document:', initDocId);
-        const initData = { restaurantId: initRestSnap.id, ...initRestSnap.data() } as Restaurant;
-        transaction.set(userRef, { restaurantId: initDocId, initialRestaurantId: initDocId }, { merge: true });
+        const rawInitData = initRestSnap.data();
+        // Legacy bootstrap repair: if this deterministic initial-owner record was created by
+        // this same authenticated UID but its ownerId was lost/corrupted, repair only the
+        // ownership pointer. The Firestore rule independently requires createdBy +
+        // provisioningType to match, so another user cannot claim the record.
+        if (rawInitData.provisioningType === 'initial_owner'
+          && rawInitData.createdBy === userId
+          && rawInitData.ownerId !== userId) {
+          transaction.update(initRestRef, { ownerId: userId, updatedAt: serverTimestamp() });
+          rawInitData.ownerId = userId;
+          console.log('[RestaurantOS Owner Bootstrap] Repaired legacy initial restaurant ownerId:', initDocId);
+        }
+        const initData = { restaurantId: initRestSnap.id, ...rawInitData } as Restaurant;
+        transaction.set(userRef, { userId, restaurantId: initDocId, initialRestaurantId: initDocId }, { merge: true });
         return initData;
       }
 
@@ -182,10 +222,12 @@ export async function getOrCreateInitialRestaurant(
       };
 
       transaction.set(initRestRef, newRestaurant);
-      transaction.set(userRef, { restaurantId: initDocId, initialRestaurantId: initDocId, role: 'owner' }, { merge: true });
+      transaction.set(userRef, { userId, restaurantId: initDocId, initialRestaurantId: initDocId }, { merge: true });
 
       return newRestaurant;
     });
+
+    await ensureOwnerMembership(result, userId, userEmail, ownerName);
 
     // Best-effort sync to public discovery projection
     try {
@@ -205,6 +247,7 @@ export async function getOrCreateInitialRestaurant(
       } catch (syncErr) {
         console.warn('[RestaurantOS Discovery] Public profile sync warning on retry fallback:', syncErr);
       }
+      await ensureOwnerMembership(fallbackRest, userId, userEmail, ownerName);
       return fallbackRest;
     }
     throw handleFirestoreError(txErr, OperationType.CREATE, `restaurants/${initDocId}`);
@@ -284,19 +327,28 @@ export async function createRestaurantBranch(
   country: string = 'India'
 ): Promise<Restaurant> {
   try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Authentication is required to create a restaurant branch.');
+    if (userId !== currentUser.uid) throw new Error('Authenticated owner identity does not match the requested user.');
+    const cleanBranchName = branchName?.trim();
+    const cleanCity = city?.trim();
+    const cleanCountry = country?.trim() || 'India';
+    if (!cleanBranchName) throw new Error('Branch name is required.');
+    if (!cleanCity) throw new Error('City is required.');
+
     const restaurantRef = doc(collection(db, 'restaurants'));
     const newRestaurant: Restaurant = {
       restaurantId: restaurantRef.id,
-      name: branchName,
-      legalName: `${branchName} Group`,
+      name: cleanBranchName,
+      legalName: `${cleanBranchName} Group`,
       logoUrl: null,
       phone: '+91 98765 43210',
       email: userEmail || 'admin@restaurantos.io',
       address: 'Shop 101, Main Street',
-      city: city,
+      city: cleanCity,
       state: '',
       postalCode: '',
-      country: country,
+      country: cleanCountry,
       gstNumber: '29ABCDE1234F1Z5',
       currency: 'INR',
       currencySymbol: '₹',

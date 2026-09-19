@@ -1,6 +1,7 @@
 import React from 'react';
-import { Mic, MicOff, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Volume2, Lock, Sparkles } from 'lucide-react';
 import { isVoiceRecognitionSupported } from '../../services/voice/voiceSupport';
+import { useSubscription } from '../../context/SubscriptionContext';
 
 interface VoiceOrderButtonProps {
   onClick: () => void;
@@ -18,13 +19,67 @@ export const VoiceOrderButton: React.FC<VoiceOrderButtonProps> = ({
   disabled = false
 }) => {
   const supported = isVoiceRecognitionSupported();
+  let isVoiceEntitled = true;
+  let openPaymentModal: any = null;
+
+  try {
+    const sub = useSubscription();
+    if (sub && sub.isFeatureEnabled) {
+      isVoiceEntitled = sub.isFeatureEnabled('voiceAssistant');
+    }
+    openPaymentModal = sub?.openPaymentModal;
+  } catch {
+    // Outside subscription provider fallback
+  }
+
+  const handleClick = () => {
+    if (!isVoiceEntitled) {
+      if (openPaymentModal) {
+        openPaymentModal('pro', 'annual');
+      }
+      return;
+    }
+    onClick();
+  };
+
+  if (!isVoiceEntitled) {
+    if (variant === 'compact') {
+      return (
+        <button
+          type="button"
+          id="voice-order-btn-compact-locked"
+          onClick={handleClick}
+          className={`flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200 transition-all active:scale-95 ${className}`}
+          title="Voice POS AI requires Pro Plan. Click to upgrade."
+        >
+          <Lock className="w-4 h-4 text-amber-600" />
+        </button>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        id="voice-order-btn-header-locked"
+        onClick={handleClick}
+        className={`flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 transition-all active:scale-95 cursor-pointer ${className}`}
+        title="Voice POS AI requires Pro Plan. Click to upgrade."
+      >
+        <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+        <span className="truncate">Voice Order</span>
+        <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-200 rounded font-bold uppercase tracking-wider">
+          Pro
+        </span>
+      </button>
+    );
+  }
 
   if (variant === 'compact') {
     return (
       <button
         type="button"
         id="voice-order-btn-compact"
-        onClick={onClick}
+        onClick={handleClick}
         disabled={disabled}
         className={`flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-xl transition-all active:scale-95 ${
           isListening
@@ -48,7 +103,7 @@ export const VoiceOrderButton: React.FC<VoiceOrderButtonProps> = ({
       <button
         type="button"
         id="voice-order-btn-floating"
-        onClick={onClick}
+        onClick={handleClick}
         disabled={disabled}
         className={`fixed bottom-20 right-4 z-20 flex items-center gap-2 px-4 py-3 rounded-full font-bold shadow-lg transition-all active:scale-95 ${
           isListening
@@ -68,7 +123,7 @@ export const VoiceOrderButton: React.FC<VoiceOrderButtonProps> = ({
     <button
       type="button"
       id="voice-order-btn-header"
-      onClick={onClick}
+      onClick={handleClick}
       disabled={disabled}
       className={`flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${
         isListening

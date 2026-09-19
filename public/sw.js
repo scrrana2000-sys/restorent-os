@@ -8,8 +8,7 @@ const STATIC_ASSETS = [
 
 // Completely bypass and self-unregister in development/preview sandboxes
 const isDevSandbox =
-  self.location.hostname.includes('ais-dev') ||
-  self.location.hostname.includes('run.app') ||
+    self.location.hostname.includes('run.app') ||
   self.location.hostname === 'localhost' ||
   self.location.hostname === '127.0.0.1';
 

@@ -21,6 +21,7 @@ import { getApiUrl } from '../utils/apiConfig';
 import { enforcePermission } from '../utils/permissions';
 import { auditService } from './auditService';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
+import { checkStaffLimit } from './subscriptionService';
 
 export interface AddStaffResult {
   member: RestaurantMember;
@@ -214,6 +215,12 @@ export class StaffService {
 
     await enforcePermission(cleanRestaurantId, 'manage_staff');
 
+    // Active Plan Staff Limit Enforcement
+    const quotaCheck = await checkStaffLimit(cleanRestaurantId);
+    if (!quotaCheck.allowed) {
+      throw new Error(quotaCheck.reason || `Staff limit reached (${quotaCheck.maxStaff} on ${quotaCheck.planName} plan). Please upgrade your plan to invite more staff.`);
+    }
+
     const cleanEmail = input.email?.trim().toLowerCase();
     const cleanName = input.displayName?.trim();
 
@@ -291,7 +298,7 @@ export class StaffService {
         const apiRes = await fetch(getApiUrl('/api/send-invitation-email'), {
           method: 'POST',
           headers,
-          credentials: 'include',
+          credentials: 'omit',
           body: JSON.stringify({
             restaurantId: cleanRestaurantId,
             invitationId,
@@ -434,7 +441,7 @@ export class StaffService {
       const apiRes = await fetch(getApiUrl('/api/send-invitation-email'), {
         method: 'POST',
         headers,
-        credentials: 'include',
+        credentials: 'omit',
         body: JSON.stringify({
           restaurantId: cleanRestaurantId,
           invitationId: cleanMemberId,
@@ -633,6 +640,7 @@ export class StaffService {
       uid: string;
       email: string | null;
       displayName: string | null;
+      photoURL?: string | null;
       emailVerified?: boolean;
       providerData?: Array<{ providerId: string }>;
     }
@@ -691,13 +699,14 @@ export class StaffService {
         memberId: user.uid,
         userId: user.uid,
         restaurantId: authoritativeRestaurantId,
+        role: authoritativeRole,
         displayName: user.displayName || invitation.displayName || 'Staff Member',
         email: cleanUserEmail,
-        role: authoritativeRole, // Locked to authoritative invitation role
         isActive: true,
         status: 'active',
         authLinked: true,
         invitationStatus: 'active',
+        invitationId: invitation.memberId,
         invitedBy: invitation.invitedBy || 'system',
         createdAt: invitation.createdAt || serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -718,15 +727,24 @@ export class StaffService {
     // Update user profile in `/users/{user.uid}`
     try {
       const userRef = doc(db, 'users', user.uid);
-      await setDoc(
-        userRef,
-        {
+      const existingProfile = await getDoc(userRef);
+      if (existingProfile.exists()) {
+        await updateDoc(userRef, {
           restaurantId: authoritativeRestaurantId,
-          role: authoritativeRole,
           updatedAt: serverTimestamp()
-        },
-        { merge: true }
-      );
+        });
+      } else {
+        await setDoc(userRef, {
+          userId: user.uid,
+          displayName: user.displayName || invitation.displayName || 'Staff Member',
+          email: cleanUserEmail,
+          photoUrl: user.photoURL || null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          restaurantId: authoritativeRestaurantId,
+          initialRestaurantId: authoritativeRestaurantId
+        });
+      }
     } catch (profErr) {
       console.warn('[RestaurantOS] Failed to update user profile upon invitation claim:', profErr);
     }
@@ -837,6 +855,7 @@ export class StaffService {
             status: 'active',
             authLinked: true,
             invitationStatus: 'active',
+            invitationId: memberDoc.id,
             invitedBy: data.invitedBy || 'owner',
             createdAt: data.createdAt || serverTimestamp(),
             updatedAt: serverTimestamp()
@@ -1060,16 +1079,8 @@ export class StaffService {
         updatedAt: serverTimestamp()
       });
 
-      // Also update user profile role if user document exists
-      if (targetUserId && !targetUserId.startsWith('staff_') && !targetUserId.startsWith('invitation_')) {
-        try {
-          const userRef = doc(db, 'users', targetUserId);
-          await updateDoc(userRef, {
-            role: newRole,
-            updatedAt: serverTimestamp()
-          });
-        } catch {}
-      }
+      // Restaurant membership is the authoritative RBAC source. Do not mirror the role
+      // into /users/{uid}, because users must never be able to self-edit an authorization field.
 
       // Log audit event
       await auditService.logEvent(cleanRestaurantId, {

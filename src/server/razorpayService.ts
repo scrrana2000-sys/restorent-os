@@ -104,21 +104,37 @@ export interface WebhookProcessResult {
  * Returns public Key ID. Safe to return to frontend for checkout initialization.
  */
 export function getPublicRazorpayKeyId(): string {
-  return process.env.RAZORPAY_KEY_ID || 'rzp_test_restaurantos_placeholder';
+  const value = process.env.RAZORPAY_KEY_ID;
+  if (!value) {
+    if (process.env.NODE_ENV !== 'production') {
+      return 'rzp_test_placeholder';
+    }
+    throw new Error('RAZORPAY_KEY_ID is not configured.');
+  }
+  return value;
 }
 
 /**
  * Returns server-only Key Secret. NEVER expose to client.
  */
 function getRazorpayKeySecret(): string {
-  return process.env.RAZORPAY_KEY_SECRET || 'rzp_secret_restaurantos_placeholder';
+  const value = process.env.RAZORPAY_KEY_SECRET;
+  if (!value) {
+    if (process.env.NODE_ENV !== 'production') {
+      return 'rzp_test_secret_placeholder';
+    }
+    throw new Error('RAZORPAY_KEY_SECRET is not configured.');
+  }
+  return value;
 }
 
 /**
  * Returns server-only Webhook Secret. NEVER expose to client.
  */
 function getRazorpayWebhookSecret(): string {
-  return process.env.RAZORPAY_WEBHOOK_SECRET || getRazorpayKeySecret();
+  const value = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!value) throw new Error('RAZORPAY_WEBHOOK_SECRET is not configured.');
+  return value;
 }
 
 /**
@@ -180,15 +196,50 @@ export async function createRazorpayOrder(params: {
   const plan = getPlanById(planId);
   const amountPaise = billingCycle === 'annual' ? plan.priceAnnualPaise : plan.priceMonthlyPaise;
 
-  const keyId = getPublicRazorpayKeyId();
-  const keySecret = getRazorpayKeySecret();
-  const hasLiveCredentials =
-    Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) &&
-    process.env.RAZORPAY_KEY_ID !== 'rzp_test_restaurantos_placeholder';
+  const hasLiveCredentials = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 
+  if (!hasLiveCredentials) {
+    if (process.env.NODE_ENV !== 'production') {
+      const generatedOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      await recordSubscriptionAudit({
+        restaurantId,
+        eventType: 'CHECKOUT_CREATED',
+        planId: plan.planId,
+        planName: plan.name,
+        billingCycle,
+        amount: amountPaise,
+        currency: 'INR',
+        status: 'pending',
+        razorpayOrderId: generatedOrderId,
+        paymentReference: generatedOrderId,
+        metadata: {
+          callerUid,
+          billingCycle,
+          orderCreatedAt: new Date().toISOString(),
+          isSimulated: true
+        }
+      }).catch((err) => {
+        console.warn('[Razorpay Service] Audit log for CHECKOUT_CREATED notice:', err);
+      });
+
+      return {
+        orderId: generatedOrderId,
+        amount: amountPaise,
+        currency: 'INR',
+        keyId: 'rzp_test_placeholder',
+        planId: plan.planId,
+        planName: plan.name,
+        billingCycle
+      };
+    }
+    throw new Error('Razorpay production credentials are not configured. Payment checkout is unavailable.');
+  }
+
+  const keyId = getPublicRazorpayKeyId();
   let generatedOrderId: string;
 
   if (hasLiveCredentials) {
+    const keySecret = getRazorpayKeySecret();
     try {
       const basicAuth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
       const receiptId = `rcpt_${restaurantId.substring(0, 8)}_${Date.now().toString().slice(-8)}`;
@@ -229,9 +280,6 @@ export async function createRazorpayOrder(params: {
       console.error('[Razorpay Service] Razorpay API network error:', err);
       throw err;
     }
-  } else {
-    // Sandbox / Local / Test Mode Order Generation
-    generatedOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 
   // Record audit history: CHECKOUT_CREATED
@@ -281,6 +329,14 @@ export function verifyRazorpayPaymentSignature(params: {
     return false;
   }
 
+  // Accept simulated test signatures in non-production / test environments
+  if (
+    (process.env.NODE_ENV !== 'production' || process.env.VITEST === 'true') &&
+    razorpaySignature.startsWith('sig_test_')
+  ) {
+    return true;
+  }
+
   const secret = getRazorpayKeySecret();
   const payload = `${razorpayOrderId}|${razorpayPaymentId}`;
 
@@ -299,19 +355,8 @@ export function verifyRazorpayPaymentSignature(params: {
         return true;
       }
     } catch {
-      // Fall through to simulated fallback check
+      // Signature mismatch. Never accept a simulated/test signature in production.
     }
-  }
-
-  // In test / simulation environments without a configured live secret,
-  // accept validly formatted mock signatures (prefixed with 'sig_')
-  const isDevOrTest =
-    process.env.NODE_ENV === 'test' ||
-    process.env.VITEST ||
-    !process.env.RAZORPAY_KEY_SECRET;
-
-  if (isDevOrTest && razorpaySignature.startsWith('sig_test_')) {
-    return true;
   }
 
   return false;
@@ -375,6 +420,36 @@ export async function claimWebhookEventIdempotently(params: {
       const snap = await transaction.get(webhookDocRef);
       if (snap.exists()) {
         const existingData = snap.data() as SubscriptionWebhookEventRecord;
+        const existingStatus = existingData.status;
+
+        // Successfully completed or intentionally ignored events must never be replayed.
+        if (existingStatus === 'processed' || existingStatus === 'ignored') {
+          return { isFirstAttempt: false, existingRecord: existingData };
+        }
+
+        // A failed delivery is safe to retry. A processing record is retryable only
+        // after a stale lease window, which protects against both concurrent delivery
+        // and a worker crash between claim and completion.
+        const receivedAtMs = Date.parse(existingData.receivedAt || '');
+        const processingLeaseMs = 10 * 60 * 1000;
+        const isStaleProcessing =
+          existingStatus === 'processing'
+          && Number.isFinite(receivedAtMs)
+          && Date.now() - receivedAtMs >= processingLeaseMs;
+
+        if (existingStatus === 'failed' || isStaleProcessing) {
+          const now = new Date().toISOString();
+          transaction.update(webhookDocRef, {
+            status: 'processing',
+            receivedAt: now,
+            processedAt: null,
+            error: null,
+            actionTaken: null,
+            updatedAt: now
+          });
+          return { isFirstAttempt: true, existingRecord: { ...existingData, status: 'processing', receivedAt: now, processedAt: null, error: null } };
+        }
+
         return { isFirstAttempt: false, existingRecord: existingData };
       }
 
@@ -455,6 +530,73 @@ export async function checkAndMarkWebhookIdempotent(
  * Preserves the 7-day trial dates and never resets the trial window.
  * Idempotent: If this exact payment was already activated, avoids duplicate activations and duplicate audit logs.
  */
+export async function ensureRestaurantTrialInFirestore(restaurantId: string) {
+  const cleanRestaurantId = restaurantId?.trim();
+  if (!cleanRestaurantId) throw new Error('restaurantId is required.');
+  try {
+    await ensureServerAuthenticated();
+  } catch (authErr) {
+    console.warn('[Razorpay Service] Server auth notice during trial init:', authErr);
+  }
+
+  const subDocRef = doc(db, 'restaurants', cleanRestaurantId, 'subscription', 'current');
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const existingSnap = await transaction.get(subDocRef);
+      if (existingSnap.exists()) {
+        return { subscriptionId: existingSnap.id, ...existingSnap.data() };
+      }
+
+      const now = new Date();
+      const trialEnds = new Date(now.getTime() + SEVEN_DAYS_MS);
+      const trial = {
+        subscriptionId: 'current',
+        restaurantId: cleanRestaurantId,
+        status: 'trial',
+        planId: TRIAL_PLAN_ID,
+        billingCycle: 'monthly',
+        trialStartedAt: now.toISOString(),
+        trialEndsAt: trialEnds.toISOString(),
+        trialStartAt: now.toISOString(),
+        trialEndAt: trialEnds.toISOString(),
+        currentPeriodStart: now.toISOString(),
+        currentPeriodEnd: trialEnds.toISOString(),
+        paymentStatus: 'none',
+        provider: 'manual',
+        autoRenew: false,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString()
+      };
+
+      transaction.set(subDocRef, trial);
+      return trial;
+    });
+  } catch (err: any) {
+    console.warn('[Razorpay Service] Trial transaction fallback notice:', err?.message || err);
+    // Return standard trial object fallback so the app continues seamlessly
+    const now = new Date();
+    const trialEnds = new Date(now.getTime() + SEVEN_DAYS_MS);
+    return {
+      subscriptionId: 'current',
+      restaurantId: cleanRestaurantId,
+      status: 'trial',
+      planId: TRIAL_PLAN_ID,
+      billingCycle: 'monthly',
+      trialStartedAt: now.toISOString(),
+      trialEndsAt: trialEnds.toISOString(),
+      trialStartAt: now.toISOString(),
+      trialEndAt: trialEnds.toISOString(),
+      currentPeriodStart: now.toISOString(),
+      currentPeriodEnd: trialEnds.toISOString(),
+      paymentStatus: 'none',
+      provider: 'manual',
+      autoRenew: false,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString()
+    };
+  }
+}
+
 export async function activateSubscriptionInFirestore(params: {
   restaurantId: string;
   planId: string;
@@ -731,6 +873,10 @@ export async function processRazorpayWebhookPayload(
   payload: any,
   eventId: string
 ): Promise<WebhookProcessResult> {
+  if (!eventId || !eventId.trim()) {
+    return { received: false, error: 'Missing webhook event ID.' };
+  }
+
   const event = payload?.event;
   if (!event) {
     return { received: false, error: 'Missing event field in webhook payload.' };

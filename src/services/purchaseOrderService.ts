@@ -43,6 +43,7 @@ import {
 } from '../utils/supplierUtils';
 import { roundQuantity, areUnitsCompatible, convertQuantity } from '../utils/units';
 import { enforcePermission } from '../utils/permissions';
+import { getApiUrl } from '../utils/apiConfig';
 import { auditService } from './auditService';
 import { IdempotencyService } from './idempotencyService';
 
@@ -453,6 +454,27 @@ export class PurchaseOrderService {
     const cleanPoId = data.purchaseOrderId?.trim();
     if (!cleanRestId || !cleanPoId) {
       throw new Error('restaurantId and purchaseOrderId are required');
+    }
+
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to receive purchase goods.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/purchases/receive'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          restaurantId: cleanRestId,
+          data,
+          clientRequestId: clientRequestId?.trim() || undefined
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.result) {
+        throw new Error(payload?.message || payload?.error || `Purchase receiving failed with status ${response.status}`);
+      }
+      return payload.result as { purchaseOrder: PurchaseOrder; receiving: PurchaseReceiving };
     }
 
     await enforcePermission(cleanRestId, 'receive_purchases');

@@ -294,6 +294,8 @@ export class PrinterService {
     const job: PrintJob = {
       id: `JOB-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       restaurantId: cleanRestId,
+      createdBy: auth.currentUser?.uid || 'system',
+      updatedBy: auth.currentUser?.uid || 'system',
       printerId: targetPrinter.id,
       jobType: 'BILL',
       documentId: order.id,
@@ -387,6 +389,8 @@ export class PrinterService {
     const job: PrintJob = {
       id: `JOB-KOT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       restaurantId: cleanRestId,
+      createdBy: auth.currentUser?.uid || 'system',
+      updatedBy: auth.currentUser?.uid || 'system',
       printerId: targetPrinter.id,
       jobType: 'KOT',
       documentId: kot.id,
@@ -471,6 +475,7 @@ export class PrinterService {
       await updateDoc(jobRef, {
         attemptCount: updatedJob.attemptCount,
         status: 'queued',
+        updatedBy: auth.currentUser?.uid || 'system',
         updatedAt: serverTimestamp()
       });
     } catch {

@@ -1,3 +1,5 @@
+> **Historical report notice — superseded by the September 18, 2026 release-candidate hardening pass:** This file records an earlier audit snapshot. The current source includes additional security and pipeline hardening. Treat `FINAL_RELEASE_CHECKLIST.md` and the current CI workflow as the authoritative release gate.
+
 # RestaurantOS — Production Audit & System Health Report
 
 **Date**: September 16, 2026

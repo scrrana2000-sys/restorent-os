@@ -170,3 +170,72 @@ export function formatSubscriptionDate(dateStr?: string | null): string {
     return dateStr;
   }
 }
+
+/**
+ * Checks whether a specific plan limit feature is enabled on the current subscription.
+ */
+export function isFeatureEntitled(
+  entitlements: SubscriptionEntitlements | null | undefined,
+  feature: keyof import('../types/subscription').PlanLimits
+): boolean {
+  if (!entitlements || !entitlements.canPerformOperationalActions) {
+    return false;
+  }
+  const limits = entitlements.plan.limits;
+  return Boolean(limits[feature]);
+}
+
+/**
+ * Checks whether an admin view is enabled based on subscription plan entitlements.
+ */
+export function isViewPlanEntitled(
+  entitlements: SubscriptionEntitlements | null | undefined,
+  view: string
+): boolean {
+  if (!entitlements) return true;
+
+  // Subscription view is always accessible even when expired
+  if (view === 'subscription') return true;
+
+  // For expired subscriptions, general operational views are restricted
+  if (!entitlements.canPerformOperationalActions) {
+    // Read-only settings / reports might remain for audit, but operational modules are gated
+    return false;
+  }
+
+  const limits = entitlements.plan.limits;
+
+  switch (view) {
+    case 'kitchen':
+      return Boolean(limits.kitchenDisplay);
+    case 'captain':
+      return Boolean(limits.captainHandheld);
+    case 'inventory':
+      return Boolean(limits.inventoryManagement);
+    case 'customers':
+      return Boolean(limits.customerCrm);
+    default:
+      return true;
+  }
+}
+
+/**
+ * Returns minimum plan required to unlock a given feature or view.
+ */
+export function getMinimumRequiredPlan(featureOrView: string): string {
+  switch (featureOrView) {
+    case 'kitchen':
+    case 'captain':
+    case 'inventory':
+    case 'customers':
+    case 'onlineOrdering':
+    case 'multiDevice':
+    case 'thermalPrinterRouting':
+      return 'Growth';
+    case 'voiceAssistant':
+      return 'Pro';
+    default:
+      return 'Starter';
+  }
+}
+
