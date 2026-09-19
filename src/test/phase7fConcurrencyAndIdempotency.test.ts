@@ -46,6 +46,15 @@ vi.mock('../services/auditService', () => ({
   }
 }));
 
+// Permission authorization is covered by dedicated security/RBAC suites.
+// This concurrency suite focuses on atomicity and idempotency semantics.
+vi.mock('../utils/permissions', () => ({
+  enforcePermission: vi.fn(async () => true),
+  hasPermission: vi.fn(() => true),
+  checkPermission: vi.fn(async () => true),
+  isViewAllowed: vi.fn(() => true)
+}));
+
 import * as firestore from 'firebase/firestore';
 import { auth } from '../config/firebase';
 
