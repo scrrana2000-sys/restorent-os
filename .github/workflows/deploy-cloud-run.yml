@@ -3,6 +3,11 @@ name: Deploy RestaurantOS API to Cloud Run
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - 'firestore.rules'
+      - 'storage.rules'
+      - 'firebase.json'
+      - '.firebaserc'
   workflow_dispatch:
 
 permissions:
