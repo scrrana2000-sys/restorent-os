@@ -38,10 +38,6 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 app.set('trust proxy', 1);
 
-if (!process.env.SYSTEM_SERVER_PASSWORD || process.env.SYSTEM_SERVER_PASSWORD.trim().length < 32) {
-  process.env.SYSTEM_SERVER_PASSWORD = 'restaurantos_sys_secure_server_pwd_2026_default_key';
-}
-
 const DEFAULT_PRODUCTION_ORIGINS = [
   'https://restaurantos01.ai.studio',
   'https://restaurantos-xqi52dpwgo-as.a.run.app'
@@ -77,7 +73,7 @@ function requireProductionSecrets() {
   process.env.ALLOWED_ORIGINS = resolvedOrigins.join(',');
 
   if (!process.env.SYSTEM_SERVER_PASSWORD || process.env.SYSTEM_SERVER_PASSWORD.trim().length < 32) {
-    process.env.SYSTEM_SERVER_PASSWORD = randomBytes(32).toString('hex');
+    throw new Error('SYSTEM_SERVER_PASSWORD must be configured in production and contain at least 32 characters.');
   }
 
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_ID.trim()) {
