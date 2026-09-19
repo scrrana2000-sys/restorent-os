@@ -509,7 +509,7 @@ export class OrderService implements IOrderService {
 
       // Stock consumption
       try {
-        await stockConsumptionService.consumeStockForOrder(cleanRestaurantId, {
+        await stockConsumptionService.consumeStockForOrderViaBackend(cleanRestaurantId, {
           orderId: updatedOrder.id,
           orderNumber: updatedOrder.orderNumber,
           items: cartState.items.map((i) => ({
@@ -877,7 +877,7 @@ export class OrderService implements IOrderService {
 
       // Stock consumption: tracked authoritatively, never silent
       try {
-        const consumptionResult = await stockConsumptionService.consumeStockForOrder(cleanRestaurantId, {
+        const consumptionResult = await stockConsumptionService.consumeStockForOrderViaBackend(cleanRestaurantId, {
           orderId: updatedOrder.id,
           orderNumber: updatedOrder.orderNumber,
           items: cartState.items.map((i) => ({
@@ -1083,7 +1083,7 @@ export class OrderService implements IOrderService {
 
       // Stock consumption: tracked authoritatively, never silent
       try {
-        const consumptionResult = await stockConsumptionService.consumeStockForOrder(cleanRestaurantId, {
+        const consumptionResult = await stockConsumptionService.consumeStockForOrderViaBackend(cleanRestaurantId, {
           orderId: createdOrder.id,
           orderNumber: createdOrder.orderNumber,
           items: createdOrder.items.map((i) => ({
@@ -1273,7 +1273,7 @@ export class OrderService implements IOrderService {
 
       // Automatic recipe stock consumption for confirmed order: tracked authoritatively
       try {
-        const consumptionResult = await stockConsumptionService.consumeStockForOrder(cleanRestaurantId, {
+        const consumptionResult = await stockConsumptionService.consumeStockForOrderViaBackend(cleanRestaurantId, {
           orderId: createdOrder.id,
           orderNumber: createdOrder.orderNumber,
           items: createdOrder.items.map((i) => ({
@@ -1592,7 +1592,7 @@ export class OrderService implements IOrderService {
     }
 
     try {
-      const res = await stockConsumptionService.consumeStockForOrder(cleanRestId, {
+      const res = await stockConsumptionService.consumeStockForOrderViaBackend(cleanRestId, {
         orderId: cleanOrderId,
         orderNumber: order.orderNumber,
         items: order.items.map((i) => ({
