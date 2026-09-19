@@ -31,6 +31,7 @@ import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { EmptyState } from '../components/common/EmptyState';
 import { FoodTypeBadge } from '../components/common/FoodTypeBadge';
 import { ImageUploader } from '../components/common/ImageUploader';
+import { getPublicRestaurantImagePath } from '../services/storageService';
 
 export const ItemsPage: React.FC = () => {
   const { restaurant, formatPrice } = useRestaurant();
@@ -595,7 +596,7 @@ export const ItemsPage: React.FC = () => {
             label="Dish Photograph"
             value={formData.imageUrl}
             onChange={(url) => setFormData({ ...formData, imageUrl: url })}
-            folderPath={restaurant ? `restaurants/${restaurant.restaurantId}/items` : 'restaurants/default/items'}
+            folderPath={restaurant ? getPublicRestaurantImagePath(restaurant.restaurantId, 'item') : 'restaurants/default/public/items'}
           />
 
           <div className="flex items-center justify-between pt-4 border-t border-slate-100">

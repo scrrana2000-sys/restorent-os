@@ -160,7 +160,11 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && (
           (resource.data.userId == request.auth.uid && resource.data.isActive == true)
-          || (('email' in resource.data) && resource.data.email == request.auth.token.email)
+          || (
+            request.auth.token.email_verified == true
+            && ('email' in resource.data)
+            && resource.data.email == request.auth.token.email
+          )
         );
     }
 
@@ -213,7 +217,11 @@ service cloud.firestore {
           isOwnerOfRestaurant(restaurantId) ||
           isMemberWithRole(restaurantId, 'manager') ||
           request.auth.uid == memberId ||
-          (('email' in resource.data) && resource.data.email == request.auth.token.email)
+          (
+            request.auth.token.email_verified == true
+            && ('email' in resource.data)
+            && resource.data.email == request.auth.token.email
+          )
         ));
 
         // Owners can create either a pending staff invitation or their own owner membership.
@@ -245,12 +253,14 @@ service cloud.firestore {
           && request.resource.data.memberId == memberId
           && request.resource.data.userId == request.auth.uid
           && request.resource.data.restaurantId == restaurantId
+          && request.auth.token.email_verified == true
           && request.resource.data.email == request.auth.token.email
           && request.resource.data.isActive == true
           && request.resource.data.status == 'active'
           && ('invitationId' in request.resource.data)
           && exists(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId))
           && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.restaurantId == restaurantId
+          && request.auth.token.email_verified == true
           && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.email == request.auth.token.email
           && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.role == request.resource.data.role
           && get(/databases/$(database)/documents/restaurants/$(restaurantId)/members/$(request.resource.data.invitationId)).data.isActive == false
@@ -272,6 +282,7 @@ service cloud.firestore {
         || (
           isSignedIn()
           && ('email' in resource.data)
+          && request.auth.token.email_verified == true
           && resource.data.email == request.auth.token.email
           && resource.data.isActive == false
           && resource.data.invitationStatus in ['pending_setup', 'invitation_sent', 'invitation_failed']

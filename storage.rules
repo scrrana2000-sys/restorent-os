@@ -35,6 +35,11 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
+    function isStoredPublicImage() {
+      return resource != null
+        && resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
     // ============================================================
     // DEFAULT DENY
     // ============================================================
@@ -44,7 +49,63 @@ service firebase.storage {
     }
 
     // ============================================================
-    // RESTAURANT-SCOPED STORAGE
+    // PUBLIC CUSTOMER IMAGES
+    // Anonymous customers may read only these exact folders.
+    // Writes/deletes remain restricted to authenticated staff/owners.
+    // ============================================================
+
+    match /restaurants/{restaurantId}/public/logo/{fileName} {
+      allow read: if isStoredPublicImage();
+      allow create: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow update: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow delete: if canAccessRestaurant(restaurantId);
+    }
+
+    match /restaurants/{restaurantId}/public/banner/{fileName} {
+      allow read: if isStoredPublicImage();
+      allow create: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow update: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow delete: if canAccessRestaurant(restaurantId);
+    }
+
+    match /restaurants/{restaurantId}/public/items/{fileName} {
+      allow read: if isStoredPublicImage();
+      allow create: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow update: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow delete: if canAccessRestaurant(restaurantId);
+    }
+
+    // ============================================================
+    // LEGACY CUSTOMER IMAGE PATHS
+    // Existing image URLs may still point to the old folders.
+    // Keep only these three known image locations publicly readable.
+    // New uploads use /public/... paths above.
+    // ============================================================
+
+    match /restaurants/{restaurantId}/logo/{fileName} {
+      allow read: if isStoredPublicImage();
+      allow create: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow update: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow delete: if canAccessRestaurant(restaurantId);
+    }
+
+    match /restaurants/{restaurantId}/branding/banner/{fileName} {
+      allow read: if isStoredPublicImage();
+      allow create: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow update: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow delete: if canAccessRestaurant(restaurantId);
+    }
+
+    match /restaurants/{restaurantId}/items/{fileName} {
+      allow read: if isStoredPublicImage();
+      allow create: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow update: if canAccessRestaurant(restaurantId) && isValidImageUpload();
+      allow delete: if canAccessRestaurant(restaurantId);
+    }
+
+    // ============================================================
+    // ALL OTHER RESTAURANT-SCOPED STORAGE
+    // Remains restricted to authenticated owner/staff.
     // ============================================================
 
     match /restaurants/{restaurantId}/{allPaths=**} {

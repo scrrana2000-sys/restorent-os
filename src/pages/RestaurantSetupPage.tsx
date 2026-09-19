@@ -32,6 +32,7 @@ import { validateRestaurantSettings } from '../utils/validation';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { ImageUploader } from '../components/common/ImageUploader';
+import { getPublicRestaurantImagePath } from '../services/storageService';
 import { createRestaurantBranch } from '../services/restaurantService';
 import { TableManagementSection } from '../components/restaurant/TableManagementSection';
 import { PrinterSettingsSection } from '../components/restaurant/PrinterSettingsSection';
@@ -305,7 +306,7 @@ export const RestaurantSetupPage: React.FC = () => {
                 label="Restaurant Logo"
                 value={formData.logoUrl}
                 onChange={(url) => setFormData({ ...formData, logoUrl: url })}
-                folderPath={restaurant ? `restaurants/${restaurant.restaurantId}/logo` : 'restaurants/default/logo'}
+                folderPath={restaurant ? getPublicRestaurantImagePath(restaurant.restaurantId, 'logo') : 'restaurants/default/public/logo'}
               />
             </div>
           </div>
@@ -330,7 +331,7 @@ export const RestaurantSetupPage: React.FC = () => {
               aspectRatio="banner"
               value={formData.bannerImageUrl || (formData as any).coverImageUrl || null}
               onChange={(url) => setFormData({ ...formData, bannerImageUrl: url, coverImageUrl: url } as any)}
-              folderPath={restaurant ? `restaurants/${restaurant.restaurantId}/branding/banner` : 'restaurants/default/branding/banner'}
+              folderPath={restaurant ? getPublicRestaurantImagePath(restaurant.restaurantId, 'banner') : 'restaurants/default/public/banner'}
             />
           </div>
         </div>

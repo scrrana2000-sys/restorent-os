@@ -46,6 +46,9 @@ describe('Storage Security & File Validation', () => {
     expect(validateStoragePath('restaurants/rest_123/items')).toBe('restaurants/rest_123/items');
     expect(validateStoragePath('/restaurants/rest_123/logo/')).toBe('restaurants/rest_123/logo');
     expect(validateStoragePath('restaurants/outlet_abc/categories')).toBe('restaurants/outlet_abc/categories');
+    expect(validateStoragePath('restaurants/rest_123/public/logo')).toBe('restaurants/rest_123/public/logo');
+    expect(validateStoragePath('restaurants/rest_123/public/banner')).toBe('restaurants/rest_123/public/banner');
+    expect(validateStoragePath('restaurants/rest_123/public/items')).toBe('restaurants/rest_123/public/items');
   });
 
   it('rejects cross-tenant or un-scoped storage paths', () => {
@@ -56,7 +59,10 @@ describe('Storage Security & File Validation', () => {
       'users/user_123',
       'root',
       'restaurants',
-      'restaurants/'
+      'restaurants/',
+      'restaurants/rest_123/public',
+      'restaurants/rest_123/public/other',
+      'restaurants/rest_123/public/items/nested'
     ];
 
     forbiddenPaths.forEach((path) => {
@@ -75,9 +81,8 @@ describe('storage.rules Static Security Audit', () => {
     expect(rulesContent).toMatch(/service\s+firebase\.storage/);
   });
 
-  it('does NOT contain dangerously permissive rules', () => {
+  it('does NOT contain dangerously permissive root or write rules', () => {
     expect(rulesContent).not.toMatch(/allow\s+read,\s*write\s*:\s*if\s+true/i);
-    expect(rulesContent).not.toMatch(/allow\s+read\s*:\s*if\s+true/i);
     expect(rulesContent).not.toMatch(/allow\s+write\s*:\s*if\s+true/i);
     expect(rulesContent).not.toMatch(/allow\s+read,\s*write\s*:\s*if\s+request\.auth\s*!=\s*null/i);
     expect(rulesContent).not.toMatch(/allow\s+write\s*:\s*if\s+request\.auth\s*!=\s*null/i);
@@ -88,7 +93,11 @@ describe('storage.rules Static Security Audit', () => {
     expect(rulesContent).toMatch(/allow\s+read,\s*write\s*:\s*if\s+false;/);
   });
 
-  it('scopes access strictly to /restaurants/{restaurantId}/{allPaths=**}', () => {
+  it('exposes only the designated public image folders and keeps other restaurant storage staff-only', () => {
+    expect(rulesContent).toMatch(/match\s+\/restaurants\/\{restaurantId\}\/public\/logo\/\{fileName\}/);
+    expect(rulesContent).toMatch(/match\s+\/restaurants\/\{restaurantId\}\/public\/banner\/\{fileName\}/);
+    expect(rulesContent).toMatch(/match\s+\/restaurants\/\{restaurantId\}\/public\/items\/\{fileName\}/);
+    expect(rulesContent).toMatch(/allow\s+read:\s*if\s+isStoredPublicImage\(\);/);
     expect(rulesContent).toMatch(/match\s+\/restaurants\/\{restaurantId\}\/\{allPaths=\*\*\}/);
   });
 
@@ -157,6 +166,11 @@ describe('Security Rules Evaluation Logic (Formal Rule Condition Verification)',
     if (!match) return 'DENY';
     const restaurantId = match[1];
 
+    const isPublicImagePath =
+      /^restaurants\/[^/]+\/public\/(logo|banner|items)\/[^/]+$/.test(path);
+
+    if (isPublicImagePath && op === 'read') return 'ALLOW';
+
     if (!canAccessRestaurant(auth, restaurantId)) return 'DENY';
     if (op === 'read' || op === 'delete') return 'ALLOW';
     if (op === 'write') return isValidImageUpload(resource) ? 'ALLOW' : 'DENY';
@@ -213,6 +227,18 @@ describe('Security Rules Evaluation Logic (Formal Rule Condition Verification)',
     expect(evaluateRule('write', 'restaurants/rest_alpha/items/pic1.jpg', ownerAuth, validJpg)).toBe('ALLOW');
     expect(evaluateRule('write', 'restaurants/rest_alpha/items/pic2.png', ownerAuth, validPng)).toBe('ALLOW');
     expect(evaluateRule('write', 'restaurants/rest_alpha/items/pic3.webp', ownerAuth, validWebp)).toBe('ALLOW');
+  });
+
+  it('10. public customer image folders are readable anonymously', () => {
+    expect(evaluateRule('read', 'restaurants/rest_alpha/public/logo/logo.webp', null, validWebp)).toBe('ALLOW');
+    expect(evaluateRule('read', 'restaurants/rest_alpha/public/banner/banner.jpg', null, validJpg)).toBe('ALLOW');
+    expect(evaluateRule('read', 'restaurants/rest_alpha/public/items/item.png', null, validPng)).toBe('ALLOW');
+  });
+
+  it('11. public customer image folders still require staff authorization for writes', () => {
+    expect(evaluateRule('write', 'restaurants/rest_alpha/public/logo/logo.webp', null, validWebp)).toBe('DENY');
+    expect(evaluateRule('write', 'restaurants/rest_beta/public/items/item.png', { uid: 'user_owner' }, validPng)).toBe('DENY');
+    expect(evaluateRule('write', 'restaurants/rest_alpha/public/items/item.png', { uid: 'user_owner' }, validPng)).toBe('ALLOW');
   });
 
   it('9. other MIME types = DENY', () => {

@@ -75,4 +75,22 @@ describe('firestore.rules Static Security & RBAC Audit', () => {
     expect(rulesContent).toMatch(/resource\.data\.userId\s*==\s*request\.auth\.uid/);
     expect(rulesContent).toMatch(/resource\.data\.isActive\s*==\s*true/);
   });
+
+  it('requires verified email before any email-based invitation/member match', () => {
+    const actualEmailComparisons = (rulesContent.match(/request\.auth\.token\.email\b/g) || []);
+    expect(actualEmailComparisons.length).toBe(5);
+    expect(rulesContent).toMatch(/request\.auth\.token\.email_verified\s*==\s*true/);
+
+    const lines = rulesContent.split('\\n');
+    for (let i = 0; i < lines.length; i += 1) {
+      if (lines[i].match(/request\.auth\.token\.email\b/)) {
+        const nearby = lines.slice(Math.max(0, i - 7), i + 1).join('\\n');
+        expect(nearby).toContain('request.auth.token.email_verified == true');
+      }
+    }
+
+    // users/{userId} only preserves its stored email field; it does not
+    // authorize a user from an authenticated-email comparison.
+    expect(rulesContent).toMatch(/request\.resource\.data\.email\s*==\s*resource\.data\.email/);
+  });
 });

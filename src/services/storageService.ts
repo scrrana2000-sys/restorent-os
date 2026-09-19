@@ -8,6 +8,28 @@ export interface UploadProgressCallback {
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB limit
 export const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
+export type PublicRestaurantImageKind = 'logo' | 'banner' | 'item';
+
+const PUBLIC_RESTAURANT_IMAGE_FOLDERS: Record<PublicRestaurantImageKind, string> = {
+  logo: 'logo',
+  banner: 'banner',
+  item: 'items'
+};
+
+export function getPublicRestaurantImagePath(
+  restaurantId: string,
+  kind: PublicRestaurantImageKind
+): string {
+  const cleanRestaurantId = (restaurantId || '').trim();
+  if (!cleanRestaurantId || /[\\/]/.test(cleanRestaurantId)) {
+    throw new Error('Invalid restaurantId for public image storage path.');
+  }
+
+  return validateStoragePath(
+    `restaurants/${cleanRestaurantId}/public/${PUBLIC_RESTAURANT_IMAGE_FOLDERS[kind]}`
+  );
+}
+
 export function validateImageFile(file: File): void {
   if (!file) {
     throw new Error('No file provided for upload.');
@@ -23,9 +45,26 @@ export function validateImageFile(file: File): void {
 export function validateStoragePath(path: string): string {
   const normalized = (path || '').replace(/^\/+/, '').replace(/\/+$/, '');
   const segments = normalized.split('/');
+
   if (segments[0] !== 'restaurants' || !segments[1] || segments[1].trim() === '') {
     throw new Error('Storage path must be restaurant-scoped: /restaurants/{restaurantId}/...');
   }
+
+  // Public customer images are limited to three exact upload folders.
+  // All other restaurant-scoped paths remain valid private storage paths.
+  if (segments[2] === 'public') {
+    const isAllowedPublicImageFolder =
+      segments.length === 4 &&
+      segments[3] !== '' &&
+      ['logo', 'banner', 'items'].includes(segments[3]);
+
+    if (!isAllowedPublicImageFolder) {
+      throw new Error(
+        'Public image storage path must be /restaurants/{restaurantId}/public/{logo|banner|items}.'
+      );
+    }
+  }
+
   return normalized;
 }
 
