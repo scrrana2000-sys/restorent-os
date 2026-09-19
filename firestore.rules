@@ -12,7 +12,9 @@ service cloud.firestore {
     }
 
     function isServer() {
-      return isSignedIn() && request.auth.token.email == 'system-server@restaurantos.app';
+      // Trusted backend access is granted only by an Admin-SDK-issued custom claim.
+      // Never trust an email address or a client-created password account.
+      return isSignedIn() && request.auth.token.server == true;
     }
 
     // Keep tenant authorization deterministic and cheap. The previous
