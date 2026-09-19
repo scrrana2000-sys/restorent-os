@@ -360,9 +360,13 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
   if (!user) return false;
 
   // Trusted backend requests are already authorized at the HTTP boundary and run
-  // under the dedicated server account. Do not force those requests through the
-  // browser staff-membership matrix.
-  if (user.email === 'system-server@restaurantos.app') return true;
+  // under an Admin-issued custom claim. Never trust an email address for this.
+  try {
+    const tokenResult = await user.getIdTokenResult();
+    if (tokenResult.claims.server === true) return true;
+  } catch (claimError) {
+    console.warn('[Permissions] Failed to inspect trusted-server claim:', claimError);
+  }
 
   try {
     // 1. Fetch restaurant to check ownerId
