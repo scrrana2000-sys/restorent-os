@@ -32,6 +32,7 @@ import { sanitizeFirestoreData } from '../utils/sanitize';
 import { stockConsumptionService } from './stockConsumptionService';
 import { orderFinalizationService } from './orderFinalizationService';
 import { parseTimestampToMillis } from '../utils/dateUtils';
+import { getApiUrl } from '../utils/apiConfig';
 import { Restaurant } from '../types/restaurant';
 import {
   getRestaurantOperatingProfile,
@@ -1666,6 +1667,28 @@ export class OrderService implements IOrderService {
       throw new Error('itemCancellations array must not be empty.');
     }
 
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to partially cancel order items.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/orders/partial-cancel-items'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          restaurantId: cleanRestaurantId,
+          orderId: cleanOrderId,
+          itemCancellations,
+          clientRequestId
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.order) {
+        throw new Error(payload?.message || 'Partial order cancellation failed.');
+      }
+      return payload.order as Order;
+    }
+
     await enforcePermission(cleanRestaurantId, 'cancel_orders');
 
     const cleanKey = clientRequestId?.trim();
@@ -1834,7 +1857,44 @@ export class OrderService implements IOrderService {
     }
 
     const sanitizedPayload = sanitizeFirestoreData(updatePayload);
-    await updateDoc(orderRef, sanitizedPayload);
+    await runTransaction(db, async (transaction) => {
+      const latestSnap = await transaction.get(orderRef);
+      if (!latestSnap.exists()) {
+        throw new Error(`Order "${cleanOrderId}" no longer exists.`);
+      }
+
+      const latestOrder = latestSnap.data() as Order;
+      if (latestOrder.restaurantId !== cleanRestaurantId) {
+        throw new Error('Cross-tenant order mutation rejected.');
+      }
+      if (latestOrder.status === 'cancelled' || latestOrder.status === 'completed') {
+        throw new Error(`Order "${cleanOrderId}" can no longer be partially cancelled from status "${latestOrder.status}".`);
+      }
+
+      if (!Array.isArray(latestOrder.items) || latestOrder.items.length !== updatedItems.length) {
+        throw new Error('Order changed concurrently. Please retry the cancellation.');
+      }
+
+      const latestById = new Map(latestOrder.items.map((item) => [item.itemId, item]));
+      for (const proposed of updatedItems) {
+        const latest = latestById.get(proposed.itemId);
+        if (!latest) throw new Error('Order changed concurrently. Please retry the cancellation.');
+
+        const proposedQty = Number(proposed.quantity);
+        const latestQty = Number(latest.quantity);
+        const proposedCancelled = Number(proposed.cancelledQuantity || 0);
+        const latestCancelled = Number(latest.cancelledQuantity || 0);
+
+        if (!Number.isInteger(proposedQty) || proposedQty < 0 || proposedQty > latestQty) {
+          throw new Error(`Invalid partial cancellation quantity for "${proposed.nameSnapshot}". Please retry.`);
+        }
+        if (!Number.isInteger(proposedCancelled) || proposedCancelled < latestCancelled) {
+          throw new Error(`Invalid cancelled quantity for "${proposed.nameSnapshot}". Please retry.`);
+        }
+      }
+
+      transaction.update(orderRef, sanitizedPayload);
+    });
 
     const updatedOrder: Order = {
       ...currentOrder,

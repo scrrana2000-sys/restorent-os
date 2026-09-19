@@ -378,6 +378,92 @@ app.post('/api/kots/create', async (req, res) => {
   }
 });
 
+/**
+ * Server-authoritative partial KOT item cancellation.
+ * Caller roles are checked before the trusted server identity performs the write.
+ */
+app.post('/api/kots/partial-cancel', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Authentication token is required.' });
+
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const kotId = String(req.body?.kotId || '').trim();
+    const cancellations = req.body?.cancellations;
+    if (!restaurantId || !kotId || !Array.isArray(cancellations) || cancellations.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_PARAMETERS',
+        message: 'restaurantId, kotId and cancellations are required.'
+      });
+    }
+
+    const staffCheck = await verifyRestaurantStaffRole(
+      authUser.uid,
+      idToken,
+      restaurantId,
+      ['owner', 'manager', 'captain', 'kitchen']
+    );
+    if (!staffCheck.authorized) {
+      return res.status(staffCheck.code || 403).json({
+        success: false,
+        error: staffCheck.error || 'FORBIDDEN',
+        message: staffCheck.message || 'Caller is not authorized to partially cancel KOT items.'
+      });
+    }
+
+    if (!(await ensureServerAuthenticated())) {
+      return res.status(503).json({
+        success: false,
+        error: 'SERVER_AUTH_UNAVAILABLE',
+        message: 'Trusted KOT cancellation service is unavailable.'
+      });
+    }
+
+    const safeCancellations = cancellations
+      .map((item: any) => ({
+        itemId: String(item?.itemId || '').trim(),
+        cancelledQuantity: Number(item?.cancelledQuantity),
+        reason: typeof item?.reason === 'string' ? item.reason.trim() : ''
+      }))
+      .filter((item: any) =>
+        item.itemId &&
+        Number.isInteger(item.cancelledQuantity) &&
+        item.cancelledQuantity > 0
+      );
+
+    if (!safeCancellations.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_CANCELLATIONS',
+        message: 'No valid item cancellations were provided.'
+      });
+    }
+
+    const clientRequestId = String(req.body?.clientRequestId || '').trim();
+    const { kotService } = await import('./src/services/kotService');
+    const result = await kotService.partiallyCancelKOTItems(
+      restaurantId,
+      kotId,
+      safeCancellations,
+      authUser.uid,
+      clientRequestId ? `${authUser.uid}_${clientRequestId}` : undefined
+    );
+
+    return res.json({ success: true, kot: result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Partial KOT cancellation failed:', err);
+    return res.status(400).json({
+      success: false,
+      error: 'KOT_PARTIAL_CANCELLATION_FAILED',
+      message: err?.message || 'Failed to partially cancel KOT items.'
+    });
+  }
+});
+
 app.post('/api/orders/create-pos', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -1099,6 +1185,92 @@ app.post('/api/orders/accept-online', async (req, res) => {
   } catch (err: any) {
     console.error('[RestaurantOS Server] Online order acceptance failed:', err);
     return res.status(400).json({ success: false, error: 'ONLINE_ORDER_ACCEPT_FAILED', message: err?.message || 'Failed to accept online order.' });
+  }
+});
+
+/**
+ * Server-authoritative partial Order item cancellation.
+ * Used by KOT cancellation synchronization and protected by caller-role checks.
+ */
+app.post('/api/orders/partial-cancel-items', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Authentication token is required.' });
+
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    const itemCancellations = req.body?.itemCancellations;
+    if (!restaurantId || !orderId || !Array.isArray(itemCancellations) || itemCancellations.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_PARAMETERS',
+        message: 'restaurantId, orderId and itemCancellations are required.'
+      });
+    }
+
+    const staffCheck = await verifyRestaurantStaffRole(
+      authUser.uid,
+      idToken,
+      restaurantId,
+      ['owner', 'manager', 'captain', 'kitchen']
+    );
+    if (!staffCheck.authorized) {
+      return res.status(staffCheck.code || 403).json({
+        success: false,
+        error: staffCheck.error || 'FORBIDDEN',
+        message: staffCheck.message || 'Caller is not authorized to partially cancel order items.'
+      });
+    }
+
+    if (!(await ensureServerAuthenticated())) {
+      return res.status(503).json({
+        success: false,
+        error: 'SERVER_AUTH_UNAVAILABLE',
+        message: 'Trusted order cancellation service is unavailable.'
+      });
+    }
+
+    const safeCancellations = itemCancellations
+      .map((item: any) => ({
+        itemId: String(item?.itemId || '').trim(),
+        cancelledQuantity: Number(item?.cancelledQuantity),
+        reason: typeof item?.reason === 'string' ? item.reason.trim() : undefined
+      }))
+      .filter((item: any) =>
+        item.itemId &&
+        Number.isInteger(item.cancelledQuantity) &&
+        item.cancelledQuantity > 0
+      );
+
+    if (!safeCancellations.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_CANCELLATIONS',
+        message: 'No valid item cancellations were provided.'
+      });
+    }
+
+    const clientRequestId = String(req.body?.clientRequestId || '').trim();
+    const { orderService } = await import('./src/services/orderService');
+    const result = await orderService.partiallyCancelOrderItems(
+      restaurantId,
+      orderId,
+      safeCancellations,
+      authUser.uid,
+      clientRequestId ? `${authUser.uid}_${clientRequestId}` : undefined
+    );
+
+    return res.json({ success: true, order: result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Partial order item cancellation failed:', err);
+    return res.status(400).json({
+      success: false,
+      error: 'ORDER_PARTIAL_CANCELLATION_FAILED',
+      message: err?.message || 'Failed to partially cancel order items.'
+    });
   }
 });
 

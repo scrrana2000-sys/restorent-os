@@ -76,6 +76,13 @@ describe('firestore.rules Static Security & RBAC Audit', () => {
     expect(rulesContent).toMatch(/resource\.data\.isActive\s*==\s*true/);
   });
 
+  it('protects partial KOT and Order item cancellation behind the trusted server boundary', () => {
+    expect(rulesContent).toMatch(/match\s+\/kots\/\{kotId\}/);
+    expect(rulesContent).toMatch(/isServer\(\)[\s\S]*?affectedKeys\(\)\.hasOnly\(\[[\s\S]*?'items'[\s\S]*?'status'/);
+    expect(rulesContent).toMatch(/match\s+\/orders\/\{orderId\}/);
+    expect(rulesContent).toContain("Partial item-cancellation is executed through the trusted backend.");
+  });
+
   it('requires verified email before any email-based invitation/member match', () => {
     const actualEmailComparisons = (rulesContent.match(/request\.auth\.token\.email\b/g) || []);
     expect(actualEmailComparisons.length).toBe(5);

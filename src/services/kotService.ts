@@ -4,6 +4,7 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  runTransaction,
   updateDoc,
   query,
   where,
@@ -807,6 +808,28 @@ export class KOTService implements IKOTService {
       throw new Error('Cancellations array must not be empty.');
     }
 
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to partially cancel KOT items.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch(getApiUrl('/api/kots/partial-cancel'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          restaurantId: cleanRestaurantId,
+          kotId: cleanKotId,
+          cancellations,
+          clientRequestId: idempotencyKey
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.kot) {
+        throw new Error(payload?.message || 'Partial KOT cancellation failed.');
+      }
+      return payload.kot as KOT;
+    }
+
     await enforcePermission(cleanRestaurantId, 'update_kot_status');
 
     const cleanKey = idempotencyKey?.trim();
@@ -900,7 +923,44 @@ export class KOTService implements IKOTService {
     }
 
     const sanitizedKotUpdate = sanitizeFirestoreData(kotUpdatePayload);
-    await updateDoc(kotRef, sanitizedKotUpdate);
+    await runTransaction(db, async (transaction) => {
+      const latestSnap = await transaction.get(kotRef);
+      if (!latestSnap.exists()) {
+        throw new Error(`KOT "${cleanKotId}" no longer exists.`);
+      }
+
+      const latestKot = latestSnap.data() as KOT;
+      if (latestKot.restaurantId !== cleanRestaurantId || latestKot.orderId !== kot.orderId) {
+        throw new Error('Cross-tenant KOT mutation rejected.');
+      }
+      if (latestKot.status === 'served' || latestKot.status === 'cancelled') {
+        throw new Error(`KOT "${cleanKotId}" can no longer be partially cancelled from status "${latestKot.status}".`);
+      }
+
+      if (!Array.isArray(latestKot.items) || latestKot.items.length !== updatedKotItems.length) {
+        throw new Error('KOT changed concurrently. Please retry the cancellation.');
+      }
+
+      const latestById = new Map(latestKot.items.map((item) => [item.itemId, item]));
+      for (const proposed of updatedKotItems) {
+        const latest = latestById.get(proposed.itemId);
+        if (!latest) throw new Error('KOT changed concurrently. Please retry the cancellation.');
+
+        const proposedQty = Number(proposed.quantity);
+        const latestQty = Number(latest.quantity);
+        const proposedCancelled = Number(proposed.cancelledQuantity || 0);
+        const latestCancelled = Number(latest.cancelledQuantity || 0);
+
+        if (!Number.isInteger(proposedQty) || proposedQty < 0 || proposedQty > latestQty) {
+          throw new Error(`Invalid partial cancellation quantity for "${proposed.nameSnapshot}". Please retry.`);
+        }
+        if (!Number.isInteger(proposedCancelled) || proposedCancelled < latestCancelled) {
+          throw new Error(`Invalid cancelled quantity for "${proposed.nameSnapshot}". Please retry.`);
+        }
+      }
+
+      transaction.update(kotRef, sanitizedKotUpdate);
+    });
 
     const updatedKot: KOT = {
       ...kot,
