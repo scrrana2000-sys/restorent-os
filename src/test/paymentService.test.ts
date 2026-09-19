@@ -90,6 +90,7 @@ describe('Payment Service & Transactional Settlement (Phase 2F)', () => {
 
   describe('1. Authoritative Payment Recording & Transactional Updates', () => {
     it('records a partial Cash payment and updates order paidAmount and dueAmount atomically', async () => {
+      (await import('../config/firebase')).auth.currentUser = { uid: 'CASHIER_ANITA' } as any;
       vi.mocked(firestore.runTransaction).mockImplementationOnce(async (_db, cb: any) => {
         const mockTx = {
           get: vi.fn().mockResolvedValueOnce({
