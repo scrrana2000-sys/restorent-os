@@ -520,13 +520,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             }
           }
 
-          let activeRole: StaffRole = (
-            resolvedRestaurant.ownerId === user.uid
-            || (
-              resolvedRestaurant.provisioningType === 'initial_owner'
-              && resolvedRestaurant.createdBy === user.uid
-            )
-          ) ? 'owner' : 'owner';
+          let activeRole: StaffRole = 'owner';
           if (resolvedRestaurant.ownerId !== user.uid) {
             const memberRef = doc(db, 'restaurants', resolvedRestaurant.restaurantId, 'members', user.uid);
             const memberSnap = await getDoc(memberRef);
