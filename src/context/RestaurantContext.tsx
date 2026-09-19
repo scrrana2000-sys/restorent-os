@@ -494,7 +494,39 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         // Persist the resolved restaurant ID to both localStorage and Firestore profile
         if (resolvedRestaurant) {
-          let activeRole: StaffRole = 'owner';
+          // Repair legacy first-login owner bootstrap before any nested collection
+          // is accessed. This is safe because createDefaultRestaurant() only
+          // self-heals an initial_owner document whose createdBy already equals
+          // the authenticated UID.
+          if (
+            resolvedRestaurant.provisioningType === 'initial_owner'
+            && resolvedRestaurant.createdBy === user.uid
+            && resolvedRestaurant.ownerId !== user.uid
+          ) {
+            try {
+              resolvedRestaurant = await createDefaultRestaurant(
+                user.uid,
+                user.email || '',
+                ownerName,
+                resolvedRestaurant.name,
+                resolvedRestaurant.city
+              );
+              console.log('[RestaurantOS Owner Bootstrap] Reconciled legacy owner authorization:', {
+                restaurantId: resolvedRestaurant.restaurantId,
+                ownerId: resolvedRestaurant.ownerId
+              });
+            } catch (repairErr) {
+              console.warn('[RestaurantOS Owner Bootstrap] Owner authorization repair warning:', repairErr);
+            }
+          }
+
+          let activeRole: StaffRole = (
+            resolvedRestaurant.ownerId === user.uid
+            || (
+              resolvedRestaurant.provisioningType === 'initial_owner'
+              && resolvedRestaurant.createdBy === user.uid
+            )
+          ) ? 'owner' : 'owner';
           if (resolvedRestaurant.ownerId !== user.uid) {
             const memberRef = doc(db, 'restaurants', resolvedRestaurant.restaurantId, 'members', user.uid);
             const memberSnap = await getDoc(memberRef);
