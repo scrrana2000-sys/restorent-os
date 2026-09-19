@@ -1027,6 +1027,7 @@ service cloud.firestore {
 
       // ==========================================================
       // SUBSCRIPTION & TRIAL
+      // Rules are deployed from the repository's firebase.json Firestore target.
       // Owner/Server controlled, immutable history, strict tenant scoping
       // ==========================================================
 
