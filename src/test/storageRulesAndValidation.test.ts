@@ -66,7 +66,7 @@ describe('Storage Security & File Validation', () => {
     ];
 
     forbiddenPaths.forEach((path) => {
-      expect(() => validateStoragePath(path)).toThrow(/Storage path must be restaurant-scoped/);
+      expect(() => validateStoragePath(path)).toThrow(/Storage path must be restaurant-scoped|Public image storage path must be/);
     });
   });
 });
