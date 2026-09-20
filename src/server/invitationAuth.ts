@@ -8,9 +8,17 @@ let isServerAuthenticated = false;
 let isServerAuthenticating = false;
 
 export async function ensureServerAuthenticated(): Promise<boolean> {
-  // This identity is backend-only. It is provisioned and granted the server
-  // custom claim exclusively through the Firebase Admin SDK.
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST || process.env.SKIP_SERVER_AUTH_FOR_LOCAL_TEST === 'true') {
+  // Server-side Firestore mutations use the Firebase Admin SDK and therefore do
+  // not require a Firebase client sign-in or a client-issued custom token.
+  // The privileged Auth user/claim is still prepared when Firebase Auth Admin
+  // management APIs are available, but failure here must never prevent the
+  // HTTP listener from starting. Cloud Run startup only needs the Admin SDK
+  // itself to initialize successfully.
+  if (
+    process.env.NODE_ENV === 'test' ||
+    process.env.VITEST ||
+    process.env.SKIP_SERVER_AUTH_FOR_LOCAL_TEST === 'true'
+  ) {
     return true;
   }
 
@@ -22,56 +30,58 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
     return isServerAuthenticated;
   }
 
-  // AI Studio/local development uses Firebase Admin directly for server-owned
-  // Firestore operations. Do not call Firebase Auth provisioning endpoints from
-  // the dev backend because the AI Studio runtime may not have the Identity
-  // Toolkit API enabled. Those calls are unnecessary for Admin SDK Firestore.
-  if (process.env.NODE_ENV !== 'production') {
-    isServerAuthenticated = true;
-    console.log(
-      '[RestaurantOS Server] AI Studio/dev server identity ready via Firebase Admin SDK.',
-      { projectId: FIREBASE_ADMIN_PROJECT_ID }
-    );
-    return true;
-  }
-
   isServerAuthenticating = true;
   try {
-    if (process.env.NODE_ENV === 'production' && !process.env.SYSTEM_SERVER_UID?.trim()) {
-      console.error('[RestaurantOS Server] SYSTEM_SERVER_UID is not configured.');
-      return false;
+    if (process.env.NODE_ENV !== 'production') {
+      isServerAuthenticated = true;
+      console.log(
+        '[RestaurantOS Server] AI Studio/dev server identity ready via Firebase Admin SDK.',
+        { projectId: FIREBASE_ADMIN_PROJECT_ID }
+      );
+      return true;
     }
 
-    let serverUser;
+    const serverUid = process.env.SYSTEM_SERVER_UID?.trim() || SYSTEM_SERVER_UID;
+
     try {
-      serverUser = await adminAuth.getUser(SYSTEM_SERVER_UID);
-    } catch (err: any) {
-      if (err?.code !== 'auth/user-not-found') throw err;
-      // The UID is created only by the Admin SDK. A browser/client cannot race
-      // to claim this privileged identity.
-      serverUser = await adminAuth.createUser({
-        uid: SYSTEM_SERVER_UID,
-        disabled: false
-      });
-    }
+      let serverUser;
+      try {
+        serverUser = await adminAuth.getUser(serverUid);
+      } catch (err: any) {
+        if (err?.code !== 'auth/user-not-found') throw err;
+        serverUser = await adminAuth.createUser({
+          uid: serverUid,
+          disabled: false
+        });
+      }
 
-    const currentClaims = serverUser.customClaims || {};
-    if (currentClaims.server !== true) {
-      await adminAuth.setCustomUserClaims(SYSTEM_SERVER_UID, {
-        ...currentClaims,
-        server: true
-      });
+      const currentClaims = serverUser.customClaims || {};
+      if (currentClaims.server !== true) {
+        await adminAuth.setCustomUserClaims(serverUid, {
+          ...currentClaims,
+          server: true
+        });
+      }
+
+      console.log(
+        '[RestaurantOS Server] Backend server identity claim prepared via Firebase Admin SDK.',
+        { projectId: FIREBASE_ADMIN_PROJECT_ID, serverUid }
+      );
+    } catch (authErr: any) {
+      // Firebase Auth management APIs are not required for Admin SDK
+      // Firestore access. In particular, an unavailable Identity Toolkit API
+      // must not kill the Cloud Run process before it starts listening.
+      console.warn(
+        '[RestaurantOS Server] Firebase Auth claim setup skipped; continuing with Admin SDK:',
+        authErr?.message || authErr
+      );
     }
 
     isServerAuthenticated = true;
-    console.log(
-      '[RestaurantOS Server] Backend server identity prepared via Firebase Admin SDK.',
-      { projectId: FIREBASE_ADMIN_PROJECT_ID }
-    );
     return true;
   } catch (err: any) {
     isServerAuthenticated = false;
-    console.error('[RestaurantOS Server] Backend server authentication failed:', err?.message || err);
+    console.error('[RestaurantOS Server] Firebase Admin SDK initialization failed:', err?.message || err);
     return false;
   } finally {
     isServerAuthenticating = false;
