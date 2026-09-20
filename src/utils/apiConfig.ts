@@ -23,7 +23,7 @@ export function getApiUrl(endpoint: string): string {
     if (configured && (isLocal || !configured.includes('localhost'))) {
       baseUrl = configured;
     } else {
-      baseUrl = isLocal || isCloudRun ? window.location.origin : PRODUCTION_API_BASE_URL;
+      baseUrl = isLocal ? window.location.origin : (isCloudRun ? window.location.origin : PRODUCTION_API_BASE_URL);
     }
   } else {
     const configured = (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL || '').trim();
