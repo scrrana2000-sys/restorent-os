@@ -94,7 +94,6 @@ jobs:
           source: .
           env_vars: |
             NODE_ENV=production
-            PORT=3000
             PUBLIC_APP_URL=https://restaurantos01.ai.studio
             ALLOWED_ORIGINS=https://restaurantos01.ai.studio
             SYSTEM_SERVER_UID=restaurantos-system-server
