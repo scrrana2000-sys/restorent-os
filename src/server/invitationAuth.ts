@@ -22,6 +22,19 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
     return isServerAuthenticated && Boolean(auth.currentUser);
   }
 
+  // AI Studio/local development uses Firebase Admin directly for server-owned
+  // Firestore operations. Do not call Firebase Auth provisioning endpoints from
+  // the dev backend because the AI Studio runtime may not have the Identity
+  // Toolkit API enabled. Those calls are unnecessary for Admin SDK Firestore.
+  if (process.env.NODE_ENV !== 'production') {
+    isServerAuthenticated = true;
+    console.log(
+      '[RestaurantOS Server] AI Studio/dev server identity ready via Firebase Admin SDK.',
+      { projectId: FIREBASE_ADMIN_PROJECT_ID }
+    );
+    return true;
+  }
+
   isServerAuthenticating = true;
   try {
     if (process.env.NODE_ENV === 'production' && !process.env.SYSTEM_SERVER_UID?.trim()) {
@@ -48,23 +61,6 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
         ...currentClaims,
         server: true
       });
-    }
-
-    // In AI Studio/development, do not perform a second client-side Firebase Auth
-    // sign-in from the backend process. That call uses a browser Web API key and
-    // can target the AI Studio hosting project instead of the RestaurantOS Firebase
-    // project, producing identitytoolkit.googleapis.com SERVICE_DISABLED errors.
-    //
-    // The Admin SDK is already the authoritative server identity and bypasses
-    // Firestore client rules for server-owned writes. Production keeps the
-    // existing server-auth contract enforced by the deployment environment.
-    if (process.env.NODE_ENV !== 'production') {
-      isServerAuthenticated = true;
-      console.log(
-        '[RestaurantOS Server] AI Studio/dev server identity ready via Firebase Admin SDK.',
-        { projectId: FIREBASE_ADMIN_PROJECT_ID }
-      );
-      return true;
     }
 
     isServerAuthenticated = true;
