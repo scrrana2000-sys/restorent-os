@@ -11,20 +11,20 @@
 import crypto from 'crypto';
 import { getPlanById, COMMERCIAL_PLANS, TRIAL_PLAN_ID, CUSTOMIZATION_CONFIG } from '../config/subscriptionPlans';
 import { BillingCycle, SubscriptionHistoryEventType } from '../types/subscription';
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp, type DocumentReference, type DocumentData, type Transaction } from 'firebase-admin/firestore';
 import { adminDb } from './firebaseAdmin';
 import { ensureServerAuthenticated, getFirestoreBaseUrl } from './invitationAuth';
 
 const serverDoc = (...segments: string[]) => adminDb.doc(segments.join('/'));
 const serverCollection = (...segments: string[]) => adminDb.collection(segments.join('/'));
-const serverGetDoc = async (ref: FirebaseFirestore.DocumentReference) => ref.get();
+const serverGetDoc = async (ref: DocumentReference) => ref.get();
 const serverSetDoc = async (
-  ref: FirebaseFirestore.DocumentReference,
-  data: FirebaseFirestore.DocumentData,
+  ref: DocumentReference,
+  data: DocumentData,
   options?: { merge?: boolean }
 ) => ref.set(data, { merge: options?.merge === true });
 const serverRunTransaction = async <T>(
-  callback: (transaction: FirebaseFirestore.Transaction) => Promise<T>
+  callback: (transaction: Transaction) => Promise<T>
 ) => adminDb.runTransaction(callback);
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
