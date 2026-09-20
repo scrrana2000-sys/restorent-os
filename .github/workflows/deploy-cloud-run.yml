@@ -121,10 +121,6 @@ jobs:
             SYSTEM_SERVER_UID=restaurantos-system-server
             FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96
           flags: '--allow-unauthenticated'
-          secrets: |
-            RAZORPAY_KEY_ID=RAZORPAY_KEY_ID:latest
-            RAZORPAY_KEY_SECRET=RAZORPAY_KEY_SECRET:latest
-            RAZORPAY_WEBHOOK_SECRET=RAZORPAY_WEBHOOK_SECRET:latest
 
       - name: Verify deployed API health endpoint
         run: |
