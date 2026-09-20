@@ -2,7 +2,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
 COPY package.json ./
-RUN npm install --no-audit --no-fund --package-lock=false --ignore-scripts
+RUN npm install --no-audit --no-fund --package-lock=false --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
 COPY . .
 RUN npm run build
