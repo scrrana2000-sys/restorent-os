@@ -11,9 +11,21 @@
 import crypto from 'crypto';
 import { getPlanById, COMMERCIAL_PLANS, TRIAL_PLAN_ID, CUSTOMIZATION_CONFIG } from '../config/subscriptionPlans';
 import { BillingCycle, SubscriptionHistoryEventType } from '../types/subscription';
-import { doc, getDoc, setDoc, collection, runTransaction, Timestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { Timestamp } from 'firebase-admin/firestore';
+import { adminDb } from './firebaseAdmin';
 import { ensureServerAuthenticated, getFirestoreBaseUrl } from './invitationAuth';
+
+const serverDoc = (...segments: string[]) => adminDb.doc(segments.join('/'));
+const serverCollection = (...segments: string[]) => adminDb.collection(segments.join('/'));
+const serverGetDoc = async (ref: FirebaseFirestore.DocumentReference) => ref.get();
+const serverSetDoc = async (
+  ref: FirebaseFirestore.DocumentReference,
+  data: FirebaseFirestore.DocumentData,
+  options?: { merge?: boolean }
+) => ref.set(data, { merge: options?.merge === true });
+const serverRunTransaction = async <T>(
+  callback: (transaction: FirebaseFirestore.Transaction) => Promise<T>
+) => adminDb.runTransaction(callback);
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -413,10 +425,10 @@ export async function claimWebhookEventIdempotently(params: {
     razorpaySubscriptionId = null
   } = params;
 
-  const webhookDocRef = doc(db, 'subscriptionWebhookEvents', eventId);
+  const webhookDocRef = serverDoc('subscriptionWebhookEvents', eventId);
 
   try {
-    return await runTransaction(db, async (transaction) => {
+    return await serverRunTransaction(async (transaction) => {
       const snap = await transaction.get(webhookDocRef);
       if (snap.exists()) {
         const existingData = snap.data() as SubscriptionWebhookEventRecord;
@@ -473,7 +485,7 @@ export async function claimWebhookEventIdempotently(params: {
   } catch (err: any) {
     console.error(`[Razorpay Webhook] Transaction error claiming event ${eventId}:`, err);
     try {
-      const snap = await getDoc(webhookDocRef);
+      const snap = await serverGetDoc(webhookDocRef);
       if (snap.exists()) {
         return { isFirstAttempt: false, existingRecord: snap.data() as SubscriptionWebhookEventRecord };
       }
@@ -495,9 +507,9 @@ export async function completeWebhookEvent(params: {
   error?: string | null;
 }) {
   try {
-    const webhookDocRef = doc(db, 'subscriptionWebhookEvents', params.eventId);
+    const webhookDocRef = serverDoc('subscriptionWebhookEvents', params.eventId);
     const now = new Date().toISOString();
-    await setDoc(
+    await serverSetDoc(
       webhookDocRef,
       {
         status: params.status,
@@ -539,9 +551,9 @@ export async function ensureRestaurantTrialInFirestore(restaurantId: string) {
     console.warn('[Razorpay Service] Server auth notice during trial init:', authErr);
   }
 
-  const subDocRef = doc(db, 'restaurants', cleanRestaurantId, 'subscription', 'current');
+  const subDocRef = serverDoc('restaurants', cleanRestaurantId, 'subscription', 'current');
   try {
-    return await runTransaction(db, async (transaction) => {
+    return await serverRunTransaction(async (transaction) => {
       const existingSnap = await transaction.get(subDocRef);
       if (existingSnap.exists()) {
         const existingData = existingSnap.data() as Record<string, any>;
@@ -662,8 +674,8 @@ export async function activateSubscriptionInFirestore(params: {
 
   // Try reading existing subscription via SDK
   try {
-    const subDocRef = doc(db, 'restaurants', restaurantId, 'subscription', 'current');
-    const existingSnap = await getDoc(subDocRef);
+    const subDocRef = serverDoc('restaurants', restaurantId, 'subscription', 'current');
+    const existingSnap = await serverGetDoc(subDocRef);
     if (existingSnap.exists()) {
       existingData = existingSnap.data();
     }
@@ -752,8 +764,8 @@ export async function activateSubscriptionInFirestore(params: {
 
   // Write updated subscription via SDK, fallback to REST if permission/auth boundary needs it
   try {
-    const subDocRef = doc(db, 'restaurants', restaurantId, 'subscription', 'current');
-    await setDoc(subDocRef, updatedSubscription, { merge: true });
+    const subDocRef = serverDoc('restaurants', restaurantId, 'subscription', 'current');
+    await serverSetDoc(subDocRef, updatedSubscription, { merge: true });
   } catch (sdkWriteErr: any) {
     console.warn('[Subscription Service] SDK write notice, attempting REST fallback:', sdkWriteErr?.message || sdkWriteErr);
     if (idToken) {
@@ -842,8 +854,8 @@ export async function recordSubscriptionAudit(params: {
   await ensureServerAuthenticated();
 
   const now = new Date().toISOString();
-  const historyColRef = collection(db, 'restaurants', restaurantId, 'subscriptionHistory');
-  const historyDocRef = doc(historyColRef);
+  const historyColRef = serverCollection('restaurants', restaurantId, 'subscriptionHistory');
+  const historyDocRef = historyColRef.doc();
 
   const record = {
     id: historyDocRef.id,
@@ -867,7 +879,7 @@ export async function recordSubscriptionAudit(params: {
   };
 
   try {
-    await setDoc(historyDocRef, record);
+    await serverSetDoc(historyDocRef, record);
     return record;
   } catch (err: any) {
     console.warn('[Razorpay Service] SDK audit log notice, attempting REST fallback:', err?.message || err);
@@ -1098,8 +1110,8 @@ export async function processRazorpayWebhookPayload(
         const planId = subEntity?.notes?.planId || 'starter';
 
         if (restaurantId) {
-          const subDocRef = doc(db, 'restaurants', restaurantId, 'subscription', 'current');
-          await setDoc(
+          const subDocRef = serverDoc('restaurants', restaurantId, 'subscription', 'current');
+          await serverSetDoc(
             subDocRef,
             {
               status: 'expired',
