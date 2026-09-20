@@ -18,7 +18,11 @@ export function getApiUrl(endpoint: string): string {
 
     const host = window.location.hostname.toLowerCase();
     const isLocal = host === 'localhost' || host === '127.0.0.1';
-    // Only actual Cloud Run hosts are treated as same-origin API hosts.\n    // AI Studio preview hosts also use *.google.com / *.googleusercontent.com, but\n    // their preview shell is not the RestaurantOS API and can return index.html for\n    // /api/* requests (causing JSON parse errors such as "Unexpected token '<'").\n    const isCloudRun = host.endsWith('.run.app');
+    // Only actual Cloud Run hosts are treated as same-origin API hosts.
+    // AI Studio preview hosts also use *.google.com / *.googleusercontent.com, but
+    // their preview shell is not the RestaurantOS API and can return index.html for
+    // /api/* requests (causing JSON parse errors such as "Unexpected token '<'").
+    const isCloudRun = host.endsWith('.run.app');
 
     if (configured && (isLocal || !configured.includes('localhost'))) {
       baseUrl = configured;
