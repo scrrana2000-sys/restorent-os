@@ -14,12 +14,12 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
     return true;
   }
 
-  if (isServerAuthenticated && auth.currentUser) return true;
+  if (isServerAuthenticated) return true;
   if (isServerAuthenticating) {
     while (isServerAuthenticating) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    return isServerAuthenticated && Boolean(auth.currentUser);
+    return isServerAuthenticated;
   }
 
   // AI Studio/local development uses Firebase Admin directly for server-owned

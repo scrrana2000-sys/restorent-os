@@ -430,7 +430,7 @@ export async function claimWebhookEventIdempotently(params: {
   try {
     return await serverRunTransaction(async (transaction) => {
       const snap = await transaction.get(webhookDocRef);
-      if (snap.exists()) {
+      if (snap.exists) {
         const existingData = snap.data() as SubscriptionWebhookEventRecord;
         const existingStatus = existingData.status;
 
@@ -486,7 +486,7 @@ export async function claimWebhookEventIdempotently(params: {
     console.error(`[Razorpay Webhook] Transaction error claiming event ${eventId}:`, err);
     try {
       const snap = await serverGetDoc(webhookDocRef);
-      if (snap.exists()) {
+      if (snap.exists) {
         return { isFirstAttempt: false, existingRecord: snap.data() as SubscriptionWebhookEventRecord };
       }
     } catch {
@@ -555,7 +555,7 @@ export async function ensureRestaurantTrialInFirestore(restaurantId: string) {
   try {
     return await serverRunTransaction(async (transaction) => {
       const existingSnap = await transaction.get(subDocRef);
-      if (existingSnap.exists()) {
+      if (existingSnap.exists) {
         const existingData = existingSnap.data() as Record<string, any>;
 
         if (existingData.operationalAccessUntil == null) {
@@ -676,7 +676,7 @@ export async function activateSubscriptionInFirestore(params: {
   try {
     const subDocRef = serverDoc('restaurants', restaurantId, 'subscription', 'current');
     const existingSnap = await serverGetDoc(subDocRef);
-    if (existingSnap.exists()) {
+    if (existingSnap.exists) {
       existingData = existingSnap.data();
     }
   } catch (sdkReadErr: any) {

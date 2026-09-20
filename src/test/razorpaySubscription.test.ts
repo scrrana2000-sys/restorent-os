@@ -109,6 +109,71 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   };
 });
 
+vi.mock('../server/firebaseAdmin', async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  const mockDocRef = (docPath: string) => ({
+    id: docPath.split('/').pop()!,
+    path: docPath,
+    get: async () => {
+      const d = getMockDoc(docPath);
+      return {
+        exists: d.exists(),
+        data: () => d.data(),
+        id: d.id
+      };
+    },
+    set: async (data: any, options?: any) => {
+      await setDoc({ path: docPath } as any, data, options);
+      setMockDoc(docPath, data, options);
+    }
+  });
+
+  const mockAdminDb = {
+    doc: vi.fn((docPath: string) => {
+      doc({} as any, ...docPath.split('/'));
+      return mockDocRef(docPath);
+    }),
+    collection: vi.fn((colPath: string) => ({
+      path: colPath,
+      doc: (subPath?: string) => {
+        const id = subPath || `auto_doc_${autoIdCounter++}`;
+        const fullPath = `${colPath}/${id}`;
+        doc({} as any, ...fullPath.split('/'));
+        return mockDocRef(fullPath);
+      }
+    })),
+    runTransaction: vi.fn(async (callback: any) => {
+      const prevLock = transactionLock;
+      let release: () => void = () => {};
+      transactionLock = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await prevLock;
+      try {
+        return await callback({
+          get: async (ref: any) => {
+            const d = getMockDoc(ref.path);
+            return {
+              exists: d.exists(),
+              data: () => d.data(),
+              id: d.id
+            };
+          },
+          set: (ref: any, data: any, options?: any) => setMockDoc(ref.path, data, options),
+          update: (ref: any, data: any) => setMockDoc(ref.path, data, { merge: true })
+        });
+      } finally {
+        release();
+      }
+    })
+  };
+
+  return {
+    ...actual,
+    adminDb: mockAdminDb
+  };
+});
+
 describe('Production Razorpay Subscription & Payment Flow', () => {
   const testSecret = 'rzp_test_secret_987654321';
 
