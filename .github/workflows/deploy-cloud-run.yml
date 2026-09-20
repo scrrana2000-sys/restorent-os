@@ -120,7 +120,6 @@ jobs:
           env_vars: |
             NODE_ENV=production
             PUBLIC_APP_URL=https://restaurantos01.ai.studio
-            ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://scrrana2000-sys.github.io
             SYSTEM_SERVER_UID=restaurantos-system-server
             FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96
           flags: '--allow-unauthenticated'
