@@ -361,11 +361,13 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
 
   // Trusted backend requests are already authorized at the HTTP boundary and run
   // under an Admin-issued custom claim. Never trust an email address for this.
-  try {
-    const tokenResult = await user.getIdTokenResult();
-    if (tokenResult.claims.server === true) return true;
-  } catch (claimError) {
-    console.warn('[Permissions] Failed to inspect trusted-server claim:', claimError);
+  if (typeof user.getIdTokenResult === 'function') {
+    try {
+      const tokenResult = await user.getIdTokenResult();
+      if (tokenResult.claims.server === true) return true;
+    } catch (claimError) {
+      console.warn('[Permissions] Failed to inspect trusted-server claim:', claimError);
+    }
   }
 
   try {
