@@ -11,7 +11,7 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ENV ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://restaurantos-xqi52dpwgo-as.a.run.app
+ENV ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://restaurantos-xqi52dpwgo-as.a.run.app,https://scrrana2000-sys.github.io
 ENV PUBLIC_APP_URL=https://restaurantos01.ai.studio
 
 COPY --from=build /app/package.json ./
