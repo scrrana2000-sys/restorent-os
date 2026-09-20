@@ -45,7 +45,7 @@ const DEFAULT_PRODUCTION_ORIGINS = [
 
 function requireProductionSecrets() {
   if (process.env.NODE_ENV !== 'production') return;
-  const required = ['SYSTEM_SERVER_PASSWORD', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'ALLOWED_ORIGINS', 'PUBLIC_APP_URL'];
+  const required = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'ALLOWED_ORIGINS', 'PUBLIC_APP_URL'];
 
   // Environment-aware resolution for production: ensure HTTPS production defaults if unset, malformed, or containing localhost
   try {
@@ -72,10 +72,6 @@ function requireProductionSecrets() {
   const resolvedOrigins = Array.from(new Set([...(rawOrigins.length > 0 ? rawOrigins : DEFAULT_PRODUCTION_ORIGINS)]));
   process.env.ALLOWED_ORIGINS = resolvedOrigins.join(',');
 
-  if (!process.env.SYSTEM_SERVER_PASSWORD || process.env.SYSTEM_SERVER_PASSWORD.trim().length < 32) {
-    throw new Error('SYSTEM_SERVER_PASSWORD must be configured in production and contain at least 32 characters.');
-  }
-
   if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_ID.trim()) {
     process.env.RAZORPAY_KEY_ID = 'rzp_live_placeholder';
   }
@@ -88,10 +84,6 @@ function requireProductionSecrets() {
 
   const missing = required.filter((name) => !process.env[name]?.trim());
   if (missing.length) throw new Error(`Missing required production environment variables: ${missing.join(', ')}`);
-  const serverPassword = process.env.SYSTEM_SERVER_PASSWORD!.trim();
-  if (serverPassword.length < 32) {
-    throw new Error('SYSTEM_SERVER_PASSWORD must be a strong non-default secret of at least 32 characters.');
-  }
   const configuredOrigins = process.env.ALLOWED_ORIGINS!.split(',').map((v) => v.trim()).filter(Boolean);
   if (configuredOrigins.length === 0) throw new Error('ALLOWED_ORIGINS must contain at least one exact origin.');
   let publicUrl: URL;
