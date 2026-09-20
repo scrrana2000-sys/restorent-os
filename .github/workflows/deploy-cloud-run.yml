@@ -96,7 +96,7 @@ jobs:
             NODE_ENV=production
             PORT=3000
             PUBLIC_APP_URL=https://restaurantos01.ai.studio
-            ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://restaurantos-xqi52dpwgo-as.a.run.app
+            ALLOWED_ORIGINS=https://restaurantos01.ai.studio
             SYSTEM_SERVER_UID=restaurantos-system-server
           flags: '--allow-unauthenticated'
           secrets: |
