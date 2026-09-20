@@ -1,4 +1,5 @@
 name: Deploy RestaurantOS API to Cloud Run
+# GitHub OIDC/WIF deployment connection verified.
 
 on:
   push:
