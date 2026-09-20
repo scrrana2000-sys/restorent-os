@@ -46,7 +46,9 @@ const DEFAULT_PRODUCTION_ORIGINS = [
 
 function requireProductionSecrets() {
   if (process.env.NODE_ENV !== 'production') return;
-  const required = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'ALLOWED_ORIGINS', 'PUBLIC_APP_URL'];
+  // Payment provider secrets are optional at container startup. The API starts normally
+  // and payment endpoints return a controlled configuration error until real secrets exist.
+  const required = ['ALLOWED_ORIGINS', 'PUBLIC_APP_URL'];
 
   // Environment-aware resolution for production: ensure HTTPS production defaults if unset, malformed, or containing localhost
   try {
@@ -72,16 +74,6 @@ function requireProductionSecrets() {
     });
   const resolvedOrigins = Array.from(new Set([...(rawOrigins.length > 0 ? rawOrigins : DEFAULT_PRODUCTION_ORIGINS)]));
   process.env.ALLOWED_ORIGINS = resolvedOrigins.join(',');
-
-  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_ID.trim()) {
-    process.env.RAZORPAY_KEY_ID = 'rzp_live_placeholder';
-  }
-  if (!process.env.RAZORPAY_KEY_SECRET || !process.env.RAZORPAY_KEY_SECRET.trim()) {
-    process.env.RAZORPAY_KEY_SECRET = 'rzp_secret_placeholder';
-  }
-  if (!process.env.RAZORPAY_WEBHOOK_SECRET || !process.env.RAZORPAY_WEBHOOK_SECRET.trim()) {
-    process.env.RAZORPAY_WEBHOOK_SECRET = 'rzp_webhook_secret_placeholder';
-  }
 
   const missing = required.filter((name) => !process.env[name]?.trim());
   if (missing.length) throw new Error(`Missing required production environment variables: ${missing.join(', ')}`);
@@ -1013,11 +1005,20 @@ function buildEmailTemplate({ name, role, restaurantName, url }: { name: string;
  * Returns public Razorpay key and currency for client-side checkout initiation.
  */
 app.get('/api/subscription/config', (_req, res) => {
-  return res.json({
-    success: true,
-    keyId: getPublicRazorpayKeyId(),
-    currency: 'INR'
-  });
+  try {
+    return res.json({
+      success: true,
+      keyId: getPublicRazorpayKeyId(),
+      currency: 'INR'
+    });
+  } catch (err: any) {
+    console.warn('[RestaurantOS Server] Razorpay is not configured:', err?.message || err);
+    return res.status(503).json({
+      success: false,
+      error: 'PAYMENT_PROVIDER_NOT_CONFIGURED',
+      message: 'Razorpay payment configuration is not available yet.'
+    });
+  }
 });
 
 /**
