@@ -114,6 +114,10 @@ describe('Partial Item / Quantity Cancellation Engine', () => {
     };
 
     vi.spyOn(orderService, 'getOrderById').mockResolvedValue(existingOrder as any);
+    vi.mocked(firestore.getDoc).mockImplementation(async (ref: any) => ({
+      exists: () => ref?.path?.endsWith(mockOrderId),
+      data: () => existingOrder
+    }) as any);
 
     const updatedOrder = await orderService.partiallyCancelOrderItems(
       mockRestaurantId,
@@ -178,6 +182,10 @@ describe('Partial Item / Quantity Cancellation Engine', () => {
     };
 
     vi.spyOn(kotService, 'getKOTById').mockResolvedValue(existingKot as any);
+    vi.mocked(firestore.getDoc).mockImplementation(async (ref: any) => ({
+      exists: () => ref?.path?.endsWith(mockKotId),
+      data: () => existingKot
+    }) as any);
     const partiallyCancelOrderItemsSpy = vi.spyOn(orderService, 'partiallyCancelOrderItems').mockResolvedValue({
       id: mockOrderId,
       items: []
