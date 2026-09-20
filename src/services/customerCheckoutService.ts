@@ -450,7 +450,10 @@ export async function submitCustomerOnlineOrder(
 
     const response = await fetch(getApiUrl('/api/submit-online-order'), {
       method: 'POST',
-      headers,
+      headers: {
+        ...headers,
+        Accept: 'application/json'
+      },
       credentials: 'omit',
       body: JSON.stringify({
         ...input,
@@ -459,17 +462,37 @@ export async function submitCustomerOnlineOrder(
       })
     });
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.message || 'Server error occurred during order submission.');
+    // Never blindly call response.json(): an upstream proxy, stale deployment, or
+    // SPA fallback can return HTML (often starting with <!doctype html>). Surface a
+    // useful API error instead of exposing the misleading JSON parser exception.
+    const responseText = await response.text();
+    let responseData: any = null;
+    try {
+      responseData = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      const contentType = response.headers.get('content-type') || 'unknown';
+      const preview = responseText.replace(/\s+/g, ' ').trim().slice(0, 160);
+      throw new Error(
+        `Order API returned a non-JSON response (HTTP ${response.status}, ${contentType}). ${preview || 'Please check the RestaurantOS API deployment.'}`
+      );
     }
 
-    const result = await response.json();
-    
+    if (!response.ok) {
+      throw new Error(
+        responseData?.message ||
+        responseData?.error ||
+        `Order submission failed (HTTP ${response.status}).`
+      );
+    }
+
+    if (!responseData?.success || !responseData?.order) {
+      throw new Error(responseData?.message || 'Order API returned an invalid success response.');
+    }
+
     // Clear stored customer cart ONLY after confirmed canonical success
     clearSavedCustomerCart();
 
-    return result;
+    return responseData;
   }
 
   // Enforce customerId integrity if running directly with auth context
