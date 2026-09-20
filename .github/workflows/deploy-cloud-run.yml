@@ -108,3 +108,4 @@ jobs:
           URL="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')"
           test -n "$URL"
           curl --fail --silent --show-error --retry 5 --retry-delay 3 "$URL/api/health"
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 "$URL/"
