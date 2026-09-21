@@ -35,7 +35,7 @@ import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { getPlanById } from './src/config/subscriptionPlans';
 
 const app = express();
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT) || 3000;
 app.set('trust proxy', 1);
 
 const DEFAULT_PRODUCTION_ORIGINS = [
@@ -1974,7 +1974,10 @@ process.once('SIGTERM', () => handleShutdown('SIGTERM'));
 process.once('SIGINT', () => handleShutdown('SIGINT'));
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
-  startServer();
+  startServer().catch((error) => {
+    console.error('[RestaurantOS Server] Fatal startup error:', error);
+    process.exit(1);
+  });
 }
 
 export { app };
