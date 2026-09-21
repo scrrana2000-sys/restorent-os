@@ -234,14 +234,26 @@ export async function getActivePlanEntitlements(restaurantId: string): Promise<S
 
   try {
     let sub = await getRestaurantSubscription(cleanId);
-    if (!sub) {
+
+    // Firestore production rules require the server-owned operationalAccessUntil
+    // timestamp. Legacy subscription documents may exist without this field.
+    // Always ask the trusted backend to repair that document before evaluating
+    // operational entitlements, otherwise the UI can look active while writes
+    // such as tableSessions are rejected by Firestore rules.
+    const hasOperationalBoundary = Boolean(sub?.operationalAccessUntil);
+
+    if (!sub || !hasOperationalBoundary) {
       try {
-        sub = await ensureRestaurantTrial(cleanId);
+        const repaired = await ensureRestaurantTrial(cleanId);
+        if (repaired?.operationalAccessUntil) {
+          sub = repaired;
+        } else if (!sub?.operationalAccessUntil) {
+          // Fail closed: never synthesize client-only operational access.
+          sub = null;
+        }
       } catch (trialError) {
-        // Never grant a synthetic trial when the subscription record is missing
-        // or cannot be initialized. Fail closed to inactive entitlements.
-        console.warn('[RestaurantOS Subscription] Trial initialization unavailable:', trialError);
-        sub = null;
+        console.warn('[RestaurantOS Subscription] Operational entitlement backfill unavailable:', trialError);
+        if (!sub?.operationalAccessUntil) sub = null;
       }
     }
 
