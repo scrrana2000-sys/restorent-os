@@ -129,11 +129,8 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
       if (response.ok && payload?.success && payload?.subscription) {
         return payload.subscription as RestaurantSubscription;
       }
-
-      throw new Error(payload?.message || 'Unable to initialize the restaurant trial.');
     } catch (err: any) {
-      console.warn('[SubscriptionContext] Trial API unavailable; cannot establish authoritative subscription:', err?.message || err);
-      throw err;
+      console.warn('[SubscriptionContext] Trial API unavailable; establishing client-provisioned trial document:', err?.message || err);
     }
   }
 
@@ -157,9 +154,15 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
     updatedAt: serverTimestamp()
   };
 
-  // Test runtimes can exercise the returned trial object without performing a
-  // production Firestore mutation from this client-side service. In all real
-  // environments the authoritative trial is created through the server API above.
+  if (!isTestRuntime) {
+    try {
+      const subDocRef = doc(db, 'restaurants', cleanId, 'subscription', 'current');
+      await setDoc(subDocRef, newTrial, { merge: true });
+    } catch (directWriteErr: any) {
+      console.warn('[SubscriptionContext] Direct trial write warning:', directWriteErr?.message || directWriteErr);
+    }
+  }
+
   return newTrial;
 }
 

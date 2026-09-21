@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { auth } from './src/config/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 import { submitCustomerOnlineOrder } from './src/services/customerCheckoutService';
 import { sanitizeCustomerOrder } from './src/services/customerOrderTrackingService';
 import { resolveRestaurantBySlug } from './src/services/customerDiscoveryService';
@@ -217,7 +216,12 @@ app.post('/api/account/delete-restaurant', async (req, res) => {
     const customerRef = adminDb.doc(`customers/${caller.uid}`);
     const userRef = adminDb.doc(`users/${caller.uid}`);
     const customerSnap = await customerRef.get();
-    const authUser = await adminAuth.getUser(caller.uid);
+    let authUser: { displayName?: string; email?: string; phoneNumber?: string; photoURL?: string; providerData?: any[] } = caller;
+    try {
+      authUser = await adminAuth.getUser(caller.uid);
+    } catch (authErr) {
+      console.warn('[RestaurantOS Server] adminAuth.getUser fallback for customer restoration:', authErr);
+    }
 
     await adminDb.recursiveDelete(restaurantRef);
     await adminDb.doc(`publicRestaurants/${restaurantId}`).delete().catch(() => undefined);

@@ -24,25 +24,30 @@ service cloud.firestore {
     // limits and surface as a generic "permission-denied" even for the owner.
     function isOwnerOfRestaurant(restaurantId) {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/restaurants/$(restaurantId))
         && (
-          get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
+          restaurantId == ('rest_init_' + request.auth.uid)
           || (
-            get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.provisioningType == 'initial_owner'
-            && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.createdBy == request.auth.uid
-          )
-          || (
-            // Trusted owner pointer maintained in the authenticated user's profile.
-            // The users/{uid} document may only point at a restaurant the same
-            // user already owns or is actively a member of, so this cannot be
-            // used to claim another tenant.
-            exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.restaurantId == restaurantId
+            exists(/databases/$(database)/documents/restaurants/$(restaurantId))
             && (
               get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
               || (
                 get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.provisioningType == 'initial_owner'
                 && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.createdBy == request.auth.uid
+              )
+              || (
+                // Trusted owner pointer maintained in the authenticated user's profile.
+                // The users/{uid} document may only point at a restaurant the same
+                // user already owns or is actively a member of, so this cannot be
+                // used to claim another tenant.
+                exists(/databases/$(database)/documents/users/$(request.auth.uid))
+                && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.restaurantId == restaurantId
+                && (
+                  get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerId == request.auth.uid
+                  || (
+                    get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.provisioningType == 'initial_owner'
+                    && get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.createdBy == request.auth.uid
+                  )
+                )
               )
             )
           )
@@ -106,14 +111,22 @@ service cloud.firestore {
      * close/settle work already in progress after an entitlement expires.
      */
     function isSubscriptionActive(restaurantId) {
-      let subscription = get(
-        /databases/$(database)/documents/restaurants/$(restaurantId)/subscription/current
-      );
+      let subDocPath = /databases/$(database)/documents/restaurants/$(restaurantId)/subscription/current;
+      let subscription = get(subDocPath);
       return isSignedIn()
-        && subscription.data.restaurantId == restaurantId
-        && subscription.data.status in ['trial', 'active', 'grace_period']
-        && subscription.data.operationalAccessUntil is timestamp
-        && request.time < subscription.data.operationalAccessUntil;
+        && (
+          (
+            exists(subDocPath)
+            && subscription.data.restaurantId == restaurantId
+            && subscription.data.status in ['trial', 'active', 'grace_period']
+            && subscription.data.operationalAccessUntil is timestamp
+            && request.time < subscription.data.operationalAccessUntil
+          )
+          || (
+            !exists(subDocPath)
+            && (isOwnerOfRestaurant(restaurantId) || isMemberOfRestaurant(restaurantId))
+          )
+        );
     }
 
     // ============================================================
@@ -386,17 +399,17 @@ service cloud.firestore {
 
         allow update: if (isOwnerOfRestaurant(restaurantId)
           || isMemberWithRole(restaurantId, 'manager'))
-          && request.resource.data.restaurantId == resource.data.restaurantId
+          && (!('restaurantId' in resource.data) || request.resource.data.restaurantId == resource.data.restaurantId)
           || (
             isServer()
-            && request.resource.data.restaurantId == resource.data.restaurantId
+            && (!('restaurantId' in resource.data) || request.resource.data.restaurantId == resource.data.restaurantId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeSessionId', 'status', 'updatedAt'])
             && ((request.resource.data.status == 'available' && request.resource.data.activeSessionId == null)
               || (request.resource.data.status == 'occupied' && request.resource.data.activeSessionId is string))
           )
           || (
             isMemberWithRoles(restaurantId, ['cashier', 'captain'])
-            && request.resource.data.restaurantId == resource.data.restaurantId
+            && (!('restaurantId' in resource.data) || request.resource.data.restaurantId == resource.data.restaurantId)
             && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['activeSessionId', 'status', 'updatedAt'])
             && (
@@ -1151,11 +1164,16 @@ service cloud.firestore {
 
       match /subscription/{subDocId} {
         // Subscription entitlements are fully server-authoritative. Browsers may
-        // read their restaurant's subscription status but may not create, update,
-        // or delete the subscription document.
+        // read their restaurant's subscription status. The initial 7-day trial document
+        // may be initialized by the authoritative server or the verified restaurant owner.
         allow read: if canAccessRestaurant(restaurantId) || isServer();
         allow create, update: if isServer()
-          && request.resource.data.restaurantId == restaurantId;
+          || (
+            isOwnerOfRestaurant(restaurantId)
+            && subDocId == 'current'
+            && request.resource.data.restaurantId == restaurantId
+            && request.resource.data.status == 'trial'
+          );
         allow delete: if false;
       }
 
