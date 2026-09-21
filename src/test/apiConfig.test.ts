@@ -24,12 +24,21 @@ describe('getApiUrl', () => {
       .toBe(`${PRODUCTION_API_BASE_URL}/api/submit-online-order`);
   });
 
+  it('routes GitHub Pages API calls to the production Cloud Run backend', () => {
+    vi.stubGlobal('window', {
+      location: { hostname: 'scrrana2000-sys.github.io', origin: 'https://scrrana2000-sys.github.io/restorent-os' }
+    });
+
+    expect(getApiUrl('/api/submit-online-order'))
+      .toBe(`${PRODUCTION_API_BASE_URL}/api/submit-online-order`);
+  });
+
   it('keeps actual Cloud Run deployments same-origin', () => {
     vi.stubGlobal('window', {
-      location: { hostname: 'restaurantos-xqi52dpwgo-as.a.run.app', origin: 'https://restaurantos-xqi52dpwgo-as.a.run.app' }
+      location: { hostname: 'restaurantos-xqi52dpwga-el.a.run.app', origin: 'https://restaurantos-xqi52dpwga-el.a.run.app' }
     });
 
     expect(getApiUrl('/api/health'))
-      .toBe('https://restaurantos-xqi52dpwgo-as.a.run.app/api/health');
+      .toBe('https://restaurantos-xqi52dpwga-el.a.run.app/api/health');
   });
 });
