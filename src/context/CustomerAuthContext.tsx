@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { CustomerProfile, CustomerAddress } from '../types/customer';
 import {
   subscribeToCustomerAuth,
