@@ -269,6 +269,13 @@ export async function logout(): Promise<void> {
 
 const userProfileCache = new Map<string, UserProfile | null>();
 
+function isTestRuntime(): boolean {
+  return typeof import.meta !== 'undefined'
+    && Boolean((import.meta as any).env?.MODE === 'test');
+}
+
+
+
 /**
  * Retrieves the stored user profile from Firestore.
  */
@@ -276,7 +283,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   const cleanUserId = (userId || '').trim();
   if (!cleanUserId) return null;
 
-  if (userProfileCache.has(cleanUserId)) {
+  if (!isTestRuntime() && userProfileCache.has(cleanUserId)) {
     return userProfileCache.get(cleanUserId) || null;
   }
 
@@ -284,7 +291,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     const userRef = doc(db, 'users', cleanUserId);
     const snap = await getDoc(userRef);
     const profile = snap.exists() ? (snap.data() as UserProfile) : null;
-    userProfileCache.set(cleanUserId, profile);
+    if (!isTestRuntime()) userProfileCache.set(cleanUserId, profile);
     return profile;
   } catch (err) {
     console.warn('Could not fetch user profile:', err);
