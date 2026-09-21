@@ -25,6 +25,7 @@ export function getApiUrl(endpoint: string): string {
     // Only non-AI-Studio *.run.app hosts are treated as deployed Cloud Run API hosts.
     const isAiStudioPreview = host.startsWith('ais-dev-') || host.endsWith('.ai.studio');
     const isCloudRun = host.endsWith('.run.app') && !isAiStudioPreview;
+    const isGitHubPages = host === 'scrrana2000-sys.github.io' || host.endsWith('.github.io');
 
     if (isAiStudioPreview) {
       // Real AI Studio preview hosts run the RestaurantOS Express + Vite server
@@ -32,6 +33,10 @@ export function getApiUrl(endpoint: string): string {
       // base URL from a preview build; that can return the SPA HTML shell (200)
       // instead of the JSON API response.
       baseUrl = window.location.origin;
+    } else if (isGitHubPages) {
+      // GitHub Pages is static hosting: /api/* falls through to index.html (HTTP 200 text/html).
+      // Always send server API calls to the live Cloud Run backend from this host.
+      baseUrl = PRODUCTION_API_BASE_URL;
     } else if (configured && (isLocal || !configured.includes('localhost'))) {
       baseUrl = configured;
     } else {
