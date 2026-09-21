@@ -120,19 +120,20 @@ jobs:
           region: ${{ env.GCP_REGION }}
           project_id: ${{ env.GCP_PROJECT_ID }}
           image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          env_vars: |
+          env_vars: |-
             NODE_ENV=production
             PUBLIC_APP_URL=https://restaurantos01.ai.studio
-            ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://restaurantos-xqi52dpwgo-as.a.run.app
+            ALLOWED_ORIGINS=https://restaurantos01.ai.studio\,https://restaurantos-xqi52dpwgo-as.a.run.app\,https://scrrana2000-sys.github.io
             SYSTEM_SERVER_UID=restaurantos-system-server
             FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96
             FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57
-          secrets: |
-            SYSTEM_SERVER_PASSWORD=SYSTEM_SERVER_PASSWORD:latest
-            RAZORPAY_KEY_ID=RAZORPAY_KEY_ID:latest
-            RAZORPAY_KEY_SECRET=RAZORPAY_KEY_SECRET:latest
-            RAZORPAY_WEBHOOK_SECRET=RAZORPAY_WEBHOOK_SECRET:latest
-          flags: '--allow-unauthenticated'
+          # Secret Manager bindings were removed because these four secret resources do not exist
+          # in the configured GCP project. The application already handles missing payment secrets
+          # as controlled runtime configuration errors, so they must not block Cloud Run revision creation.
+          secrets: '{}'
+          env_vars_update_strategy: overwrite
+          secrets_update_strategy: overwrite
+          flags: '--allow-unauthenticated --port 3000'
 
       - name: Verify deployed API health endpoint
         run: |
