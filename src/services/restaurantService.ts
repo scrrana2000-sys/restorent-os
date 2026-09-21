@@ -209,6 +209,15 @@ export async function getOrCreateInitialRestaurant(
           if (profileRestSnap.exists()) {
             const profileRestData = profileRestSnap.data() as any;
 
+            // Existing owner identities must not retain an active customer profile.
+            if (customerSnap.exists()) {
+              transaction.set(customerRef, {
+                accountStatus: 'blocked',
+                blockedAt: serverTimestamp(),
+                blockedReason: 'restaurant_owner'
+              }, { merge: true });
+            }
+
             // Repair a legacy initial-owner record before returning it. Without
             // this, a stale ownerId causes every nested collection read to fail
             // even though the authenticated user originally provisioned it.
