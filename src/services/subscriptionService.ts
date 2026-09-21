@@ -14,6 +14,7 @@
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   collection,
   onSnapshot,
@@ -355,6 +356,28 @@ export async function checkStaffLimit(
   return { allowed: true, currentCount: count, maxStaff, planName };
 }
 
+
+/**
+ * Loads billing history only when the subscription page explicitly requests it.
+ * No realtime listener is kept alive across the entire owner console.
+ */
+export async function getSubscriptionHistoryOnce(
+  restaurantId: string,
+  limitCount = 50
+): Promise<SubscriptionHistoryRecord[]> {
+  const cleanId = restaurantId?.trim();
+  if (!cleanId) return [];
+
+  const historyColRef = collection(db, 'restaurants', cleanId, 'subscriptionHistory');
+  const q = query(historyColRef, orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+
+  const records: SubscriptionHistoryRecord[] = [];
+  snap.docs.slice(0, limitCount).forEach((docSnap) => {
+    records.push({ id: docSnap.id, ...docSnap.data() } as SubscriptionHistoryRecord);
+  });
+  return records;
+}
 
 /**
  * Realtime reactive listener for the restaurant's subscription status.
