@@ -21,7 +21,8 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  limit
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import {
@@ -41,34 +42,6 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const THREE_HUNDRED_SIXTY_FIVE_DAYS_MS = 365 * 24 * 60 * 60 * 1000;
 
-function buildAuthAccountTrial(restaurantId: string): RestaurantSubscription | null {
-  const creationTime = auth.currentUser?.metadata?.creationTime;
-  if (!creationTime) return null;
-
-  const trialStart = new Date(creationTime);
-  if (Number.isNaN(trialStart.getTime())) return null;
-
-  const trialEnd = new Date(trialStart.getTime() + SEVEN_DAYS_MS);
-
-  return {
-    subscriptionId: 'current',
-    restaurantId,
-    status: 'trial',
-    planId: TRIAL_PLAN_ID,
-    billingCycle: 'monthly',
-    trialStartedAt: trialStart.toISOString(),
-    trialEndsAt: trialEnd.toISOString(),
-    trialStartAt: trialStart.toISOString(),
-    trialEndAt: trialEnd.toISOString(),
-    currentPeriodStart: trialStart.toISOString(),
-    currentPeriodEnd: trialEnd.toISOString(),
-    paymentStatus: 'none',
-    provider: 'manual',
-    autoRenew: false,
-    createdAt: trialStart.toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-}
 
 /**
  * Idempotently ensures that every restaurant has a 7-day free trial subscription record.
@@ -117,28 +90,6 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
         return payload.subscription as RestaurantSubscription;
       }
 
-      // Google AI Studio preview can run without the production API service.
-      // For an existing legacy trial, allow the owner-scoped Firestore rule to
-      // perform a one-time entitlement timestamp backfill so local validation does
-      // not depend on Cloud Run being deployed.
-      const isAiStudioPreview =
-        typeof window !== 'undefined' &&
-        window.location.hostname.startsWith('ais-dev-');
-
-      if (isAiStudioPreview && existing.status === 'trial') {
-        const now = new Date();
-        const accessUntil = new Date(now.getTime() + SEVEN_DAYS_MS);
-        const backfilled = {
-          ...existing,
-          operationalAccessUntil: Timestamp.fromDate(accessUntil),
-          updatedAt: serverTimestamp()
-        };
-        await setDoc(subDocRef, backfilled, { merge: true });
-        return {
-          ...existing,
-          operationalAccessUntil: Timestamp.fromDate(accessUntil)
-        } as RestaurantSubscription;
-      }
     } catch (upgradeErr) {
       console.warn('[RestaurantOS Subscription] Legacy subscription timestamp backfill notice:', upgradeErr);
     }
@@ -179,21 +130,9 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
         return payload.subscription as RestaurantSubscription;
       }
 
-      // During GitHub Pages/static hosting, the backend may be unreachable while
-      // the frontend is otherwise healthy. For server availability/configuration
-      // failures only, preserve the one-time trial from Firebase Auth creation time.
-      if ([404, 500, 502, 503, 504].includes(response.status)) {
-        const localTrial = buildAuthAccountTrial(cleanId);
-        if (localTrial) return localTrial;
-      }
-
       throw new Error(payload?.message || 'Unable to initialize the restaurant trial.');
     } catch (err: any) {
-      const localTrial = buildAuthAccountTrial(cleanId);
-      if (localTrial) {
-        console.warn('[SubscriptionContext] Trial API unavailable; using account-creation trial entitlement:', err?.message || err);
-        return localTrial;
-      }
+      console.warn('[SubscriptionContext] Trial API unavailable; cannot establish authoritative subscription:', err?.message || err);
       throw err;
     }
   }
@@ -393,11 +332,12 @@ export async function getSubscriptionHistoryOnce(
   if (!cleanId) return [];
 
   const historyColRef = collection(db, 'restaurants', cleanId, 'subscriptionHistory');
-  const q = query(historyColRef, orderBy('createdAt', 'desc'));
+  const safeLimit = Math.max(1, Math.min(Math.floor(limitCount), 100));
+  const q = query(historyColRef, orderBy('createdAt', 'desc'), limit(safeLimit));
   const snap = await getDocs(q);
 
   const records: SubscriptionHistoryRecord[] = [];
-  snap.docs.slice(0, limitCount).forEach((docSnap) => {
+  snap.docs.forEach((docSnap) => {
     records.push({ id: docSnap.id, ...docSnap.data() } as SubscriptionHistoryRecord);
   });
   return records;
