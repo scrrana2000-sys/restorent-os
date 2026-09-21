@@ -51,13 +51,11 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
   } = useCustomerCart();
 
   const [confirmClearOpen, setConfirmClearOpen] = useState<boolean>(false);
-  const [checkoutNoticeOpen, setCheckoutNoticeOpen] = useState<boolean>(false);
 
   const isOpen = propIsOpen !== undefined ? propIsOpen : isCartDrawerOpen;
 
   const handleClose = () => {
     setConfirmClearOpen(false);
-    setCheckoutNoticeOpen(false);
     if (propOnClose) {
       propOnClose();
     } else {
