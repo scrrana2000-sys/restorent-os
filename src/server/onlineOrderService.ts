@@ -658,7 +658,8 @@ async function writeAudit(
 function extractInput(input: ServerOnlineOrderInput) {
   if (!input.cart) throw new Error('Cart is empty.');
   if (!input.customerDetails?.name || input.customerDetails.name.trim().length < 2) throw new Error('Customer name is required.');
-  if (!input.customerDetails?.phone || !/\\d{10,15}/.test(input.customerDetails.phone.replace(/\\D/g, ''))) {
+  const phoneDigits = input.customerDetails.phone.replace(/\D/g, '');
+  if (!input.customerDetails?.phone || phoneDigits.length < 10 || phoneDigits.length > 15) {
     throw new Error('A valid customer phone number is required.');
   }
   if (!['cash'].includes(input.paymentMethod)) {
