@@ -5,7 +5,7 @@
  * are static frontend hosts and therefore must use the trusted production API.
  * VITE_API_BASE_URL remains an optional explicit override.
  */
-const PRODUCTION_API_BASE_URL = 'https://restaurantos-xqi52dpwga-el.a.run.app';
+const PRODUCTION_API_BASE_URL = 'https://restaurantos-xqi52dpwgo-as.a.run.app';
 
 export function getApiUrl(endpoint: string): string {
   const cleanPath = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
@@ -23,10 +23,16 @@ export function getApiUrl(endpoint: string): string {
     // customer tracking, and owner APIs do not depend on a deleted/stale production
     // Cloud Run URL during AI Studio validation.
     // Only non-AI-Studio *.run.app hosts are treated as deployed Cloud Run API hosts.
-    const isAiStudioPreview = host.startsWith('ais-dev-');
+    const isAiStudioPreview = host.startsWith('ais-dev-') || host.endsWith('.ai.studio');
     const isCloudRun = host.endsWith('.run.app') && !isAiStudioPreview;
 
-    if (configured && (isLocal || !configured.includes('localhost'))) {
+    if (isAiStudioPreview) {
+      // Real AI Studio preview hosts run the RestaurantOS Express + Vite server
+      // on the same origin. Never send checkout/order APIs to a stale external
+      // base URL from a preview build; that can return the SPA HTML shell (200)
+      // instead of the JSON API response.
+      baseUrl = window.location.origin;
+    } else if (configured && (isLocal || !configured.includes('localhost'))) {
       baseUrl = configured;
     } else {
       baseUrl = isLocal || isAiStudioPreview || isCloudRun
