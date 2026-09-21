@@ -77,10 +77,18 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
   const currencySymbol = cart?.currencySymbol || restaurantProfile?.currencySymbol || '₹';
 
   const handleProceedToCheckout = () => {
+    // Checkout is owned by the parent menu page. Never trap the customer
+    // inside the sidebar with the old M9-H informational notice.
     if (onCheckout) {
       onCheckout();
-    } else {
-      setCheckoutNoticeOpen(true);
+      return;
+    }
+
+    // Defensive fallback for any legacy caller that has not yet supplied the
+    // callback. The menu page listens for this event and opens the real
+    // checkout modal.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('restaurantos_open_checkout'));
     }
   };
 
