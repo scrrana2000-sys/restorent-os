@@ -42,7 +42,7 @@ app.set('trust proxy', 1);
 const DEFAULT_PRODUCTION_ORIGINS = [
   'https://restaurantos01.ai.studio',
   'https://antos01.ai.studio',
-  'https://restaurantos-xqi52dpwgo-as.a.run.app',
+  'https://restaurantos-xqi52dpwga-el.a.run.app',
   'https://scrrana2000-sys.github.io'
 ];
 
