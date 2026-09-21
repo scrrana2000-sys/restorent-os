@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDocsFromCache,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -25,7 +26,82 @@ export function subscribeToCategories(
   onError?: (err: unknown) => void
 ) {
   const colRef = collection(db, 'restaurants', restaurantId, 'categories');
-  const q = query(colRef, orderBy('sortOrder', 'asc'));
+  const categoryCache = new Map<string, Category[]>();
+const menuItemCache = new Map<string, MenuItem[]>();
+
+function cloneCachedList<T>(items: T[]): T[] {
+  return items.map((item) => ({ ...item } as T));
+}
+
+async function readCollectionOnce<T>(
+  collectionRef: any,
+  buildItem: (id: string, data: any) => T,
+  cache: Map<string, T[]>,
+  cacheKey: string,
+  forceRefresh = false
+): Promise<T[]> {
+  if (!forceRefresh) {
+    const cached = cache.get(cacheKey);
+    if (cached) return cloneCachedList(cached);
+  }
+
+  const q = query(collectionRef, orderBy('sortOrder', 'asc'));
+  let snapshot: any = null;
+
+  // Prefer the local persistent Firestore cache. This avoids a billed backend
+  // read when the collection is already present in the browser cache.
+  if (!forceRefresh) {
+    try {
+      snapshot = await getDocsFromCache(q);
+    } catch {
+      snapshot = null;
+    }
+  }
+
+  if (!snapshot || (!snapshot.docs?.length && forceRefresh)) {
+    snapshot = await getDocs(q);
+  }
+
+  const list: T[] = [];
+  snapshot.forEach((d: any) => list.push(buildItem(d.id, d.data())));
+  cache.set(cacheKey, list);
+  return cloneCachedList(list);
+}
+
+export async function getCategoriesOnce(restaurantId: string, forceRefresh = false): Promise<Category[]> {
+  const cleanId = (restaurantId || '').trim();
+  if (!cleanId) return [];
+  const colRef = collection(db, 'restaurants', cleanId, 'categories');
+  return readCollectionOnce(
+    colRef,
+    (id, data) => ({ categoryId: id, restaurantId: cleanId, ...data } as Category),
+    categoryCache,
+    cleanId,
+    forceRefresh
+  );
+}
+
+export async function getMenuItemsOnce(restaurantId: string, forceRefresh = false): Promise<MenuItem[]> {
+  const cleanId = (restaurantId || '').trim();
+  if (!cleanId) return [];
+  const colRef = collection(db, 'restaurants', cleanId, 'items');
+  return readCollectionOnce(
+    colRef,
+    (id, data) => ({ itemId: id, restaurantId: cleanId, ...data } as MenuItem),
+    menuItemCache,
+    cleanId,
+    forceRefresh
+  );
+}
+
+export function invalidateMenuCache(restaurantId: string): void {
+  const cleanId = (restaurantId || '').trim();
+  if (!cleanId) return;
+  categoryCache.delete(cleanId);
+  menuItemCache.delete(cleanId);
+}
+
+const q = query(colRef, orderBy('sortOrder', 'asc'));
 
   return onSnapshot(
     q,
@@ -69,6 +145,7 @@ export async function createCategory(
     };
 
     await setDoc(newDoc, category);
+    invalidateMenuCache(restaurantId);
     return newDoc.id;
   } catch (error) {
     throw handleFirestoreError(error, OperationType.CREATE, `restaurants/${restaurantId}/categories`);
@@ -87,6 +164,7 @@ export async function updateCategory(
       ...data,
       updatedAt: serverTimestamp()
     });
+    invalidateMenuCache(restaurantId);
   } catch (error) {
     throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${restaurantId}/categories/${categoryId}`);
   }
@@ -100,6 +178,7 @@ export async function deleteCategory(
   try {
     const ref = doc(db, 'restaurants', restaurantId, 'categories', categoryId);
     await deleteDoc(ref);
+    invalidateMenuCache(restaurantId);
   } catch (error) {
     throw handleFirestoreError(error, OperationType.DELETE, `restaurants/${restaurantId}/categories/${categoryId}`);
   }
@@ -117,6 +196,7 @@ export async function toggleCategoryStatus(
       isActive,
       updatedAt: serverTimestamp()
     });
+    invalidateMenuCache(restaurantId);
   } catch (error) {
     throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${restaurantId}/categories/${categoryId}`);
   }
@@ -207,6 +287,7 @@ export async function createMenuItem(
     };
 
     await setDoc(newDoc, item);
+    invalidateMenuCache(restaurantId);
     return newDoc.id;
   } catch (error) {
     throw handleFirestoreError(error, OperationType.CREATE, `restaurants/${restaurantId}/items`);
@@ -232,6 +313,7 @@ export async function updateMenuItem(
       payload.taxRate = Math.max(0, Number(data.taxRate));
     }
     await updateDoc(ref, payload);
+    invalidateMenuCache(restaurantId);
   } catch (error) {
     throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${restaurantId}/items/${itemId}`);
   }
@@ -245,6 +327,7 @@ export async function deleteMenuItem(
   try {
     const ref = doc(db, 'restaurants', restaurantId, 'items', itemId);
     await deleteDoc(ref);
+    invalidateMenuCache(restaurantId);
   } catch (error) {
     throw handleFirestoreError(error, OperationType.DELETE, `restaurants/${restaurantId}/items/${itemId}`);
   }
@@ -262,6 +345,7 @@ export async function toggleItemAvailability(
       isAvailable,
       updatedAt: serverTimestamp()
     });
+    invalidateMenuCache(restaurantId);
   } catch (error) {
     throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${restaurantId}/items/${itemId}`);
   }
@@ -269,14 +353,17 @@ export async function toggleItemAvailability(
 
 export const menuService = {
   subscribeToCategories,
+  getCategoriesOnce,
   createCategory,
   updateCategory,
   deleteCategory,
   swapCategoryOrder,
   subscribeToMenuItems,
+  getMenuItemsOnce,
   createMenuItem,
   updateMenuItem,
   deleteMenuItem,
-  toggleItemAvailability
+  toggleItemAvailability,
+  invalidateMenuCache
 };
 
