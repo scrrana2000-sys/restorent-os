@@ -39,7 +39,7 @@ jobs:
 
       - name: Resolve frontend deployment configuration
         run: |
-          VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://restaurantos-xqi52dpwgo-as.a.run.app}"
+          VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://restaurantos-xqi52dpwga-el.a.run.app}"
           VITE_PUBLIC_APP_URL="${VITE_PUBLIC_APP_URL:-https://restaurantos01.ai.studio}"
           echo "VITE_API_BASE_URL=$VITE_API_BASE_URL" >> "$GITHUB_ENV"
           echo "VITE_PUBLIC_APP_URL=$VITE_PUBLIC_APP_URL" >> "$GITHUB_ENV"
