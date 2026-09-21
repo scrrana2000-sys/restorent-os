@@ -46,14 +46,14 @@ export const CustomerAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setFirebaseUser(user);
 
       if (user) {
-        try {
-          // Auth state is intentionally passive here. Do not read Firestore on
-          // every global auth event. Customer profile data is loaded only by
-          // explicit customer sign-in or a profile/order action.
-          if (isMounted) setCustomer(null);
-        } catch (err) {
-          console.warn('[CustomerAuthContext] Failed to resolve customer identity:', err);
-          if (isMounted) setCustomer(null);
+        // Auth state is intentionally passive here. Do not read Firestore on
+        // every global auth event. Preserve an already-loaded customer profile
+        // for the same UID; only clear a profile when the authenticated UID
+        // actually changes.
+        if (isMounted) {
+          setCustomer((previous) =>
+            previous?.customerId === user.uid ? previous : null
+          );
         }
       } else {
         if (isMounted) {
