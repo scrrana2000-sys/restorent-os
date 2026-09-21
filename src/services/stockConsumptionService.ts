@@ -159,17 +159,28 @@ export class StockConsumptionService {
     const distinctMenuItemIds = Array.from(new Set(data.items.map((i) => i.itemId.trim())));
     const activeRecipesMap = new Map<string, Recipe>();
 
-    for (const mId of distinctMenuItemIds) {
-      const q = query(
-        collection(db, recipesPath(cleanRestId)),
-        where('menuItemId', '==', mId),
-        where('status', '==', 'active'),
-        limit(1)
-      );
-      const recipeSnap = await getDocs(q);
-      if (recipeSnap && !recipeSnap.empty && recipeSnap.docs && recipeSnap.docs.length > 0) {
-        const rDoc = recipeSnap.docs[0];
-        activeRecipesMap.set(mId, { id: rDoc.id, ...rDoc.data() } as Recipe);
+    // Recipe lookups are independent per menu item. Resolve them in parallel so
+    // stock consumption latency does not grow linearly with cart size.
+    const recipeResults = await Promise.all(
+      distinctMenuItemIds.map(async (mId) => {
+        const q = query(
+          collection(db, recipesPath(cleanRestId)),
+          where('menuItemId', '==', mId),
+          where('status', '==', 'active'),
+          limit(1)
+        );
+        const recipeSnap = await getDocs(q);
+        if (recipeSnap && !recipeSnap.empty && recipeSnap.docs && recipeSnap.docs.length > 0) {
+          const rDoc = recipeSnap.docs[0];
+          return { menuItemId: mId, recipe: { id: rDoc.id, ...rDoc.data() } as Recipe };
+        }
+        return null;
+      })
+    );
+
+    for (const result of recipeResults) {
+      if (result) {
+        activeRecipesMap.set(result.menuItemId, result.recipe);
       }
     }
 
