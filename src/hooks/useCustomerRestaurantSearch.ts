@@ -138,20 +138,22 @@ export function useCustomerRestaurantSearch(
           exactResolved = await resolveRestaurantBySlug(trimmedQuery);
         }
 
-        // 2. Query scoped to city using authoritative M9-B discovery service
-        const criteria: RestaurantDiscoveryCriteria = {
-          city: currentCity,
-          state: location?.state,
-          area: filters.selectedArea || (location?.area ? location.area : undefined),
-          searchQuery: trimmedQuery || undefined,
-          cuisine: filters.selectedCuisine || undefined,
-          deliveryOnly: filters.deliveryOnly || undefined,
-          takeawayOnly: filters.takeawayOnly || undefined,
-          limit: pageSize,
-          cursor: isPageLoadMore ? (nextCursorRef.current || undefined) : undefined
-        };
-
-        const result = await discoverRestaurants(criteria);
+        // 2. When the user entered an exact public identifier, that single
+        // tenant lookup is already the complete result; do not also run the
+        // city discovery query.
+        const result = exactResolved
+          ? { restaurants: [exactResolved], hasMore: false, nextCursor: null }
+          : await discoverRestaurants({
+              city: currentCity,
+              state: location?.state,
+              area: filters.selectedArea || (location?.area ? location.area : undefined),
+              searchQuery: trimmedQuery || undefined,
+              cuisine: filters.selectedCuisine || undefined,
+              deliveryOnly: filters.deliveryOnly || undefined,
+              takeawayOnly: filters.takeawayOnly || undefined,
+              limit: pageSize,
+              cursor: isPageLoadMore ? (nextCursorRef.current || undefined) : undefined
+            });
 
         // Discard stale response if a newer query has fired
         if (requestId !== activeRequestIdRef.current) {
