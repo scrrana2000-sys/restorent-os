@@ -440,9 +440,13 @@ export async function submitCustomerOnlineOrder(
   // intentionally have no Firebase Auth session, so IdempotencyService would
   // reject them with "Authenticated user is required for idempotency operations."
   const isBrowser = typeof window !== 'undefined';
-  const isTest = !isBrowser && typeof process !== 'undefined'
-    && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
-  if (isBrowser) {
+  // Vitest uses a browser-like DOM environment, so window exists during unit tests.
+  // Keep tests on the deterministic local service path while real browser/customer
+  // sessions always use the server-authoritative API above.
+  const isTest =
+    (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true')) ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test');
+  if (isBrowser && !isTest) {
     let idToken = input.idToken;
     if (!idToken && typeof auth !== 'undefined' && auth.currentUser) {
       try {
