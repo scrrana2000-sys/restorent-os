@@ -1,9 +1,10 @@
 name: Deploy RestaurantOS API to Cloud Run
 
-# Production Cloud Run deployment is intentionally manual while RestaurantOS is being
-# validated in Google AI Studio. Keep the full deployment pipeline here for the
-# final production release, but do not deploy on every GitHub push.
+# Keep the API deployment synchronized with main so the frontend can never point
+# at a stale Cloud Run revision after server-side changes.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -119,7 +120,7 @@ jobs:
           env_vars: |-
             NODE_ENV=production
             PUBLIC_APP_URL=https://restaurantos01.ai.studio
-            ALLOWED_ORIGINS=https://restaurantos01.ai.studio\,https://antos01.ai.studio\,https://restaurantos-xqi52dpwga-el.a.run.app\,https://restaurantos-xqi52dpwgo-as.a.run.app\,https://scrrana2000-sys.github.io
+            ALLOWED_ORIGINS=https://restaurantos01.ai.studio\,https://antos01.ai.studio\,https://restaurantos-xqi52dpwga-el.a.run.app\,https://restaurantos-xqi52dpwga-el.a.run.app\,https://scrrana2000-sys.github.io
             SYSTEM_SERVER_UID=restaurantos-system-server
             FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96
             FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57
