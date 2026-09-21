@@ -870,3 +870,211 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
     throw error;
   }
 }
+
+
+/** Server-authoritative POS order creation. The HTTP route verifies the caller role; all Firestore mutations use Admin SDK. */
+export async function submitServerPosOrder(input: {
+  restaurantId: string;
+  cartState: CartState;
+  orderType: 'dineIn' | 'takeaway' | 'delivery';
+  source: string;
+  tableId?: string | null;
+  tableSessionId?: string | null;
+  customerSnapshot?: CustomerSnapshot | null;
+  notes?: string;
+  taxJurisdiction?: 'intraState' | 'interState';
+  createdBy: string;
+  clientRequestId?: string;
+  skipTableSessionValidation?: boolean;
+  createKot?: boolean;
+}): Promise<{ order: Order; kot: KOT | null }> {
+  const restaurantId = cleanId(input.restaurantId, 'restaurantId');
+  const subSnap = await adminDb.doc(\`restaurants/\${restaurantId}/subscription/current\`).get();
+  if (!subSnap.exists) throw new Error('Restaurant trial or subscription is not active.');
+  const sub = subSnap.data() || {};
+  const accessUntil = asMillis(sub.operationalAccessUntil);
+  if (!['trial', 'active', 'grace_period'].includes(String(sub.status)) || !accessUntil || Date.now() >= accessUntil) {
+    throw new Error('Restaurant trial or subscription has expired.');
+  }
+
+  if (input.orderType === 'dineIn' && !input.skipTableSessionValidation) {
+    const sessionId = cleanId(input.tableSessionId, 'tableSessionId');
+    const sessionSnap = await adminDb.doc(\`restaurants/\${restaurantId}/tableSessions/\${sessionId}\`).get();
+    if (!sessionSnap.exists || sessionSnap.data()?.restaurantId !== restaurantId || sessionSnap.data()?.status !== 'open') {
+      throw new Error('Selected table session is not open.');
+    }
+  }
+
+  if (!Array.isArray(input.cartState.items) || input.cartState.items.length === 0) throw new Error('Cart is empty.');
+
+  // Re-read authoritative menu price/tax/availability; client values are not trusted.
+  const canonicalItems: CartItem[] = await Promise.all(input.cartState.items.map(async (item) => {
+    const itemId = cleanId(item.itemId, 'itemId');
+    const snap = await adminDb.doc(\`restaurants/\${restaurantId}/items/\${itemId}\`).get();
+    if (!snap.exists) throw new Error(\`Item "\${item.nameSnapshot || itemId}" is no longer available.\`);
+    const data = snap.data() as any;
+    if (data.restaurantId && data.restaurantId !== restaurantId) throw new Error('Item tenant mismatch.');
+    if (data.isActive === false || data.isAvailable === false) throw new Error(\`"\${data.name || item.nameSnapshot || itemId}" is unavailable.\`);
+    const price = Number(data.price);
+    const taxRate = Number(data.taxRate);
+    if (!Number.isFinite(price) || price < 0) throw new Error(\`Invalid price for "\${data.name || itemId}".\`);
+    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) throw new Error(\`Invalid tax rate for "\${data.name || itemId}".\`);
+    return {
+      ...item,
+      itemId,
+      nameSnapshot: String(data.name || item.nameSnapshot || itemId),
+      shortNameSnapshot: String(data.shortName || data.name || item.shortNameSnapshot || itemId),
+      imageUrlSnapshot: data.imageUrl || item.imageUrlSnapshot || null,
+      foodTypeSnapshot: data.foodType || item.foodTypeSnapshot || null,
+      unitPriceMinor: Math.round(price * 100),
+      taxRate,
+      taxInclusive: Boolean(data.taxInclusive),
+      quantity: Math.max(1, Math.min(100, Math.floor(Number(item.quantity) || 1)))
+    };
+  }));
+
+  const calculations = calculateOrderTotals({
+    items: canonicalItems.map(item => ({
+      quantity: item.quantity,
+      unitPriceMinor: item.unitPriceMinor,
+      taxRate: item.taxRate,
+      taxInclusive: item.taxInclusive,
+      discount: item.discount
+    })),
+    orderDiscount: input.cartState.orderDiscount,
+    taxJurisdiction: input.taxJurisdiction || 'intraState'
+  });
+
+  const now = new Date();
+  const orderRef = adminDb.collection(\`restaurants/\${restaurantId}/orders\`).doc();
+  const orderNumber = \`ORD-\${Date.now().toString(36).toUpperCase()}-\${randomBytes(3).toString('hex').toUpperCase()}\`;
+  const orderItems: OrderItem[] = calculations.lineResults.map((line: any, index: number) => ({
+    itemId: canonicalItems[index].itemId,
+    nameSnapshot: canonicalItems[index].nameSnapshot,
+    shortNameSnapshot: canonicalItems[index].shortNameSnapshot,
+    imageUrlSnapshot: canonicalItems[index].imageUrlSnapshot || null,
+    foodTypeSnapshot: canonicalItems[index].foodTypeSnapshot || null,
+    quantity: canonicalItems[index].quantity,
+    unitPriceMinor: canonicalItems[index].unitPriceMinor,
+    taxRate: canonicalItems[index].taxRate,
+    taxInclusive: canonicalItems[index].taxInclusive,
+    discountMinor: line.discountMinor,
+    lineSubtotalMinor: line.subtotalMinor,
+    lineTaxMinor: line.totalTaxMinor,
+    lineTotalMinor: line.lineTotalMinor,
+    notes: canonicalItems[index].notes,
+    modifiers: canonicalItems[index].modifiers ? [...canonicalItems[index].modifiers!] : undefined
+  }));
+
+  const orderPayload: any = {
+    restaurantId,
+    orderNumber,
+    customerId: null,
+    orderType: input.orderType,
+    source: input.source,
+    status: input.createKot ? 'sentToKitchen' : 'confirmed',
+    tableId: input.orderType === 'dineIn' ? (input.tableId || null) : null,
+    tableSessionId: input.orderType === 'dineIn' ? (input.tableSessionId || null) : null,
+    items: orderItems,
+    itemCount: orderItems.reduce((sum, item) => sum + item.quantity, 0),
+    subtotalMinor: calculations.subtotalMinor,
+    discountMinor: calculations.discountMinor,
+    taxableAmountMinor: calculations.taxableAmountMinor,
+    cgstMinor: calculations.cgstMinor,
+    sgstMinor: calculations.sgstMinor,
+    igstMinor: calculations.igstMinor,
+    totalTaxMinor: calculations.totalTaxMinor,
+    grandTotalMinor: calculations.grandTotalMinor,
+    paidAmountMinor: 0,
+    dueAmountMinor: calculations.grandTotalMinor,
+    paymentStatus: 'unpaid',
+    notes: input.notes || input.cartState.notes || '',
+    customerSnapshot: input.customerSnapshot || null,
+    createdBy: input.createdBy,
+    updatedBy: input.createdBy
+  };
+
+  const validation = validateOrder(orderPayload, { skipTableRequirement: input.skipTableSessionValidation || !orderPayload.tableId });
+  if (!validation.isValid) throw new Error(\`Order validation failed: \${validation.error || 'Invalid order data'}\`);
+
+  const kotRef = input.createKot ? adminDb.collection(\`restaurants/\${restaurantId}/kots\`).doc() : null;
+  const kot: KOT | null = kotRef ? ({
+    id: kotRef.id,
+    kotNumber: \`KOT-\${Date.now().toString(36).toUpperCase()}-\${randomBytes(2).toString('hex').toUpperCase()}\`,
+    restaurantId,
+    orderId: orderRef.id,
+    orderNumber,
+    orderType: input.orderType,
+    tableId: orderPayload.tableId || null,
+    tableSessionId: orderPayload.tableSessionId || null,
+    items: orderItems.map(item => ({
+      itemId: item.itemId,
+      nameSnapshot: item.nameSnapshot,
+      shortNameSnapshot: item.shortNameSnapshot,
+      imageUrlSnapshot: item.imageUrlSnapshot || null,
+      foodTypeSnapshot: item.foodTypeSnapshot || null,
+      quantity: item.quantity,
+      notes: item.notes,
+      modifiers: item.modifiers ? [...item.modifiers] : undefined
+    })),
+    notes: orderPayload.notes || '',
+    status: 'sentToKitchen',
+    sentToKitchenAt: now,
+    createdBy: input.createdBy,
+    updatedBy: input.createdBy,
+    createdAt: now,
+    updatedAt: now
+  } as KOT) : null;
+
+  const idempotencyKey = input.clientRequestId
+    ? \`\${input.createdBy}_\${input.clientRequestId}\`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120)
+    : null;
+  const idemRef = idempotencyKey ? adminDb.doc(\`restaurants/\${restaurantId}/idempotency/\${idempotencyKey}\`) : null;
+  if (idemRef) {
+    const existing = await idemRef.get();
+    if (existing.exists && existing.data()?.status === 'completed' && existing.data()?.responseSnapshot) {
+      return existing.data()!.responseSnapshot as { order: Order; kot: KOT | null };
+    }
+  }
+
+  await adminDb.runTransaction(async tx => {
+    if (idemRef) {
+      const current = await tx.get(idemRef);
+      if (current.exists && current.data()?.status === 'completed') return;
+      tx.set(idemRef, {
+        id: idempotencyKey,
+        restaurantId,
+        operation: 'create_order_with_kot',
+        status: 'pending',
+        createdBy: SYSTEM_SERVER_UID,
+        actorUid: input.createdBy,
+        createdAt: now,
+        updatedAt: now
+      }, { merge: false });
+    }
+    tx.create(orderRef, stripUndefined({ ...orderPayload, id: orderRef.id, createdAt: now, updatedAt: now }));
+    if (kotRef && kot) tx.create(kotRef, stripUndefined(kot));
+  });
+
+  const order = { id: orderRef.id, ...orderPayload, createdAt: now, updatedAt: now } as Order;
+  if (idemRef) {
+    await idemRef.set({
+      status: 'completed',
+      targetEntityId: order.id,
+      responseSnapshot: { order, kot },
+      updatedAt: new Date()
+    }, { merge: true });
+  }
+  await writeAudit(restaurantId, 'order', order.id, 'order_created', input.createdBy, {
+    orderNumber: order.orderNumber,
+    grandTotalMinor: order.grandTotalMinor,
+    orderType: order.orderType,
+    kotId: kot?.id || null
+  });
+  if (kot) await writeAudit(restaurantId, 'kot', kot.id, 'kot_created', input.createdBy, {
+    kotNumber: kot.kotNumber,
+    orderId: order.id,
+    status: kot.status
+  });
+  return { order, kot };
+}
