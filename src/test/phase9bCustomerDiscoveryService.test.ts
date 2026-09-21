@@ -23,6 +23,7 @@ vi.mock('firebase/firestore', () => {
     limit: vi.fn(),
     startAfter: vi.fn(),
     orderBy: vi.fn(),
+    documentId: vi.fn(() => '__name__'),
     serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP')
   };
 });
