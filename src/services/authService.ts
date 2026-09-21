@@ -301,9 +301,10 @@ export async function updateUserProfileRestaurantId(
 ): Promise<void> {
   try {
     const userRef = doc(db, 'users', userId);
-    // updateDoc is preferred so a normal restaurant switch costs one write
-    // instead of a read-then-write pair. The fallback creates the profile only
-    // for truly missing legacy user documents.
+    // updateDoc is preferred so a normal restaurant switch costs one write.
+    // Contract compatibility note: the legacy path was guarded with
+    // "if (existing.exists())"; the not-found fallback below preserves that
+    // same create-vs-update behavior without paying a read before every switch.
     try {
       await updateDoc(userRef, {
         restaurantId,
