@@ -1,5 +1,5 @@
 // RestaurantOS Production PWA Service Worker
-const CACHE_NAME = 'restaurantos-v1';
+const CACHE_NAME = 'restaurantos-v2';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -7,8 +7,11 @@ const STATIC_ASSETS = [
 ];
 
 // Completely bypass and self-unregister in development/preview sandboxes
+const isProductionCloudRun =
+  self.location.hostname === 'restaurantos-xqi52dpwga-el.a.run.app';
+
 const isDevSandbox =
-    self.location.hostname.includes('run.app') ||
+  (self.location.hostname.includes('run.app') && !isProductionCloudRun) ||
   self.location.hostname === 'localhost' ||
   self.location.hostname === '127.0.0.1';
 
