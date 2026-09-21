@@ -67,6 +67,7 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
     createOwnerRestaurant,
     availableRestaurants,
     switchRestaurant,
+    loadAvailableRestaurants,
     isSwitching,
     retry
   } = useRestaurant();
@@ -381,9 +382,16 @@ const OwnerCentralManagementConsole: React.FC<{ onBackToCustomerHome?: () => voi
     <AdminLayout
       currentView={currentView}
       onNavigate={setCurrentView}
-      onSwitchRestaurant={
-        availableRestaurants.length > 1 ? () => setShowMultiSelector(true) : undefined
-      }
+      onSwitchRestaurant={async () => {
+        try {
+          const restaurants = await loadAvailableRestaurants();
+          if (restaurants.length > 1) {
+            setShowMultiSelector(true);
+          }
+        } catch (err) {
+          console.warn('[RestaurantOS] Failed to load restaurant switcher data:', err);
+        }
+      }}
       onBackToCustomerHome={handleBackToCustomer}
     >
       <SubscriptionStatusBanner onOpenPlans={() => setCurrentView('subscription')} />
