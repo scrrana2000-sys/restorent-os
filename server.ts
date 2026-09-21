@@ -572,6 +572,11 @@ app.post('/api/orders/create-pos', async (req, res) => {
     const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain']);
     if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Caller is not authorized to create POS orders.' });
 
+    // Never create a shared idempotency key when the caller omitted a request ID.
+    // When provided, bind it to the authenticated actor before sending it to the server pipeline.
+    const rawClientRequestId = typeof req.body?.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+    const clientRequestId = rawClientRequestId ? `${authUser.uid}_${rawClientRequestId}` : undefined;
+
     const result = await submitServerPosOrder({
       restaurantId,
       cartState: req.body.cartState,
@@ -583,7 +588,7 @@ app.post('/api/orders/create-pos', async (req, res) => {
       notes: typeof req.body?.notes === 'string' ? req.body.notes : '',
       taxJurisdiction: req.body?.taxJurisdiction || 'intraState',
       createdBy: authUser.uid,
-      clientRequestId: typeof req.body?.clientRequestId === 'string' ? req.body.clientRequestId.trim() : undefined,
+      clientRequestId,
       skipTableSessionValidation: Boolean(req.body?.skipTableSessionValidation),
       createKot: Boolean(req.body?.createKot)
     });
