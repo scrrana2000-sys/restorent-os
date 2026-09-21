@@ -6,7 +6,16 @@ describe('getApiUrl', () => {
     vi.unstubAllGlobals();
   });
 
-  it('uses the trusted production API from an AI Studio preview host', () => {
+  it('keeps RestaurantOS AI Studio preview API calls same-origin', () => {
+    vi.stubGlobal('window', {
+      location: { hostname: 'restaurantos01.ai.studio', origin: 'https://restaurantos01.ai.studio' }
+    });
+
+    expect(getApiUrl('/api/submit-online-order'))
+      .toBe('https://restaurantos01.ai.studio/api/submit-online-order');
+  });
+
+  it('uses the trusted production API from the generic AI Studio shell', () => {
     vi.stubGlobal('window', {
       location: { hostname: 'aistudio.google.com', origin: 'https://aistudio.google.com' }
     });
