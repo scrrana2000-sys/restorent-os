@@ -27,7 +27,6 @@ import {
 } from '../../services/customerDiscoveryService';
 import {
   fetchPublicMenu,
-  subscribeToPublicMenu,
   PublicMenuData
 } from '../../services/customerMenuService';
 import {
@@ -206,26 +205,6 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
   useEffect(() => {
     loadRestaurantAndMenu();
   }, [loadRestaurantAndMenu]);
-
-  // Live real-time menu subscription when restaurant is resolved
-  useEffect(() => {
-    if (!restaurant?.restaurantId) return;
-
-    const unsub = subscribeToPublicMenu(
-      restaurant.restaurantId,
-      (updatedMenu) => {
-        setMenuData(updatedMenu);
-        if (updatedMenu.categories.length > 0 && !activeCategoryId) {
-          setActiveCategoryId(updatedMenu.categories[0].categoryId);
-        }
-      },
-      (err) => {
-        console.warn('[RestaurantOS] Live menu update error:', err);
-      }
-    );
-
-    return () => unsub();
-  }, [restaurant?.restaurantId]);
 
   // Navigation handlers
   const handleBack = () => {
