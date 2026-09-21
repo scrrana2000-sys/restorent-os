@@ -76,27 +76,18 @@ export async function getCustomerProfile(customerId: string): Promise<CustomerPr
  */
 export async function provisionCustomerProfile(firebaseUser: FirebaseUser): Promise<CustomerProfile> {
   const customerId = firebaseUser.uid;
-
-  // A Firebase UID that already owns or staffs a restaurant must never be
-  // silently converted into a customer identity. Restaurant ownership is
-  // authoritative from the /users/{uid} profile pointer.
   const userRef = doc(db, 'users', customerId);
-  const userSnap = await getDoc(userRef);
-  if (userSnap.exists()) {
-    const userData = userSnap.data() as any;
-    if (userData.restaurantId || userData.role === 'owner' || userData.role === 'manager' || userData.role === 'cashier' || userData.role === 'kitchen' || userData.role === 'captain' || userData.role === 'accountant') {
-      throw new Error('This Google account is registered as a Restaurant account. Customer access is unavailable while the restaurant account exists.');
-    }
-  }
 
+  // First inspect the customer profile. This preserves the existing customer
+  // provisioning contract while still allowing blocked profiles to prevent
+  // accidental owner/customer overlap.
   const existing = await getCustomerProfile(customerId);
 
-  if (existing) {
-    if (existing.accountStatus === 'blocked') {
-      throw new Error('Customer access is blocked because this Google account owns a Restaurant. Delete the Restaurant permanently to restore Customer access.');
-    }
+  if (existing?.accountStatus === 'blocked') {
+    throw new Error('Customer access is blocked because this Google account owns a Restaurant. Delete the Restaurant permanently to restore Customer access.');
+  }
 
-    // If photoURL was missing previously or has updated from Google, update it safely
+  if (existing) {
     if (firebaseUser.photoURL && existing.photoURL !== firebaseUser.photoURL) {
       try {
         const customerRef = doc(db, 'customers', customerId);
@@ -116,7 +107,19 @@ export async function provisionCustomerProfile(firebaseUser: FirebaseUser): Prom
     return existing;
   }
 
-  // Pre-fill profile from Google account metadata
+  // A Firebase UID with an existing restaurant/staff pointer is a restaurant
+  // identity, not a customer identity. Do not create customers/{uid} for it.
+  const userSnap = await getDoc(userRef);
+  if (userSnap?.exists?.()) {
+    const userData = userSnap.data() as any;
+    if (
+      userData?.restaurantId
+      || ['owner', 'manager', 'cashier', 'kitchen', 'captain', 'accountant'].includes(userData?.role)
+    ) {
+      throw new Error('This Google account is registered as a Restaurant account. Customer access is unavailable while the restaurant account exists.');
+    }
+  }
+
   const newProfile: CustomerProfile = {
     customerId,
     name: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Customer'),
@@ -134,8 +137,8 @@ export async function provisionCustomerProfile(firebaseUser: FirebaseUser): Prom
     const customerRef = doc(db, 'customers', customerId);
     await setDoc(customerRef, newProfile);
     // Create the lightweight identity profile only for an explicit customer flow.
-    // Owner onboarding writes restaurantId later and therefore prevents future
-    // customer provisioning for the same Firebase UID.
+    // Owner onboarding writes restaurantId later and prevents future customer
+    // provisioning for the same Firebase UID.
     await setDoc(userRef, {
       userId: customerId,
       displayName: newProfile.name,
