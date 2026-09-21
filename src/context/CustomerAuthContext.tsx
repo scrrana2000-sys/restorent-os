@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
 import { CustomerProfile, CustomerAddress } from '../types/customer';
 import {
   subscribeToCustomerAuth,
@@ -49,22 +47,10 @@ export const CustomerAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       if (user) {
         try {
-          // Firebase Auth is shared by customer and restaurant identities. Do not
-          // create a customer profile merely because a user is authenticated.
-          // Customer provisioning happens only from the explicit customer sign-in flow.
-          const userSnap = await getDoc(doc(db, 'users', user.uid));
-          const userData = userSnap.exists() ? (userSnap.data() as any) : null;
-          const isRestaurantIdentity = Boolean(
-            userData?.restaurantId
-            || ['owner', 'manager', 'cashier', 'kitchen', 'captain', 'accountant'].includes(userData?.role)
-          );
-
-          if (isRestaurantIdentity) {
-            if (isMounted) setCustomer(null);
-          } else {
-            const profile = await getCustomerProfile(user.uid);
-            if (isMounted) setCustomer(profile?.accountStatus === 'blocked' ? null : profile);
-          }
+          // Auth state is intentionally passive here. Do not read Firestore on
+          // every global auth event. Customer profile data is loaded only by
+          // explicit customer sign-in or a profile/order action.
+          if (isMounted) setCustomer(null);
         } catch (err) {
           console.warn('[CustomerAuthContext] Failed to resolve customer identity:', err);
           if (isMounted) setCustomer(null);
