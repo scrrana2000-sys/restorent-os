@@ -9,7 +9,6 @@ import {
   getRestaurantById,
   getRestaurantsForUser,
   createDefaultRestaurant,
-  subscribeToRestaurant,
   updateRestaurantProfile
 } from '../services/restaurantService';
 import {
@@ -35,6 +34,7 @@ interface RestaurantContextType {
   retry: () => void;
   availableRestaurants: Restaurant[];
   switchRestaurant: (restaurantId: string) => Promise<void>;
+  loadAvailableRestaurants: () => Promise<Restaurant[]>;
   isSwitching: boolean;
 }
 
@@ -54,7 +54,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [availableRestaurants, setAvailableRestaurants] = useState<Restaurant[]>([]);
   const [activeRestaurantId, setActiveRestaurantId] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState<boolean>(false);
-  const unsubscribeRef = React.useRef<(() => void) | undefined>(undefined);
 
   const retry = () => setRetryTrigger((c) => c + 1);
 
@@ -142,13 +141,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
 
-      // 1. Clean up existing listener
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = undefined;
-      }
-
-      // 2. Persist selection to localStorage & Firestore profile
+      // Persist selection to localStorage & Firestore profile
       try {
         localStorage.setItem(`restaurantos_restaurant_id_${user.uid}`, found.restaurantId);
       } catch {}
@@ -159,12 +152,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         console.warn('[RestaurantOS Debug] Failed to persist restaurantId link to profile:', linkErr);
       }
 
-      // 3. Update active states
+      // Update active states
       setActiveRestaurantId(found.restaurantId);
       setRestaurant(found);
       setError(null);
 
-      // 4. Update role and restaurantId in AuthContext profile
+      // Update role and restaurantId in AuthContext profile
       setProfile((prev) => {
         if (prev) {
           return {
@@ -182,19 +175,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           restaurantId: found.restaurantId
         };
       });
-
-      // 5. Start new listener
-      unsubscribeRef.current = subscribeToRestaurant(
-        found.restaurantId,
-        (updated) => {
-          if (updated) {
-            setRestaurant(updated);
-          }
-        },
-        (err) => {
-          console.error('[RestaurantOS Debug] Restaurant subscription error:', err);
-        }
-      );
 
       console.log('[RestaurantOS Debug] Switch complete. Current active role:', activeRole);
     } catch (err: any) {
@@ -234,24 +214,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       let verifiedProfile = profile;
 
       try {
-        // -------------------------------------------------------------
-        // Step 0: Claim any pending invitations or unlinked staff records
-        // for this authenticated user's email
-        // -------------------------------------------------------------
-        if (user.email) {
-          try {
-            await staffService.claimPendingInvitationsForUser({
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName || profile?.displayName || null,
-              emailVerified: user.emailVerified,
-              providerData: user.providerData
-            });
-          } catch (claimErr) {
-            console.warn('[RestaurantOS Debug] Pending invitation claim note (non-fatal):', claimErr);
-          }
-        }
-
         // -------------------------------------------------------------
         // Strategy 1: Cached local pointer for this authenticated user (HINT ONLY)
         // Never trusted for authorization - must verify existence and membership from Firestore
@@ -600,23 +562,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setActiveRestaurantId(resolvedRestaurant.restaurantId);
         setError(null);
 
-        // Ensure public discovery profile is synchronized
-        if (resolvedRestaurant) {
-          syncPublicRestaurantProfile(resolvedRestaurant).catch((syncErr) => {
-            console.warn('[RestaurantOS Debug] Public discovery projection sync notice:', syncErr);
-          });
-        }
-
-        // Fetch available restaurants in the background
-        fetchAvailableRestaurants(user.uid, resolvedRestaurant.restaurantId)
-          .then((list) => {
-            if (!isCancelled) {
-              setAvailableRestaurants(list);
-            }
-          })
-          .catch((err) => {
-            console.warn('[RestaurantOS Debug] Error fetching available restaurants:', err);
-          });
+        // Do not enumerate all owned/staff restaurants during bootstrap.
+        // The active restaurant alone is enough for the first page render.
+        setAvailableRestaurants([resolvedRestaurant]);
 
         console.log('[RestaurantOS Debug] Final restaurant paths initialized:', {
           authUid: user.uid,
@@ -624,26 +572,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           resolvedRestaurantId: resolvedRestaurant.restaurantId,
           restaurantDocPath: `restaurants/${resolvedRestaurant.restaurantId}`
         });
-
-        // Set up real-time listener for the active restaurant document
-        if (!isCancelled) {
-          if (unsubscribeRef.current) {
-            unsubscribeRef.current();
-            unsubscribeRef.current = undefined;
-          }
-          unsubscribeRef.current = subscribeToRestaurant(
-            resolvedRestaurant.restaurantId,
-            (updated) => {
-              if (updated && !isCancelled) {
-                setRestaurant(updated);
-              }
-            },
-            (err) => {
-              if (isCancelled || !auth.currentUser) return;
-              console.error('[RestaurantOS Debug] Restaurant subscription error:', err);
-            }
-          );
-        }
 
       } catch (err: any) {
         if (isCancelled) return;
@@ -673,10 +601,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     return () => {
       isCancelled = true;
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = undefined;
-      }
     };
   }, [user, profile?.restaurantId, profile?.role, retryTrigger]);
 
@@ -736,28 +660,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             console.warn('[RestaurantOS Discovery] Public profile sync notice on manual create:', syncErr);
           });
 
-          // Refresh available restaurants list
-          fetchAvailableRestaurants(user.uid, newRest.restaurantId)
-            .then((list) => setAvailableRestaurants(list))
-            .catch((listErr) => console.warn('[RestaurantOS Debug] Failed to refresh available restaurants:', listErr));
-
-          // Real-time Firestore subscription
-          if (unsubscribeRef.current) {
-            unsubscribeRef.current();
-            unsubscribeRef.current = undefined;
-          }
-          unsubscribeRef.current = subscribeToRestaurant(
-            newRest.restaurantId,
-            (updated) => {
-              if (updated) {
-                setRestaurant(updated);
-              }
-            },
-            (subErr) => {
-              if (!auth.currentUser) return;
-              console.error('[RestaurantOS Debug] Restaurant subscription error:', subErr);
-            }
-          );
+          setAvailableRestaurants([newRest]);
 
           return newRest;
         } catch (createErr: any) {
@@ -788,6 +691,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [restaurant]);
 
+  const loadAvailableRestaurants = React.useCallback(async (): Promise<Restaurant[]> => {
+    if (!user) return [];
+    const list = await fetchAvailableRestaurants(
+      user.uid,
+      profile?.restaurantId || activeRestaurantId || restaurant?.restaurantId
+    );
+    setAvailableRestaurants(list);
+    return list;
+  }, [user, profile?.restaurantId, activeRestaurantId, restaurant?.restaurantId]);
+
   const formatPrice = React.useCallback((amount: number) => {
     const symbol = restaurant?.currencySymbol || '₹';
     return `${symbol}${Number(amount || 0).toLocaleString(undefined, {
@@ -813,6 +726,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     retry,
     availableRestaurants,
     switchRestaurant,
+    loadAvailableRestaurants,
     isSwitching
   }), [
     restaurant,
@@ -826,6 +740,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     formatPrice,
     availableRestaurants,
     switchRestaurant,
+    loadAvailableRestaurants,
     isSwitching
   ]);
 
@@ -858,6 +773,7 @@ export function useRestaurant() {
       formatPrice: (m: number) => `₹${m / 100}`,
       availableRestaurants: [],
       switchRestaurant: async () => {},
+      loadAvailableRestaurants: async () => [],
       isSwitching: false
     };
   }
