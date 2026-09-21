@@ -267,17 +267,25 @@ export async function logout(): Promise<void> {
   await signOut(auth);
 }
 
+const userProfileCache = new Map<string, UserProfile | null>();
+
 /**
  * Retrieves the stored user profile from Firestore.
  */
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  const cleanUserId = (userId || '').trim();
+  if (!cleanUserId) return null;
+
+  if (userProfileCache.has(cleanUserId)) {
+    return userProfileCache.get(cleanUserId) || null;
+  }
+
   try {
-    const userRef = doc(db, 'users', userId);
+    const userRef = doc(db, 'users', cleanUserId);
     const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      return snap.data() as UserProfile;
-    }
-    return null;
+    const profile = snap.exists() ? (snap.data() as UserProfile) : null;
+    userProfileCache.set(cleanUserId, profile);
+    return profile;
   } catch (err) {
     console.warn('Could not fetch user profile:', err);
     return null;
@@ -293,13 +301,18 @@ export async function updateUserProfileRestaurantId(
 ): Promise<void> {
   try {
     const userRef = doc(db, 'users', userId);
-    const existing = await getDoc(userRef);
-    if (existing.exists()) {
+    // updateDoc is preferred so a normal restaurant switch costs one write
+    // instead of a read-then-write pair. The fallback creates the profile only
+    // for truly missing legacy user documents.
+    try {
       await updateDoc(userRef, {
         restaurantId,
         updatedAt: serverTimestamp()
       });
-    } else {
+    } catch (writeErr: any) {
+      const code = writeErr?.code || '';
+      if (!String(code).includes('not-found')) throw writeErr;
+
       const firebaseUser = auth.currentUser;
       await setDoc(userRef, {
         userId,
@@ -312,6 +325,7 @@ export async function updateUserProfileRestaurantId(
         initialRestaurantId: restaurantId
       });
     }
+    userProfileCache.delete(userId);
     console.log('[RestaurantOS Debug] Successfully linked restaurantId to user profile:', {
       userId,
       restaurantId
