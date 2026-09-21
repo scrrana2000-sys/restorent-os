@@ -5,7 +5,7 @@
  * 7-day trial tracking, custom solution inquiries, and payment audit logs.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Sparkles,
   ShieldCheck,
@@ -30,11 +30,17 @@ import { formatSubscriptionDate } from '../../utils/subscriptionEntitlements';
 import { useAuth } from '../../context/AuthContext';
 
 export const SubscriptionView: React.FC = () => {
-  const { subscription, history, entitlements, openPaymentModal } = useSubscription();
+  const { subscription, history, entitlements, openPaymentModal, loadSubscriptionHistory } = useSubscription();
   const { profile } = useAuth();
   const [billingCycle] = useState<BillingCycle>('monthly');
 
   const isOwner = profile?.role === 'owner' || !profile?.role;
+
+  // Billing history is a page-level read. It is not loaded while POS,
+  // Kitchen, Dashboard, etc. are open.
+  useEffect(() => {
+    loadSubscriptionHistory();
+  }, [loadSubscriptionHistory]);
 
   const getStatusBadge = () => {
     switch (entitlements.status) {
