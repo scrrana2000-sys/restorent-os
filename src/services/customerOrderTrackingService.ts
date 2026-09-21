@@ -397,7 +397,16 @@ export function subscribeToOrderTracking(
             trackingToken: token
           });
           onUpdate(order);
-          setActivePollingInterval();
+
+          // Stop polling after a terminal order state. Guest tracking keeps the
+          // protected Cloud Run path, but avoids a request every few seconds.
+          if (['completed', 'served', 'cancelled'].includes(order.status)) {
+            stopped = true;
+            if (timer) clearInterval(timer);
+            timer = null;
+          } else {
+            setActivePollingInterval();
+          }
         }
       } catch (err: any) {
         if (!stopped) onError(err instanceof Error ? err : new Error(String(err)));
@@ -408,16 +417,27 @@ export function subscribeToOrderTracking(
 
     const setActivePollingInterval = () => {
       if (timer || stopped) return;
-      timer = setInterval(poll, 5000);
+      timer = setInterval(poll, 20000);
     };
 
-    void poll();
-    setActivePollingInterval();
+    const startPolling = () => {
+      if (stopped || document.visibilityState === 'hidden') return;
+      void poll();
+      setActivePollingInterval();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') startPolling();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    startPolling();
 
     return () => {
       stopped = true;
       if (timer) clearInterval(timer);
       timer = null;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }
 
