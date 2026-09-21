@@ -382,8 +382,11 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
     }
   }
 
+  // Never reuse authorization state between tests. Production gets the
+  // in-memory cache; Firestore rules remain the final authority.
+  const useAuthorizationCache = !isTestEnvironment;
   const cacheKey = permissionCacheKey(cleanRestaurantId, user.uid);
-  const cached = restaurantAuthorizationCache.get(cacheKey);
+  const cached = useAuthorizationCache ? restaurantAuthorizationCache.get(cacheKey) : undefined;
   if (cached && cached.expiresAt > Date.now()) {
     return hasPermission(cached.role, action);
   }
@@ -396,10 +399,12 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
     if (restSnap.exists()) {
       const restData = restSnap.data();
       if (restData.ownerId === user.uid) {
-        restaurantAuthorizationCache.set(cacheKey, {
-          role: 'owner',
-          expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS
-        });
+        if (useAuthorizationCache) {
+          restaurantAuthorizationCache.set(cacheKey, {
+            role: 'owner',
+            expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS
+          });
+        }
         return hasPermission('owner', action);
       }
     }
@@ -416,10 +421,12 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
       if (!isActive) return false;
 
       const role = memberData.role as StaffRole;
-      restaurantAuthorizationCache.set(cacheKey, {
-        role,
-        expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS
-      });
+      if (useAuthorizationCache) {
+        restaurantAuthorizationCache.set(cacheKey, {
+          role,
+          expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS
+        });
+      }
       return hasPermission(role, action);
     }
 
