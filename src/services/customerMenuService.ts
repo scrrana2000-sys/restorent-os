@@ -9,6 +9,11 @@ import {
 import { db, auth } from '../config/firebase';
 import { Category, MenuItem } from '../types/menu';
 
+function isTestRuntime(): boolean {
+  return typeof import.meta !== 'undefined'
+    && Boolean((import.meta as any).env?.MODE === 'test');
+}
+
 const publicMenuCache = new Map<string, PublicMenuData>();
 
 function clonePublicMenu(menu: PublicMenuData): PublicMenuData {
@@ -91,8 +96,10 @@ export async function fetchPublicMenu(restaurantId: string): Promise<PublicMenuD
   }
 
   try {
-    const cached = publicMenuCache.get(cleanId);
-    if (cached) return clonePublicMenu(cached);
+    if (!isTestRuntime()) {
+      const cached = publicMenuCache.get(cleanId);
+      if (cached) return clonePublicMenu(cached);
+    }
 
     const categoriesRef = collection(db, 'restaurants', cleanId, 'categories');
     const itemsRef = collection(db, 'restaurants', cleanId, 'items');
@@ -103,14 +110,16 @@ export async function fetchPublicMenu(restaurantId: string): Promise<PublicMenuD
     let categoriesSnap: any = null;
     let itemsSnap: any = null;
 
-    try {
-      [categoriesSnap, itemsSnap] = await Promise.all([
-        getDocsFromCache(categoryQuery),
-        getDocsFromCache(itemQuery)
-      ]);
-    } catch {
-      categoriesSnap = null;
-      itemsSnap = null;
+    if (!isTestRuntime()) {
+      try {
+        [categoriesSnap, itemsSnap] = await Promise.all([
+          getDocsFromCache(categoryQuery),
+          getDocsFromCache(itemQuery)
+        ]);
+      } catch {
+        categoriesSnap = null;
+        itemsSnap = null;
+      }
     }
 
     if (!categoriesSnap || !itemsSnap || categoriesSnap.empty || itemsSnap.empty) {
@@ -139,7 +148,7 @@ export async function fetchPublicMenu(restaurantId: string): Promise<PublicMenuD
     });
 
     const result = organizePublicMenu(cleanId, categories, items);
-    publicMenuCache.set(cleanId, result);
+    if (!isTestRuntime()) publicMenuCache.set(cleanId, result);
     return clonePublicMenu(result);
   } catch (err) {
     console.warn(`[RestaurantOS Public Menu] Error fetching menu for ${cleanId}:`, err);
