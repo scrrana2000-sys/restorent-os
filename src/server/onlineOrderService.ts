@@ -85,10 +85,19 @@ function cleanId(value: unknown, fieldName: string): string {
   return valueAsString;
 }
 
-function isFiniteNonNegativeInteger(value: unknown): boolean {
-  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.filter((item) => item !== undefined).map((item) => stripUndefined(item)) as T;
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    const result: Record<string, any> = {};
+    for (const [key, item] of Object.entries(value as Record<string, any>)) {
+      if (item !== undefined) result[key] = stripUndefined(item);
+    }
+    return result as T;
+  }
+  return value;
 }
-
 function asMillis(value: any): number {
   if (!value) return 0;
   if (typeof value.toMillis === 'function') return value.toMillis();
@@ -458,7 +467,7 @@ async function consumeStockForOrder(
   for (const result of recipeSnapshots) if (result) activeRecipes.set(result.menuItemId, result.recipe);
 
   if (!items.some((item) => activeRecipes.has(item.itemId))) {
-    await adminDb.doc(`restaurants/${restaurantId}/order_stock_locks/${order.id}`).set({
+    await adminDb.doc(`restaurants/${restaurantId}/order_stock_locks/${order.id}`).set(stripUndefined({
       restaurantId,
       orderId: order.id,
       status: 'not_applicable',
@@ -467,7 +476,7 @@ async function consumeStockForOrder(
       idempotencyKey: clientRequestId,
       createdAt: new Date(),
       updatedAt: new Date()
-    }, { merge: true });
+    }), { merge: true });
     return { consumptions: [], movements: [] };
   }
 
@@ -731,7 +740,7 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
       }
     }
 
-    tx.set(idempotencyRef, {
+    tx.set(idempotencyRef, stripUndefined({
       id: key,
       restaurantId,
       operation: createKot ? 'create_order_with_kot' : 'create_order',
@@ -745,7 +754,7 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
       lockedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date()
-    }, { merge: false });
+    }), { merge: false });
 
     return { action: 'execute' as const };
   });
@@ -771,26 +780,26 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
   try {
     await adminDb.runTransaction(async (tx) => {
       const orderRef = adminDb.doc(`restaurants/${restaurantId}/orders/${order.id}`);
-      tx.create(orderRef, {
+      tx.create(orderRef, stripUndefined({
         ...order,
         createdAt: new Date(),
         updatedAt: new Date()
-      });
+      }));
 
       if (kot) {
         const kotRef = adminDb.doc(`restaurants/${restaurantId}/kots/${kot.id}`);
-        tx.create(kotRef, {
+        tx.create(kotRef, stripUndefined({
           ...kot,
           sentToKitchenAt: new Date(),
           createdAt: new Date(),
           updatedAt: new Date()
-        });
+        }));
       }
 
       tx.update(idempotencyRef, {
         status: 'completed',
         targetEntityId: order.id,
-        responseSnapshot: { order, kot },
+        responseSnapshot: stripUndefined({ order, kot }),
         updatedAt: new Date()
       });
     });
@@ -817,11 +826,11 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
     try {
       const stockResult = await consumeStockForOrder(restaurantId, order, order.createdBy || SYSTEM_SERVER_UID, key);
       const orderRef = adminDb.doc(`restaurants/${restaurantId}/orders/${order.id}`);
-      await orderRef.update({
+      await orderRef.update(stripUndefined({
         stockConsumptionStatus: stockResult.consumptions.length ? 'consumed' : 'not_applicable',
         stockConsumptionError: null,
         updatedAt: new Date()
-      });
+      }));
       order.stockConsumptionStatus = stockResult.consumptions.length ? 'consumed' : 'not_applicable';
       order.stockConsumptionError = null;
       if (stockResult.consumptions.length) {
@@ -837,11 +846,11 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
       order.stockConsumptionStatus = 'failed';
       order.stockConsumptionError = message;
       try {
-        await adminDb.doc(`restaurants/${restaurantId}/orders/${order.id}`).update({
+        await adminDb.doc(`restaurants/${restaurantId}/orders/${order.id}`).update(stripUndefined({
           stockConsumptionStatus: 'failed',
           stockConsumptionError: message,
           updatedAt: new Date()
-        });
+        }));
       } catch (statusError) {
         console.warn('[RestaurantOS Server] Could not persist online order stock failure state:', statusError);
       }
