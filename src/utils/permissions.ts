@@ -341,6 +341,18 @@ export function isViewAllowed(role: StaffRole | undefined, view: string): boolea
   return false;
 }
 
+type CachedRestaurantAuthorization = {
+  role: StaffRole;
+  expiresAt: number;
+};
+
+const restaurantAuthorizationCache = new Map<string, CachedRestaurantAuthorization>();
+const PERMISSION_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function permissionCacheKey(restaurantId: string, uid: string): string {
+  return `${uid}::${restaurantId}`;
+}
+
 export async function checkPermission(restaurantId: string, action: PermissionAction): Promise<boolean> {
   const cleanRestaurantId = restaurantId?.trim();
   if (!cleanRestaurantId) return false;
@@ -370,25 +382,32 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
     }
   }
 
+  const cacheKey = permissionCacheKey(cleanRestaurantId, user.uid);
+  const cached = restaurantAuthorizationCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return hasPermission(cached.role, action);
+  }
+
   try {
-    // 1. Fetch restaurant to check ownerId
+    // Resolve the user's restaurant role once, then serve all subsequent
+    // permission checks from memory. Firestore rules remain authoritative.
     const restRef = doc(db, 'restaurants', cleanRestaurantId);
     const restSnap = await getDoc(restRef);
     if (restSnap.exists()) {
       const restData = restSnap.data();
       if (restData.ownerId === user.uid) {
-        // Owner has all permissions
+        restaurantAuthorizationCache.set(cacheKey, {
+          role: 'owner',
+          expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS
+        });
         return hasPermission('owner', action);
       }
     }
 
-    // 2. Fetch membership
     const memberRef = doc(db, 'restaurants', cleanRestaurantId, 'members', user.uid);
     const memberSnap = await getDoc(memberRef);
     if (memberSnap.exists()) {
       const memberData = memberSnap.data();
-
-      // Check if member is active
       const isActive =
         memberData.isActive !== false &&
         memberData.status !== 'inactive' &&
@@ -397,6 +416,10 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
       if (!isActive) return false;
 
       const role = memberData.role as StaffRole;
+      restaurantAuthorizationCache.set(cacheKey, {
+        role,
+        expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS
+      });
       return hasPermission(role, action);
     }
 
@@ -404,6 +427,18 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
   } catch (err) {
     console.warn('[Permissions] checkPermission lookup encountered error:', err);
     return false;
+  }
+}
+
+export function clearPermissionCache(restaurantId?: string, uid?: string): void {
+  if (!restaurantId && !uid) {
+    restaurantAuthorizationCache.clear();
+    return;
+  }
+  for (const key of restaurantAuthorizationCache.keys()) {
+    if ((!uid || key.startsWith(`${uid}::`)) && (!restaurantId || key.endsWith(`::${restaurantId}`))) {
+      restaurantAuthorizationCache.delete(key);
+    }
   }
 }
 
