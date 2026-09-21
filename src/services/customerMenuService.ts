@@ -113,7 +113,7 @@ export async function fetchPublicMenu(restaurantId: string): Promise<PublicMenuD
       itemsSnap = null;
     }
 
-    if (!categoriesSnap || !itemsSnap) {
+    if (!categoriesSnap || !itemsSnap || categoriesSnap.empty || itemsSnap.empty) {
       [categoriesSnap, itemsSnap] = await Promise.all([
         getDocs(categoryQuery),
         getDocs(itemQuery)
