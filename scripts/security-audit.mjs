@@ -47,7 +47,7 @@ checks.push(
   ['guest tracking uses high-entropy token', serverSource.includes("randomBytes(32).toString('base64url')")],
   ['Dockerfile does not copy environment secret files', dockerignore.includes('.env') && dockerignore.includes('.env.*')],
   ['POS financial order creation uses trusted API boundary', serverSource.includes('/api/orders/create-pos') && read('src/services/orderService.ts').includes('/api/orders/create-pos')],
-  ['idempotency records are private to creator/server', rules.includes('resource.data.createdBy == request.auth.uid') && /match \/idempotency\/\{key\}[\s\S]*?allow read: if isServer\\(\\) \\|\\| \\(isSignedIn\\(\\) && \\[\s\S]*?resource.data.createdBy == request.auth.uid/.test(rules)],
+  ['idempotency records are private to creator/server', rules.includes('match /idempotency/{key}') && rules.includes('allow read: if isServer() || (isSignedIn() && (') && rules.includes('!exists(/databases/$(database)/documents/restaurants/$(restaurantId)/idempotency/$(key))') && rules.includes('resource.data.createdBy == request.auth.uid')],
   ['order creation is server-authoritative', /match \/orders\/\{orderId\}[\s\S]*?allow create: if isServer\(\)/.test(rules)],
   ['KOT creation is server-authoritative', /match \/kots\/\{kotId\}[\s\S]*?allow create: if isServer\(\)/.test(rules)],
   ['order stock locks are server-only mutations', /match \/order_stock_locks\/\{lockId\}[\s\S]*?allow update: if isServer\(\)/.test(rules)],
