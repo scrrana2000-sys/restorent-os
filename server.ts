@@ -33,7 +33,7 @@ import {
 import { stockConsumptionService } from './src/services/stockConsumptionService';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { getPlanById } from './src/config/subscriptionPlans';
-import { adminDb, adminAuth } from './src/server/firebaseAdmin';
+import { adminDb, adminAuth, adminStorageBucket } from './src/server/firebaseAdmin';
 import { FieldValue } from 'firebase-admin/firestore';
 
 const app = express();
@@ -210,6 +210,14 @@ app.post('/api/account/delete-restaurant', async (req, res) => {
 
     await adminDb.recursiveDelete(restaurantRef);
     await adminDb.doc(`publicRestaurants/${restaurantId}`).delete().catch(() => undefined);
+    // All restaurant uploads are tenant-scoped under /restaurants/{restaurantId}/.
+    // Storage deletion is best-effort so a missing/unconfigured bucket cannot
+    // prevent Firestore/account restoration after the tenant is deleted.
+    try {
+      await adminStorageBucket.deleteFiles({ prefix: `restaurants/${restaurantId}/` });
+    } catch (storageErr) {
+      console.warn('[RestaurantOS Account Lifecycle] Storage cleanup warning:', storageErr);
+    }
 
     if (customerSnap.exists) {
       await customerRef.set({
