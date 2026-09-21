@@ -33,6 +33,8 @@ import {
 import { stockConsumptionService } from './src/services/stockConsumptionService';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { getPlanById } from './src/config/subscriptionPlans';
+import { adminDb, adminAuth } from './src/server/firebaseAdmin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -171,6 +173,85 @@ app.use((req, _res, next) => {
     req.url = '/';
   }
   next();
+});
+
+// Permanently delete a restaurant owned by the authenticated user and restore
+// that same Firebase UID to customer mode. This uses the Admin SDK because
+// Firestore client rules intentionally do not expose recursive tenant deletion.
+app.post('/api/account/delete-restaurant', async (req, res) => {
+  try {
+    const authHeader = String(req.headers.authorization || '');
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const caller = await verifyFirebaseToken(token);
+    if (!caller) return res.status(401).json({ success: false, message: 'Authentication required.' });
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const confirmationName = String(req.body?.confirmationName || '').trim();
+    if (!restaurantId || !confirmationName) {
+      return res.status(400).json({ success: false, message: 'Restaurant ID and exact restaurant-name confirmation are required.' });
+    }
+
+    const restaurantRef = adminDb.doc(`restaurants/${restaurantId}`);
+    const restaurantSnap = await restaurantRef.get();
+    if (!restaurantSnap.exists) return res.status(404).json({ success: false, message: 'Restaurant not found.' });
+
+    const restaurant = restaurantSnap.data() || {};
+    if (restaurant.ownerId !== caller.uid) {
+      return res.status(403).json({ success: false, message: 'Only the restaurant owner can permanently delete this restaurant.' });
+    }
+    if (restaurant.name !== confirmationName) {
+      return res.status(400).json({ success: false, message: 'Restaurant-name confirmation does not match.' });
+    }
+
+    const customerRef = adminDb.doc(`customers/${caller.uid}`);
+    const userRef = adminDb.doc(`users/${caller.uid}`);
+    const customerSnap = await customerRef.get();
+    const authUser = await adminAuth.getUser(caller.uid);
+
+    await adminDb.recursiveDelete(restaurantRef);
+    await adminDb.doc(`publicRestaurants/${restaurantId}`).delete().catch(() => undefined);
+
+    if (customerSnap.exists) {
+      await customerRef.set({
+        accountStatus: 'active',
+        blockedAt: FieldValue.delete(),
+        blockedReason: FieldValue.delete(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } else {
+      await customerRef.set({
+        customerId: caller.uid,
+        name: authUser.displayName || authUser.email?.split('@')[0] || 'Customer',
+        email: authUser.email || '',
+        phone: authUser.phoneNumber || '',
+        photoURL: authUser.photoURL || null,
+        authProvider: authUser.providerData?.[0]?.providerId || 'google.com',
+        addresses: [],
+        accountStatus: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    await userRef.set({
+      userId: caller.uid,
+      displayName: authUser.displayName || authUser.email?.split('@')[0] || 'Customer',
+      email: authUser.email || '',
+      photoUrl: authUser.photoURL || null,
+      updatedAt: new Date().toISOString(),
+      restaurantId: FieldValue.delete(),
+      initialRestaurantId: FieldValue.delete()
+    }, { merge: true });
+
+    console.log('[RestaurantOS Account Lifecycle] Restaurant permanently deleted and customer access restored:', {
+      callerUid: caller.uid,
+      restaurantId
+    });
+    return res.json({ success: true, restoredAccount: 'customer' });
+  } catch (err: any) {
+    console.error('[RestaurantOS Account Lifecycle] Restaurant deletion failed:', err);
+    return res.status(500).json({ success: false, message: 'Restaurant deletion failed. Please retry; the account was not intentionally converted.' });
+  }
 });
 
 // Health check endpoint
