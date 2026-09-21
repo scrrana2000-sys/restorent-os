@@ -1027,7 +1027,7 @@ export async function submitServerPosOrder(input: {
   } as KOT) : null;
 
   const idempotencyKey = input.clientRequestId
-    ? \`\${input.createdBy}_\${input.clientRequestId}\`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120)
+    ? input.clientRequestId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120)
     : null;
   const idemRef = idempotencyKey ? adminDb.doc(\`restaurants/\${restaurantId}/idempotency/\${idempotencyKey}\`) : null;
   if (idemRef) {
