@@ -64,7 +64,7 @@ describe('Milestone 12 — Final Release Gate & Production Audit Suite', () => {
       expect(fs.existsSync(swPath)).toBe(true);
 
       const swContent = fs.readFileSync(swPath, 'utf-8');
-      expect(swContent).toContain("CACHE_NAME = 'restaurantos-v2'");
+      expect(swContent).toContain("CACHE_NAME = 'restaurantos-v3'");
       expect(swContent).toContain('addEventListener(\'install\'');
       expect(swContent).toContain('addEventListener(\'fetch\'');
     });
