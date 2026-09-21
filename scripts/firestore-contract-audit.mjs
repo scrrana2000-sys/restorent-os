@@ -23,7 +23,7 @@ const checks = [
   ['KOT browser creation uses trusted API', kot.includes("/api/kots/create") && server.includes("app.post('/api/kots/create'")],
   ['purchase receiving browser path uses trusted API', purchase.includes("/api/purchases/receive") && server.includes("app.post('/api/purchases/receive'")],
   ['subscription browser fallback fails closed', subscription.includes('Subscription verification service is unavailable')],
-  ['non-local browser API calls use trusted production fallback; Cloud Run uses same-origin API', apiConfig.includes('PRODUCTION_API_BASE_URL') && apiConfig.includes('isCloudRun') && apiConfig.includes('isCloudRun ? window.location.origin : PRODUCTION_API_BASE_URL')],
+  ['API routing separates AI Studio, Cloud Run, and static hosting correctly', apiConfig.includes('PRODUCTION_API_BASE_URL') && apiConfig.includes('isAiStudioPreview') && apiConfig.includes('isCloudRun') && apiConfig.includes('isLocal || isAiStudioPreview || isCloudRun') && apiConfig.includes('window.location.origin') && apiConfig.includes('PRODUCTION_API_BASE_URL') && apiConfig.includes('isCloudRun = host.endsWith(\'.run.app\') && !isAiStudioPreview')],
   ['staff invitation can create a rules-compliant user profile', staff.includes('userId: user.uid') && staff.includes('createdAt: serverTimestamp()')],
   ['existing initial restaurant profile link can create a rules-compliant user doc', restaurant.includes('userId,') && restaurant.includes('initialRestaurantId: existing.restaurantId')],
   ['user restaurant-link helper can create a rules-compliant profile when missing', authService.includes('if (existing.exists())') && authService.includes('userId,') && authService.includes('initialRestaurantId: restaurantId')],
