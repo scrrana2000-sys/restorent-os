@@ -404,9 +404,9 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-start gap-2 min-w-0">
                           {item.foodType ? (
-                            <FoodTypeBadge foodType={item.foodType} size="xs" className="mt-0.5 shrink-0" />
+                            <FoodTypeBadge foodType={item.foodType} size="sm" className="mt-0.5 shrink-0" />
                           ) : typeof item.isVeg === 'boolean' ? (
-                            <FoodTypeBadge foodType={item.isVeg ? 'veg' : 'nonVeg'} size="xs" className="mt-0.5 shrink-0" />
+                            <FoodTypeBadge foodType={item.isVeg ? 'veg' : 'nonVeg'} size="sm" className="mt-0.5 shrink-0" />
                           ) : null}
 
                           <div className="min-w-0">
