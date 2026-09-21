@@ -1,5 +1,5 @@
 import { auth } from '../config/firebase';
-import { getApiUrl } from './apiConfig';
+import { getApiUrl } from '../utils/apiConfig';
 
 /** Permanently deletes the authenticated owner's restaurant and restores customer access. */
 export async function permanentlyDeleteOwnedRestaurant(
