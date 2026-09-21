@@ -108,6 +108,11 @@ jobs:
           docker logout ghcr.io >/dev/null 2>&1 || true
           docker manifest inspect "${{ env.IMAGE_NAME }}:${{ github.sha }}" >/dev/null
 
+      - name: Confirm immutable image tag
+        run: |
+          echo "Deploying image: $IMAGE_NAME:${GITHUB_SHA}"
+          docker manifest inspect "$IMAGE_NAME:${GITHUB_SHA}" >/dev/null
+
       - name: Deploy prebuilt container image to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v3
         with:
