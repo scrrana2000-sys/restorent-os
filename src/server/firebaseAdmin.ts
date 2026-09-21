@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 
 /**
  * Firebase Admin must always target the RestaurantOS Firebase project.
@@ -30,6 +31,10 @@ const adminApp =
 
 export const adminAuth = getAdminAuth(adminApp);
 export const adminDb = getAdminFirestore(adminApp, FIRESTORE_DATABASE_ID);
+export const adminStorageBucket = getAdminStorage(adminApp).bucket(
+  process.env.FIREBASE_STORAGE_BUCKET?.trim()
+  || `${FIREBASE_PROJECT_ID}.firebasestorage.app`
+);
 
 export const FIREBASE_ADMIN_PROJECT_ID = FIREBASE_PROJECT_ID;
 export const FIREBASE_ADMIN_DATABASE_ID = FIRESTORE_DATABASE_ID;
