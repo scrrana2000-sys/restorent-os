@@ -18,20 +18,20 @@ export function getApiUrl(endpoint: string): string {
 
     const host = window.location.hostname.toLowerCase();
     const isLocal = host === 'localhost' || host === '127.0.0.1';
-    // Only actual Cloud Run hosts are treated as same-origin API hosts.
-    // AI Studio preview hosts also use *.google.com / *.googleusercontent.com, but
-    // their preview shell is not the RestaurantOS API and can return index.html for
-    // /api/* requests (causing JSON parse errors such as "Unexpected token '<'").
-    // AI Studio preview services also use a *.run.app hostname, but they are not
-    // the deployed RestaurantOS API. Sending /api/* to the preview shell returns
-    // index.html with HTTP 200 instead of JSON.
+    // Google AI Studio preview runs the RestaurantOS Express + Vite development
+    // server on the same preview origin. Keep /api/* same-origin there so checkout,
+    // customer tracking, and owner APIs do not depend on a deleted/stale production
+    // Cloud Run URL during AI Studio validation.
+    // Only non-AI-Studio *.run.app hosts are treated as deployed Cloud Run API hosts.
     const isAiStudioPreview = host.startsWith('ais-dev-');
     const isCloudRun = host.endsWith('.run.app') && !isAiStudioPreview;
 
     if (configured && (isLocal || !configured.includes('localhost'))) {
       baseUrl = configured;
     } else {
-      baseUrl = isLocal ? window.location.origin : (isCloudRun ? window.location.origin : PRODUCTION_API_BASE_URL);
+      baseUrl = isLocal || isAiStudioPreview || isCloudRun
+        ? window.location.origin
+        : PRODUCTION_API_BASE_URL;
     }
   } else {
     const configured = (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL || '').trim();
