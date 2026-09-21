@@ -145,8 +145,10 @@ export const CustomerAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!firebaseUser?.uid) return;
     try {
       const p = await getCustomerProfile(firebaseUser.uid);
-      if (p) {
+      if (p && p.accountStatus !== 'blocked') {
         setCustomer(p);
+      } else {
+        setCustomer(null);
       }
     } catch (err) {
       console.warn('[CustomerAuthContext] Failed to refresh profile:', err);
