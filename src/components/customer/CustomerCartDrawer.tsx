@@ -77,8 +77,13 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
   const handleProceedToCheckout = () => {
     if (onCheckout) {
       onCheckout();
-    } else {
-      setCheckoutNoticeOpen(true);
+      return;
+    }
+
+    // Defensive fallback: never show the obsolete M9-H boundary notice.
+    // A checkout action should always attempt to enter the real checkout flow.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('restaurantos_open_checkout'));
     }
   };
 
@@ -361,27 +366,7 @@ export const CustomerCartDrawer: React.FC<CustomerCartDrawerProps> = ({
               </span>
             </button>
 
-            {/* M9-H Notice Modal / Boundary */}
-            {checkoutNoticeOpen && (
-              <div
-                id="checkout-milestone-boundary-notice"
-                className="p-3 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-900 text-xs flex items-start gap-2.5 animate-in fade-in duration-150"
-              >
-                <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 flex-1">
-                  <span className="font-bold block">Checkout Flow Ready (Milestone M9-H)</span>
-                  <p className="text-[11px] text-indigo-700 leading-relaxed">
-                    Customer Cart is active and verified! Complete delivery address, payment collection, and order submission will connect in Milestone M9-H.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setCheckoutNoticeOpen(false)}
-                  className="p-1 text-indigo-400 hover:text-indigo-700"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
+            {/* Checkout is handled by CustomerCheckoutModal in the parent page. */}
           </div>
         )}
       </div>
