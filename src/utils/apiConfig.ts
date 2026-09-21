@@ -22,7 +22,11 @@ export function getApiUrl(endpoint: string): string {
     // AI Studio preview hosts also use *.google.com / *.googleusercontent.com, but
     // their preview shell is not the RestaurantOS API and can return index.html for
     // /api/* requests (causing JSON parse errors such as "Unexpected token '<'").
-    const isCloudRun = host.endsWith('.run.app');
+    // AI Studio preview services also use a *.run.app hostname, but they are not
+    // the deployed RestaurantOS API. Sending /api/* to the preview shell returns
+    // index.html with HTTP 200 instead of JSON.
+    const isAiStudioPreview = host.startsWith('ais-dev-');
+    const isCloudRun = host.endsWith('.run.app') && !isAiStudioPreview;
 
     if (configured && (isLocal || !configured.includes('localhost'))) {
       baseUrl = configured;
