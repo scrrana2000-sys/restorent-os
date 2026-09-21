@@ -221,5 +221,9 @@ export interface CustomerProfile {
   addresses?: CustomerAddress[];
   createdAt: string;
   updatedAt: string;
+  /** Customer access is blocked while the same Firebase UID owns a restaurant. */
+  accountStatus?: 'active' | 'blocked';
+  blockedAt?: any;
+  blockedReason?: string;
 }
 
