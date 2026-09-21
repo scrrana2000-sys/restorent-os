@@ -50,6 +50,5 @@ describe('getApiUrl', () => {
     expect(getApiUrl('/api/health'))
       .toBe('http://localhost:3000/api/health');
 
-    vi.stubGlobal('importMetaEnv', { VITE_API_BASE_URL: 'http://localhost:4173' });
   });
 });
