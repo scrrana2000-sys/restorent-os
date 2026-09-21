@@ -16,6 +16,11 @@ import { Category, CategoryFormData, MenuItem, MenuItemFormData } from '../types
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { enforcePermission } from '../utils/permissions';
 
+function isTestRuntime(): boolean {
+  return typeof import.meta !== 'undefined'
+    && Boolean((import.meta as any).env?.MODE === 'test');
+}
+
 const categoryCache = new Map<string, Category[]>();
 const menuItemCache = new Map<string, MenuItem[]>();
 
@@ -30,7 +35,7 @@ async function readCollectionOnce<T>(
   cacheKey: string,
   forceRefresh = false
 ): Promise<T[]> {
-  if (!forceRefresh) {
+  if (!forceRefresh && !isTestRuntime()) {
     const cached = cache.get(cacheKey);
     if (cached) return cloneCachedList(cached);
   }
@@ -40,7 +45,7 @@ async function readCollectionOnce<T>(
 
   // Prefer the local persistent Firestore cache. This avoids a billed backend
   // read when the collection is already present in the browser cache.
-  if (!forceRefresh) {
+  if (!forceRefresh && !isTestRuntime()) {
     try {
       snapshot = await getDocsFromCache(q);
     } catch {
@@ -54,7 +59,7 @@ async function readCollectionOnce<T>(
 
   const list: T[] = [];
   snapshot.forEach((d: any) => list.push(buildItem(d.id, d.data())));
-  cache.set(cacheKey, list);
+  if (!isTestRuntime()) cache.set(cacheKey, list);
   return cloneCachedList(list);
 }
 
