@@ -54,7 +54,7 @@ checks.push(
   ['order stock locks are server-only mutations', /match \/order_stock_locks\/\{lockId\}[\s\S]*?allow update: if isServer\(\)/.test(rules)],
   ['POS order API validates source and order type enums', serverSource.includes("new Set(['pos', 'captain', 'admin', 'api'])") && serverSource.includes("new Set(['dineIn', 'takeaway', 'delivery'])")],
   ['KOT browser creation uses trusted API boundary', read('src/services/kotService.ts').includes("/api/kots/create") && serverSource.includes("app.post('/api/kots/create'")],
-  ['order API never creates shared idempotency key when caller omitted request ID', serverSource.includes("return rawClientRequestId ? `${authUser.uid}_${rawClientRequestId}` : undefined") ],
+  ['order API never creates shared idempotency key when caller omitted request ID', serverSource.includes('const rawClientRequestId') && serverSource.includes('const clientRequestId = rawClientRequestId') && serverSource.includes(' : undefined;') && serverSource.includes('clientRequestId,')],
   ['webhook failed events are retryable', read('src/server/razorpayService.ts').includes("existingStatus === 'failed' || isStaleProcessing") && read('src/server/razorpayService.ts').includes("processingLeaseMs = 10 * 60 * 1000")],
   ['restaurant document deletion is disabled to avoid orphaned tenant data', rules.includes('allow delete: if false;') && /match \/restaurants\/\{restaurantId\}[\s\S]*?allow delete: if false;/.test(rules)],
 );
