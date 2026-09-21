@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { auth } from './src/config/firebase';
-import { submitServerOnlineOrder } from './src/server/onlineOrderService';
+import { submitServerOnlineOrder, submitServerPosOrder } from './src/server/onlineOrderService';
 import { sanitizeCustomerOrder } from './src/services/customerOrderTrackingService';
 import { resolveRestaurantBySlug } from './src/services/customerDiscoveryService';
 import { collection, getDocs, getDoc, query, where } from 'firebase/firestore';
@@ -557,53 +557,25 @@ app.post('/api/kots/partial-cancel', async (req, res) => {
 app.post('/api/orders/create-pos', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer authentication token is required.' });
-    }
+    if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Bearer authentication token is required.' });
     const idToken = authHeader.substring(7).trim();
     const authUser = await verifyFirebaseToken(idToken);
-    if (!authUser?.uid) {
-      return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid or expired Firebase authentication token.' });
-    }
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_AUTH_TOKEN', message: 'Invalid or expired Firebase authentication token.' });
 
     const restaurantId = String(req.body?.restaurantId || '').trim();
     const source = String(req.body?.source || '').trim();
-    const orderType = String(req.body?.orderType || '').trim();
-    if (!restaurantId || !req.body?.cartState || !source || !orderType) {
-      return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId, cartState, source and orderType are required.' });
-    }
-    const allowedStaffOrderSources = new Set(['pos', 'captain', 'admin', 'api']);
-    const allowedStaffOrderTypes = new Set(['dineIn', 'takeaway', 'delivery']);
-    if (!allowedStaffOrderSources.has(source) || source === 'online') {
-      return res.status(400).json({ success: false, error: 'INVALID_SOURCE', message: 'Online or unsupported order sources must use their dedicated trusted workflow.' });
-    }
-    if (!allowedStaffOrderTypes.has(orderType)) {
-      return res.status(400).json({ success: false, error: 'INVALID_ORDER_TYPE', message: 'Unsupported POS order type.' });
-    }
+    const orderType = String(req.body?.orderType || '').trim() as 'dineIn' | 'takeaway' | 'delivery';
+    if (!restaurantId || !req.body?.cartState || !source || !orderType) return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId, cartState, source and orderType are required.' });
+    if (!new Set(['pos', 'captain', 'admin', 'api']).has(source) || source === 'online') return res.status(400).json({ success: false, error: 'INVALID_SOURCE', message: 'Online or unsupported order sources must use their dedicated trusted workflow.' });
+    if (!new Set(['dineIn', 'takeaway', 'delivery']).has(orderType)) return res.status(400).json({ success: false, error: 'INVALID_ORDER_TYPE', message: 'Unsupported POS order type.' });
 
-    const staffCheck = await verifyRestaurantStaffRole(
-      authUser.uid,
-      idToken,
-      restaurantId,
-      ['owner', 'manager', 'cashier', 'captain']
-    );
-    if (!staffCheck.authorized) {
-      return res.status(staffCheck.code || 403).json({
-        success: false,
-        error: staffCheck.error || 'FORBIDDEN',
-        message: staffCheck.message || 'Caller is not authorized to create POS orders.'
-      });
-    }
+    const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain']);
+    if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Caller is not authorized to create POS orders.' });
 
-    if (!(await ensureServerAuthenticated())) {
-      return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted order service is unavailable.' });
-    }
-
-    const { orderService } = await import('./src/services/orderService');
-    const input = {
+    const result = await submitServerPosOrder({
       restaurantId,
       cartState: req.body.cartState,
-      orderType: orderType as any,
+      orderType,
       source,
       tableId: req.body?.tableId || null,
       tableSessionId: req.body?.tableSessionId || null,
@@ -611,26 +583,16 @@ app.post('/api/orders/create-pos', async (req, res) => {
       notes: typeof req.body?.notes === 'string' ? req.body.notes : '',
       taxJurisdiction: req.body?.taxJurisdiction || 'intraState',
       createdBy: authUser.uid,
-      clientRequestId: (() => {
-        const rawClientRequestId = String(req.body?.clientRequestId || '').trim();
-        return rawClientRequestId ? `${authUser.uid}_${rawClientRequestId}` : undefined;
-      })(),
-      skipTableSessionValidation: Boolean(req.body?.skipTableSessionValidation)
-    } as any;
-
-    if (req.body?.createKot === true) {
-      const result = await orderService.createOrderAndKOTFromCart(input);
-      return res.json({ success: true, order: result.order, kot: result.kot });
-    }
-
-    const order = await orderService.createOrderFromCart(input);
-    return res.json({ success: true, order, kot: null });
+      clientRequestId: typeof req.body?.clientRequestId === 'string' ? req.body.clientRequestId.trim() : undefined,
+      skipTableSessionValidation: Boolean(req.body?.skipTableSessionValidation),
+      createKot: Boolean(req.body?.createKot)
+    });
+    return res.json({ success: true, order: result.order, kot: result.kot });
   } catch (err: any) {
     console.error('[RestaurantOS Server] POS order creation failed:', err);
     return res.status(400).json({ success: false, error: 'POS_ORDER_CREATION_FAILED', message: err?.message || 'Failed to create POS order.' });
   }
 });
-
 app.post('/api/submit-online-order', async (req, res) => {
   try {
     const clientIp = req.ip || req.socket.remoteAddress || 'unknown-ip';
