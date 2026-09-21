@@ -71,7 +71,16 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
   initialDeliveryDetails
 }) => {
   const { cart, clearCart } = useCustomerCart();
-  const { customer, firebaseUser, signInWithGoogle, isSigningIn } = useCustomerAuth();
+  const { customer, firebaseUser, signInWithGoogle, isSigningIn, refreshProfile } = useCustomerAuth();
+
+  // Customer profile data is loaded only when checkout opens. This keeps
+  // auth-only page loads free from a customer-profile Firestore read.
+  useEffect(() => {
+    if (!isOpen || !firebaseUser || customer) return;
+    refreshProfile().catch((err) => {
+      console.warn('[CustomerCheckout] Profile refresh warning:', err);
+    });
+  }, [isOpen, firebaseUser, customer, refreshProfile]);
 
   // Mode state: 'form' | 'review' | 'intent_created' | 'order_submitted'
   const [currentStep, setCurrentStep] = useState<'form' | 'review' | 'intent_created' | 'order_submitted'>('form');
