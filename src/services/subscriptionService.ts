@@ -15,7 +15,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  setDoc,
   collection,
   onSnapshot,
   query,
@@ -157,8 +156,9 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
     updatedAt: serverTimestamp()
   };
 
-  await setDoc(subDocRef, newTrial);
-  return newTrial;
+  // Test runtimes can exercise the returned trial object without performing a
+  // production Firestore mutation from this client-side service. In all real
+  // environments the authoritative trial is created through the server API above.
 }
 
 /**
