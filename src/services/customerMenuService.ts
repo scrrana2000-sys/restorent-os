@@ -3,10 +3,24 @@ import {
   query,
   orderBy,
   getDocs,
+  getDocsFromCache,
   onSnapshot
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { Category, MenuItem } from '../types/menu';
+
+const publicMenuCache = new Map<string, PublicMenuData>();
+
+function clonePublicMenu(menu: PublicMenuData): PublicMenuData {
+  return {
+    ...menu,
+    categories: menu.categories.map((item) => ({ ...item })),
+    allItems: menu.allItems.map((item) => ({ ...item })),
+    itemsByCategory: Object.fromEntries(
+      Object.entries(menu.itemsByCategory).map(([key, items]) => [key, items.map((item) => ({ ...item }))])
+    )
+  };
+}
 
 export interface PublicMenuData {
   restaurantId: string;
@@ -77,13 +91,34 @@ export async function fetchPublicMenu(restaurantId: string): Promise<PublicMenuD
   }
 
   try {
+    const cached = publicMenuCache.get(cleanId);
+    if (cached) return clonePublicMenu(cached);
+
     const categoriesRef = collection(db, 'restaurants', cleanId, 'categories');
     const itemsRef = collection(db, 'restaurants', cleanId, 'items');
 
-    const [categoriesSnap, itemsSnap] = await Promise.all([
-      getDocs(query(categoriesRef, orderBy('sortOrder', 'asc'))),
-      getDocs(query(itemsRef, orderBy('sortOrder', 'asc')))
-    ]);
+    const categoryQuery = query(categoriesRef, orderBy('sortOrder', 'asc'));
+    const itemQuery = query(itemsRef, orderBy('sortOrder', 'asc'));
+
+    let categoriesSnap: any = null;
+    let itemsSnap: any = null;
+
+    try {
+      [categoriesSnap, itemsSnap] = await Promise.all([
+        getDocsFromCache(categoryQuery),
+        getDocsFromCache(itemQuery)
+      ]);
+    } catch {
+      categoriesSnap = null;
+      itemsSnap = null;
+    }
+
+    if (!categoriesSnap || !itemsSnap) {
+      [categoriesSnap, itemsSnap] = await Promise.all([
+        getDocs(categoryQuery),
+        getDocs(itemQuery)
+      ]);
+    }
 
     const categories: Category[] = [];
     categoriesSnap.forEach((docSnap) => {
@@ -103,7 +138,9 @@ export async function fetchPublicMenu(restaurantId: string): Promise<PublicMenuD
       });
     });
 
-    return organizePublicMenu(cleanId, categories, items);
+    const result = organizePublicMenu(cleanId, categories, items);
+    publicMenuCache.set(cleanId, result);
+    return clonePublicMenu(result);
   } catch (err) {
     console.warn(`[RestaurantOS Public Menu] Error fetching menu for ${cleanId}:`, err);
     throw err;
@@ -114,6 +151,11 @@ export async function fetchPublicMenu(restaurantId: string): Promise<PublicMenuD
  * Subscribes to real-time updates for a restaurant's public menu.
  * Ensures that live catalog modifications or availability toggles are immediately reflected.
  */
+export function invalidatePublicMenuCache(restaurantId: string): void {
+  const cleanId = (restaurantId || '').trim();
+  if (cleanId) publicMenuCache.delete(cleanId);
+}
+
 export function subscribeToPublicMenu(
   restaurantId: string,
   onUpdate: (menuData: PublicMenuData) => void,
