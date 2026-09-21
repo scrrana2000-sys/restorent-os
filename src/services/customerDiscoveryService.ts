@@ -122,28 +122,27 @@ export async function discoverRestaurants(
         ? where('cityLower', '==', cityTerms[0])
         : where('cityLower', 'in', cityTerms.slice(0, 10));
 
-      const queryParts: any[] = [
-        publicCol,
-        firestoreCityFilter,
-        orderBy(documentId())
-      ];
-      if (criteria.cursor) {
-        queryParts.push(startAfter(criteria.cursor));
-      }
-      queryParts.push(
-        firestoreLimit(pageSize * 3) // Fetch a slightly larger batch for in-memory status/area/cuisine filtering
-      );
-      const q = query(...queryParts);
+      const q = criteria.cursor
+        ? query(
+            publicCol,
+            firestoreCityFilter,
+            orderBy(documentId()),
+            startAfter(criteria.cursor),
+            firestoreLimit(pageSize * 3)
+          )
+        : query(
+            publicCol,
+            firestoreCityFilter,
+            orderBy(documentId()),
+            firestoreLimit(pageSize * 3)
+          );
 
       snapshot = await getDocs(q);
     } else {
       // Fallback if city is not set but an explicit search query was entered by the user
-      const queryParts: any[] = [publicCol, orderBy(documentId())];
-      if (criteria.cursor) {
-        queryParts.push(startAfter(criteria.cursor));
-      }
-      queryParts.push(firestoreLimit(MAX_PAGE_SIZE));
-      const q = query(...queryParts);
+      const q = criteria.cursor
+        ? query(publicCol, orderBy(documentId()), startAfter(criteria.cursor), firestoreLimit(MAX_PAGE_SIZE))
+        : query(publicCol, orderBy(documentId()), firestoreLimit(MAX_PAGE_SIZE));
       snapshot = await getDocs(q);
     }
 
