@@ -116,12 +116,36 @@ export async function ensureRestaurantTrial(restaurantId: string): Promise<Resta
       if (response.ok && payload?.success && payload?.subscription) {
         return payload.subscription as RestaurantSubscription;
       }
+
+      // Google AI Studio preview can run without the production API service.
+      // For an existing legacy trial, allow the owner-scoped Firestore rule to
+      // perform a one-time entitlement timestamp backfill so local validation does
+      // not depend on Cloud Run being deployed.
+      const isAiStudioPreview =
+        typeof window !== 'undefined' &&
+        window.location.hostname.startsWith('ais-dev-');
+
+      if (isAiStudioPreview && existing.status === 'trial') {
+        const now = new Date();
+        const accessUntil = new Date(now.getTime() + SEVEN_DAYS_MS);
+        const backfilled = {
+          ...existing,
+          operationalAccessUntil: Timestamp.fromDate(accessUntil),
+          updatedAt: serverTimestamp()
+        };
+        await setDoc(subDocRef, backfilled, { merge: true });
+        return {
+          ...existing,
+          operationalAccessUntil: Timestamp.fromDate(accessUntil)
+        } as RestaurantSubscription;
+      }
     } catch (upgradeErr) {
       console.warn('[RestaurantOS Subscription] Legacy subscription timestamp backfill notice:', upgradeErr);
     }
 
-    // Return the existing document for UI display. Firestore create rules will
-    // still fail closed until the trusted backend supplies operationalAccessUntil.
+    // Return the existing document for UI display if the authoritative backfill
+    // service is unavailable. The Firestore rules remain fail-closed until the
+    // trusted server or the tightly-scoped AI Studio legacy-trial migration succeeds.
     return existing;
   }
 
