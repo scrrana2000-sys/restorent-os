@@ -1150,39 +1150,12 @@ service cloud.firestore {
       // ==========================================================
 
       match /subscription/{subDocId} {
+        // Subscription entitlements are fully server-authoritative. Browsers may
+        // read their restaurant's subscription status but may not create, update,
+        // or delete the subscription document.
         allow read: if canAccessRestaurant(restaurantId) || isServer();
-
-        // Subscription entitlements are server-authoritative. Browser clients may
-        // not activate paid plans. A narrowly scoped owner-only exception exists
-        // solely for migrating a legacy trial that predates operationalAccessUntil
-        // while validating in AI Studio without a deployed API.
-        allow create: if isServer()
-          && request.resource.data.restaurantId == restaurantId
-          || (
-            isOwnerOfRestaurant(restaurantId)
-            && request.resource.data.restaurantId == restaurantId
-            && request.resource.data.status == 'trial'
-            && request.resource.data.planId == 'trial'
-            && request.resource.data.operationalAccessUntil is timestamp
-            && request.resource.data.operationalAccessUntil > request.time
-            && request.resource.data.operationalAccessUntil <= request.time + duration.value(7, 'd')
-          );
-
-        allow update: if isServer()
-          && request.resource.data.restaurantId == restaurantId
-          || (
-            isOwnerOfRestaurant(restaurantId)
-            && resource.data.restaurantId == restaurantId
-            && !('operationalAccessUntil' in resource.data)
-            && request.resource.data.restaurantId == restaurantId
-            && request.resource.data.status == 'trial'
-            && request.resource.data.planId == 'trial'
-            && request.resource.data.operationalAccessUntil is timestamp
-            && request.resource.data.operationalAccessUntil > request.time
-            && request.resource.data.operationalAccessUntil <= request.time + duration.value(7, 'd')
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['operationalAccessUntil', 'updatedAt'])
-          );
-
+        allow create, update: if isServer()
+          && request.resource.data.restaurantId == restaurantId;
         allow delete: if false;
       }
 
