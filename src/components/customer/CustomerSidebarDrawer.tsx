@@ -62,7 +62,6 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
   } = useCustomerCart();
 
   const [confirmClearOpen, setConfirmClearOpen] = useState<boolean>(false);
-  const [checkoutNoticeOpen, setCheckoutNoticeOpen] = useState<boolean>(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState<boolean>(false);
 
   // Coordinated modal back handler for Android Back button integration
