@@ -22,6 +22,7 @@ interface AuthContextType {
   loginGoogle: (forceRedirect?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   setProfile: React.Dispatch<React.SetStateAction<UserProfile | null>>;
+  refreshProfile: () => Promise<UserProfile | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,17 +41,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then(async (redirectUser) => {
         if (redirectUser && isMounted) {
           setUser(redirectUser);
-          const prof = await getUserProfile(redirectUser.uid);
-          if (isMounted) {
-            setProfile(
-              prof || {
-                userId: redirectUser.uid,
-                displayName: redirectUser.displayName || redirectUser.email?.split('@')[0] || 'Admin',
-                email: redirectUser.email || '',
-                photoUrl: redirectUser.photoURL || null
-              }
-            );
-          }
+          // Keep OAuth redirect handling auth-only. Firestore profile data is
+          // loaded by the owner/customer page that actually needs it.
         }
       })
       .catch((err: any) => {
@@ -72,17 +64,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           authMethod: 'onAuthStateChanged',
           authenticatedUid: appUser.uid
         });
-        const prof = await getUserProfile(appUser.uid);
-        if (isMounted) {
-          setProfile(
-            prof || {
-              userId: appUser.uid,
-              displayName: appUser.displayName || appUser.email?.split('@')[0] || 'Admin',
-              email: appUser.email || '',
-              photoUrl: appUser.photoURL || null
-            }
-          );
-        }
+        // Do not read Firestore during the global auth event. OwnerCentral's
+        // RestaurantContext and customer pages load only the profile they need.
+        if (isMounted) setProfile(null);
       } else {
         setProfile(null);
       }
@@ -94,6 +78,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribe();
     };
   }, []);
+
+  const refreshProfile = async (): Promise<UserProfile | null> => {
+    const uid = user?.uid;
+    if (!uid) {
+      setProfile(null);
+      return null;
+    }
+
+    const prof = await getUserProfile(uid);
+    if (prof) {
+      setProfile(prof);
+      return prof;
+    }
+
+    const fallback: UserProfile = {
+      userId: uid,
+      displayName: user.displayName || user.email?.split('@')[0] || 'Admin',
+      email: user.email || '',
+      photoUrl: user.photoURL || null
+    };
+    setProfile(fallback);
+    return fallback;
+  };
 
   const clearRedirectError = () => {
     setRedirectError(null);
@@ -149,7 +156,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         loginGoogle,
         logout,
-        setProfile
+        setProfile,
+        refreshProfile
       }}
     >
       {children}
@@ -170,7 +178,8 @@ export function useAuth() {
       register: async () => {},
       loginGoogle: async () => {},
       logout: async () => {},
-      setProfile: () => {}
+      setProfile: () => {},
+      refreshProfile: async () => null
     };
   }
   return context;
