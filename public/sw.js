@@ -1,5 +1,5 @@
 // RestaurantOS Production PWA Service Worker
-const CACHE_NAME = 'restaurantos-v2';
+const CACHE_NAME = 'restaurantos-v3';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -10,7 +10,12 @@ const STATIC_ASSETS = [
 const isProductionCloudRun =
   self.location.hostname === 'restaurantos-xqi52dpwga-el.a.run.app';
 
+const isSupportedProductionHost =
+  isProductionCloudRun ||
+  self.location.hostname === 'scrrana2000-sys.github.io';
+
 const isDevSandbox =
+  !isSupportedProductionHost ||
   (self.location.hostname.includes('run.app') && !isProductionCloudRun) ||
   self.location.hostname === 'localhost' ||
   self.location.hostname === '127.0.0.1';
