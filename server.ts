@@ -709,23 +709,42 @@ app.post('/api/submit-online-order', async (req, res) => {
 
     const guestTrackingToken = randomBytes(32).toString('base64url');
 
-    if (!cart || !customerDetails || !orderType || !paymentMethod) {
+    // The browser normally submits a validated CustomerCheckoutIntent. Reconstruct
+    // the canonical cart when the transport payload does not also carry cart.
+    const effectiveCart = cart || (intent ? {
+      restaurantId: intent.restaurantId,
+      restaurantName: intent.restaurantName || '',
+      publicSlug: '',
+      items: Array.isArray(intent.items) ? intent.items : [],
+      subtotal: Number(intent.subtotal) || 0,
+      itemCount: Array.isArray(intent.items)
+        ? intent.items.reduce((sum: number, item: any) => sum + Number(item?.quantity || 0), 0)
+        : 0
+    } : null);
+
+    const effectiveOrderType = orderType || intent?.orderType;
+    const effectiveCustomerDetails = customerDetails || intent?.customerDetails;
+    const effectiveDeliveryDetails = deliveryDetails || intent?.deliveryDetails;
+    const effectivePaymentMethod = paymentMethod || intent?.paymentMethod || 'cash';
+    const effectiveIdempotencyKey = idempotencyKey || intent?.idempotencyKey;
+
+    if (!effectiveCart || !effectiveCustomerDetails || !effectiveOrderType) {
       return res.status(400).json({
         success: false,
         error: 'MISSING_CHECKOUT_DATA',
-        message: 'Cart, customer details, order type, and payment method are required.'
+        message: 'Cart, customer details, and order type are required.'
       });
     }
 
     const result = await submitServerOnlineOrder({
       intent,
-      cart,
+      cart: effectiveCart,
       restaurantProfile,
-      orderType,
-      customerDetails,
-      deliveryDetails,
-      paymentMethod,
-      idempotencyKey,
+      orderType: effectiveOrderType,
+      customerDetails: effectiveCustomerDetails,
+      deliveryDetails: effectiveDeliveryDetails,
+      paymentMethod: effectivePaymentMethod,
+      idempotencyKey: effectiveIdempotencyKey,
       customerId: effectiveCustomerId,
       customerEmail: effectiveCustomerEmail,
       customerTrackingToken: guestTrackingToken
