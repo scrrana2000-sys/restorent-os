@@ -16,7 +16,7 @@ import { Category, CategoryFormData, MenuItem, MenuItemFormData } from '../types
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { enforcePermission } from '../utils/permissions';
 
-  const categoryCache = new Map<string, Category[]>();
+const categoryCache = new Map<string, Category[]>();
 const menuItemCache = new Map<string, MenuItem[]>();
 
 function cloneCachedList<T>(items: T[]): T[] {
@@ -48,7 +48,7 @@ async function readCollectionOnce<T>(
     }
   }
 
-  if (!snapshot || (!snapshot.docs?.length && forceRefresh)) {
+  if (!snapshot || snapshot.empty) {
     snapshot = await getDocs(q);
   }
 
@@ -223,6 +223,7 @@ export async function swapCategoryOrder(
       updateDoc(refA, { sortOrder: orderA, updatedAt: serverTimestamp() }),
       updateDoc(refB, { sortOrder: orderB, updatedAt: serverTimestamp() })
     ]);
+    invalidateMenuCache(restaurantId);
   } catch (error) {
     throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${restaurantId}/categories`);
   }
