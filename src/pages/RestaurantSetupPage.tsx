@@ -23,7 +23,9 @@ import {
   ShoppingBag,
   Eye,
   EyeOff,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useAuth } from '../context/AuthContext';
@@ -37,6 +39,7 @@ import { createRestaurantBranch } from '../services/restaurantService';
 import { TableManagementSection } from '../components/restaurant/TableManagementSection';
 import { PrinterSettingsSection } from '../components/restaurant/PrinterSettingsSection';
 import { auditUserRestaurants, DuplicateAuditReport } from '../services/duplicateRestaurantAuditService';
+import { permanentlyDeleteOwnedRestaurant } from '../services/accountLifecycleService';
 import { getDefaultCapabilitiesForMode } from '../config/restaurantOperatingModes';
 import {
   getVoiceAssistantSettings,
@@ -106,6 +109,12 @@ export const RestaurantSetupPage: React.FC = () => {
   // States for duplicate restaurant audit
   const [auditReport, setAuditReport] = useState<DuplicateAuditReport | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
+
+  // Permanent restaurant deletion / customer-account restoration
+  const [showDeleteRestaurant, setShowDeleteRestaurant] = useState(false);
+  const [deleteRestaurantConfirmation, setDeleteRestaurantConfirmation] = useState('');
+  const [isDeletingRestaurant, setIsDeletingRestaurant] = useState(false);
+  const [deleteRestaurantError, setDeleteRestaurantError] = useState<string | null>(null);
 
   useEffect(() => {
     if (restaurant) {
@@ -893,6 +902,93 @@ export const RestaurantSetupPage: React.FC = () => {
               </Button>
             </div>
           </div>
+
+          {/* Account Lifecycle / Permanent Restaurant Deletion */}
+          {restaurant && user?.uid === restaurant.ownerId && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 mt-6">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4.5 h-4.5" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-xs font-bold text-rose-900 uppercase tracking-wider">Danger Zone</h4>
+                  <p className="text-xs text-rose-800 mt-1 leading-relaxed">
+                    Permanently delete this restaurant and restore this Google account as a Customer account. All restaurant tenant data is removed; your Firebase login is not deleted.
+                  </p>
+                  {!showDeleteRestaurant ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="mt-3 border-rose-300 text-rose-700 hover:bg-rose-100"
+                      leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setDeleteRestaurantError(null);
+                        setDeleteRestaurantConfirmation('');
+                        setShowDeleteRestaurant(true);
+                      }}
+                    >
+                      Delete Restaurant Permanently
+                    </Button>
+                  ) : (
+                    <div className="mt-4 bg-white border border-rose-200 rounded-xl p-4 space-y-3">
+                      <p className="text-xs font-semibold text-slate-800">
+                        Type <span className="font-mono text-rose-700">{restaurant.name}</span> to confirm.
+                      </p>
+                      <input
+                        type="text"
+                        value={deleteRestaurantConfirmation}
+                        onChange={(e) => setDeleteRestaurantConfirmation(e.target.value)}
+                        placeholder={restaurant.name}
+                        disabled={isDeletingRestaurant}
+                        className="w-full text-xs rounded-xl border border-slate-200 bg-white py-2.5 px-3.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-500 disabled:opacity-60"
+                      />
+                      {deleteRestaurantError && (
+                        <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                          {deleteRestaurantError}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2 justify-end">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={isDeletingRestaurant}
+                          onClick={() => setShowDeleteRestaurant(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          isLoading={isDeletingRestaurant}
+                          disabled={deleteRestaurantConfirmation !== restaurant.name}
+                          leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                          onClick={async () => {
+                            if (!user || !restaurant || deleteRestaurantConfirmation !== restaurant.name) return;
+                            setIsDeletingRestaurant(true);
+                            setDeleteRestaurantError(null);
+                            try {
+                              await permanentlyDeleteOwnedRestaurant(restaurant.restaurantId, restaurant.name);
+                              window.location.hash = 'discover';
+                              window.location.reload();
+                            } catch (err: any) {
+                              setDeleteRestaurantError(err?.message || 'Restaurant deletion failed.');
+                            } finally {
+                              setIsDeletingRestaurant(false);
+                            }
+                          }}
+                        >
+                          Permanently Delete & Restore Customer
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Safe Duplicate Documents Audit Console */}
           <div className="bg-slate-50 border border-slate-100 rounded-xl p-5 mt-6">
