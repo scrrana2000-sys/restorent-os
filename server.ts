@@ -127,20 +127,31 @@ app.use((req, res, next) => {
       try {
         const parsedOrigin = new URL(origin);
         const hostHeader = req.headers.host;
+        const hostname = parsedOrigin.hostname.toLowerCase();
         const isSameHost = Boolean(hostHeader && (parsedOrigin.host === hostHeader || origin.includes(hostHeader)));
         if (isSameHost) {
           isAllowed = true;
+        } else if (
+          // Google AI Studio preview origins are ephemeral ais-dev-*.run.app hosts.
+          // They are not practical to enumerate in ALLOWED_ORIGINS, but customer
+          // and owner API calls are still protected by Firebase authentication or
+          // server-side authorization. Keep this limited to the AI Studio preview
+          // hostname pattern rather than allowing arbitrary *.run.app origins.
+          hostname.startsWith('ais-dev-') &&
+          hostname.endsWith('.run.app')
+        ) {
+          isAllowed = true;
         } else if (process.env.NODE_ENV !== 'production') {
           isAllowed =
-            parsedOrigin.hostname.endsWith('.run.app') ||
-            parsedOrigin.hostname.endsWith('.aistudio.google.com') ||
-            parsedOrigin.hostname.endsWith('.studio.googleusercontent.com') ||
-            parsedOrigin.hostname.endsWith('.google.com') ||
-            parsedOrigin.hostname.endsWith('.googleusercontent.com') ||
-            parsedOrigin.hostname.endsWith('.web.app') ||
-            parsedOrigin.hostname.endsWith('.firebaseapp.com') ||
-            parsedOrigin.hostname === 'localhost' ||
-            parsedOrigin.hostname === '127.0.0.1';
+            hostname.endsWith('.run.app') ||
+            hostname.endsWith('.aistudio.google.com') ||
+            hostname.endsWith('.studio.googleusercontent.com') ||
+            hostname.endsWith('.google.com') ||
+            hostname.endsWith('.googleusercontent.com') ||
+            hostname.endsWith('.web.app') ||
+            hostname.endsWith('.firebaseapp.com') ||
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1';
         }
       } catch {
         isAllowed = false;
