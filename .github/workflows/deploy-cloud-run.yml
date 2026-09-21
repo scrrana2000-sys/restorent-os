@@ -123,7 +123,7 @@ jobs:
           env_vars: |-
             NODE_ENV=production
             PUBLIC_APP_URL=https://restaurantos01.ai.studio
-            ALLOWED_ORIGINS=https://restaurantos01.ai.studio\,https://restaurantos-xqi52dpwgo-as.a.run.app\,https://scrrana2000-sys.github.io
+            ALLOWED_ORIGINS=https://restaurantos01.ai.studio\,https://antos01.ai.studio\,https://restaurantos-xqi52dpwgo-as.a.run.app\,https://scrrana2000-sys.github.io
             SYSTEM_SERVER_UID=restaurantos-system-server
             FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96
             FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57
