@@ -1,13 +1,9 @@
 name: Deploy RestaurantOS API to Cloud Run
 
+# Production Cloud Run deployment is intentionally manual while RestaurantOS is being
+# validated in Google AI Studio. Keep the full deployment pipeline here for the
+# final production release, but do not deploy on every GitHub push.
 on:
-  push:
-    branches: [main, master]
-    paths-ignore:
-      - 'firestore.rules'
-      - 'storage.rules'
-      - 'firebase.json'
-      - '.firebaserc'
   workflow_dispatch:
 
 permissions:
