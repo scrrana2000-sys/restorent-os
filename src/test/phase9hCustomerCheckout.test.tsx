@@ -267,6 +267,8 @@ describe('Phase M9-H: Customer Checkout Verification Suite', () => {
 
   it('10. Phone validation enforces valid mobile format', () => {
     expect(isValidPhoneNumber('9876543210')).toBe(true);
+    expect(isValidPhoneNumber('+91 9876543210')).toBe(true);
+    expect(isValidPhoneNumber('98765-43210')).toBe(true);
     expect(isValidPhoneNumber('123')).toBe(false);
 
     const result = validateCustomerCheckout({
