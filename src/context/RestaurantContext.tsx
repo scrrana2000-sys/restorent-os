@@ -535,10 +535,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             localStorage.setItem(`restaurantos_restaurant_id_${user.uid}`, resolvedRestaurant.restaurantId);
           } catch {}
 
-          try {
-            await updateUserProfileRestaurantId(user.uid, resolvedRestaurant.restaurantId);
-          } catch (linkErr) {
-            console.warn('[RestaurantOS Debug] Failed to persist restaurantId link to profile:', linkErr);
+          // Avoid a Firestore write when the profile already points to the
+          // resolved restaurant. Only repair the link when it is actually stale.
+          if (verifiedProfile?.restaurantId !== resolvedRestaurant.restaurantId) {
+            try {
+              await updateUserProfileRestaurantId(user.uid, resolvedRestaurant.restaurantId);
+            } catch (linkErr) {
+              console.warn('[RestaurantOS Debug] Failed to persist restaurantId link to profile:', linkErr);
+            }
           }
 
           setProfile((prev) => {

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { kotService } from '../services/kotService';
 import { tableService } from '../services/tableService';
 import { orderService } from '../services/orderService';
-import { subscribeToMenuItems } from '../services/menuService';
+import { getMenuItemsOnce } from '../services/menuService';
 import { offlineSyncService } from '../services/offlineSyncService';
 import { KOT, KOTStatus } from '../types/kot';
 import { Table } from '../types/table';
@@ -73,9 +73,7 @@ export const KitchenPage: React.FC = () => {
     setError(null);
 
     let unsubKots = () => {};
-    let unsubTables = () => {};
     let unsubOrders = () => {};
-    let unsubMenuItems = () => {};
 
     try {
       // Subscribe to active kitchen KOTs
@@ -97,12 +95,10 @@ export const KitchenPage: React.FC = () => {
         }
       );
 
-      // Subscribe to tables for Table Name mapping
-      unsubTables = tableService.subscribeToTables(
-        restaurantId,
-        (tbls) => setTables(tbls),
-        (err) => console.warn('Tables sub error in kitchen:', err)
-      );
+      // Table labels change infrequently; load them once for this page.
+      tableService.getTables(restaurantId)
+        .then((tbls) => setTables(tbls))
+        .catch((err) => console.warn('Tables load error in kitchen:', err));
 
       // Subscribe to active orders for Order Number & Order Type mapping
       unsubOrders = orderService.subscribeToActiveOrders(
@@ -111,12 +107,10 @@ export const KitchenPage: React.FC = () => {
         (err) => console.warn('Orders sub error in kitchen:', err)
       );
 
-      // Subscribe to menu items for visual image & dietary type lookup
-      unsubMenuItems = subscribeToMenuItems(
-        restaurantId,
-        (items) => setMenuItems(items),
-        (err) => console.warn('Menu items sub error in kitchen:', err)
-      );
+      // Menu catalog is page data, not a live kitchen stream.
+      getMenuItemsOnce(restaurantId)
+        .then((items) => setMenuItems(items))
+        .catch((err) => console.warn('Menu items load error in kitchen:', err));
     } catch (err: any) {
       setError(err.message || 'Error subscribing to kitchen realtime data');
       setLoading(false);
@@ -124,9 +118,7 @@ export const KitchenPage: React.FC = () => {
 
     return () => {
       unsubKots();
-      unsubTables();
       unsubOrders();
-      unsubMenuItems();
     };
   }, [restaurantId]);
 

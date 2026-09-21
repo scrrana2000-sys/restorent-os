@@ -79,6 +79,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   const [paymentDueOrders, setPaymentDueOrders] = useState<Order[]>([]);
   const [paymentDueLoading, setPaymentDueLoading] = useState<boolean>(false);
   const [paymentDueError, setPaymentDueError] = useState<string | null>(null);
+  const [paymentDueReloadToken, setPaymentDueReloadToken] = useState(0);
   const [isPaymentDueModalOpen, setIsPaymentDueModalOpen] = useState<boolean>(false);
 
   // Modals
@@ -199,7 +200,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     return () => {
       cancelled = true;
     };
-  }, [restaurantId, isPaymentDueModalOpen]);
+  }, [restaurantId, isPaymentDueModalOpen, paymentDueReloadToken]);
 
   const totalPaymentDueMinor = useMemo(() => {
     return paymentDueOrders.reduce((sum, ord) => {
@@ -928,8 +929,9 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         loading={paymentDueLoading}
         error={paymentDueError}
         onRetry={() => {
-          setPaymentDueLoading(true);
           setPaymentDueError(null);
+          setPaymentDueLoading(true);
+          setPaymentDueReloadToken((value) => value + 1);
         }}
         onCollectPayment={(orderToCollect) => {
           setIsPaymentDueModalOpen(false);

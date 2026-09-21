@@ -13,7 +13,7 @@ import {
   Plus
 } from 'lucide-react';
 import { useRestaurant } from '../context/RestaurantContext';
-import { subscribeToCategories, subscribeToMenuItems } from '../services/menuService';
+import { getCategoriesOnce, getMenuItemsOnce } from '../services/menuService';
 import { Category, MenuItem } from '../types/menu';
 import { Button } from '../components/common/Button';
 import { AdminView } from '../components/layout/Sidebar';
@@ -30,27 +30,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!restaurant) return;
+    if (!restaurant?.restaurantId) return;
 
     let isMounted = true;
-    console.log('[RestaurantOS Debug] DashboardPage subscribing for restaurantId:', restaurant.restaurantId);
-    const unsubCategories = subscribeToCategories(restaurant.restaurantId, (cats) => {
-      if (!isMounted) return;
-      console.log('[RestaurantOS Debug] DashboardPage categories count:', cats.length);
-      setCategories(cats);
-    });
+    setIsLoading(true);
 
-    const unsubItems = subscribeToMenuItems(restaurant.restaurantId, (menuItems) => {
-      if (!isMounted) return;
-      console.log('[RestaurantOS Debug] DashboardPage menu items count:', menuItems.length);
-      setItems(menuItems);
-      setIsLoading(false);
-    });
+    (async () => {
+      try {
+        const [cats, menuItems] = await Promise.all([
+          getCategoriesOnce(restaurant.restaurantId),
+          getMenuItemsOnce(restaurant.restaurantId)
+        ]);
+        if (!isMounted) return;
+        setCategories(cats);
+        setItems(menuItems);
+      } catch (err) {
+        if (isMounted) console.warn('[RestaurantOS Debug] Dashboard menu load notice:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    })();
 
     return () => {
       isMounted = false;
-      unsubCategories();
-      unsubItems();
     };
   }, [restaurant?.restaurantId]);
 

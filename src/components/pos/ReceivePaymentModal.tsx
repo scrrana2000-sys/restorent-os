@@ -5,7 +5,6 @@ import { Table } from '../../types/table';
 import { formatMoney, fromMoneyMinor, toMoneyMinor, isValidMoney } from '../../utils/money';
 import { getFormattedTableLabel } from '../../utils/tableLabel';
 import { paymentService } from '../../services/paymentService';
-import { tableService } from '../../services/tableService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
@@ -30,21 +29,9 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
   const { user } = useAuth();
   const symbol = restaurant?.currencySymbol || '₹';
 
-  const [tables, setTables] = useState<Table[]>([]);
-  useEffect(() => {
-    if (!isOpen || tableMapProp || !restaurant?.restaurantId) return;
-    const unsub = tableService.subscribeToTables(restaurant.restaurantId, (liveTables) => {
-      setTables(liveTables);
-    });
-    return () => unsub();
-  }, [isOpen, tableMapProp, restaurant?.restaurantId]);
-
-  const activeTableMap = useMemo(() => {
-    if (tableMapProp) return tableMapProp;
-    const map = new Map<string, Table>();
-    tables.forEach((t) => map.set(t.id, t));
-    return map;
-  }, [tableMapProp, tables]);
+  // The parent POS/Payments page already has the table map when needed.
+  // Do not open a second realtime tables listener during payment.
+  const activeTableMap = tableMapProp || new Map<string, Table>();
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [amountRupees, setAmountRupees] = useState<string>('');
