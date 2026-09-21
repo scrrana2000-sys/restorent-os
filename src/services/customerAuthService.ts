@@ -5,7 +5,7 @@ import {
   onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { CustomerProfile, CustomerAddress } from '../types/customer';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
@@ -60,7 +60,10 @@ export async function getCustomerProfile(customerId: string): Promise<CustomerPr
       authProvider: data.authProvider || 'google.com',
       addresses: Array.isArray(data.addresses) ? data.addresses : [],
       createdAt: data.createdAt || new Date().toISOString(),
-      updatedAt: data.updatedAt || new Date().toISOString()
+      updatedAt: data.updatedAt || new Date().toISOString(),
+      accountStatus: data.accountStatus === 'blocked' ? 'blocked' : 'active',
+      blockedAt: data.blockedAt,
+      blockedReason: data.blockedReason
     };
   } catch (err) {
     throw handleFirestoreError(err, OperationType.GET, `customers/${customerId}`);
@@ -73,9 +76,26 @@ export async function getCustomerProfile(customerId: string): Promise<CustomerPr
  */
 export async function provisionCustomerProfile(firebaseUser: FirebaseUser): Promise<CustomerProfile> {
   const customerId = firebaseUser.uid;
+
+  // A Firebase UID that already owns or staffs a restaurant must never be
+  // silently converted into a customer identity. Restaurant ownership is
+  // authoritative from the /users/{uid} profile pointer.
+  const userRef = doc(db, 'users', customerId);
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists()) {
+    const userData = userSnap.data() as any;
+    if (userData.restaurantId || userData.role === 'owner' || userData.role === 'manager' || userData.role === 'cashier' || userData.role === 'kitchen' || userData.role === 'captain' || userData.role === 'accountant') {
+      throw new Error('This Google account is registered as a Restaurant account. Customer access is unavailable while the restaurant account exists.');
+    }
+  }
+
   const existing = await getCustomerProfile(customerId);
 
   if (existing) {
+    if (existing.accountStatus === 'blocked') {
+      throw new Error('Customer access is blocked because this Google account owns a Restaurant. Delete the Restaurant permanently to restore Customer access.');
+    }
+
     // If photoURL was missing previously or has updated from Google, update it safely
     if (firebaseUser.photoURL && existing.photoURL !== firebaseUser.photoURL) {
       try {
@@ -106,12 +126,24 @@ export async function provisionCustomerProfile(firebaseUser: FirebaseUser): Prom
     authProvider: 'google.com',
     addresses: [],
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    accountStatus: 'active'
   };
 
   try {
     const customerRef = doc(db, 'customers', customerId);
     await setDoc(customerRef, newProfile);
+    // Create the lightweight identity profile only for an explicit customer flow.
+    // Owner onboarding writes restaurantId later and therefore prevents future
+    // customer provisioning for the same Firebase UID.
+    await setDoc(userRef, {
+      userId: customerId,
+      displayName: newProfile.name,
+      email: newProfile.email,
+      photoUrl: newProfile.photoURL || null,
+      createdAt: newProfile.createdAt,
+      updatedAt: newProfile.updatedAt
+    }, { merge: true });
     return newProfile;
   } catch (err) {
     throw handleFirestoreError(err, OperationType.CREATE, `customers/${customerId}`);
