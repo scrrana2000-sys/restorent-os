@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { signInWithCustomToken } from 'firebase/auth';
+import { auth, db } from '../config/firebase';
 import { adminAuth, SYSTEM_SERVER_UID, FIREBASE_ADMIN_PROJECT_ID } from './firebaseAdmin';
 
 let isServerAuthenticated = false;
@@ -32,15 +33,6 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
 
   isServerAuthenticating = true;
   try {
-    if (process.env.NODE_ENV !== 'production') {
-      isServerAuthenticated = true;
-      console.log(
-        '[RestaurantOS Server] AI Studio/dev server identity ready via Firebase Admin SDK.',
-        { projectId: FIREBASE_ADMIN_PROJECT_ID }
-      );
-      return true;
-    }
-
     const serverUid = process.env.SYSTEM_SERVER_UID?.trim() || SYSTEM_SERVER_UID;
 
     try {
@@ -63,18 +55,32 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
         });
       }
 
+      // The application services use the Firebase JS Firestore client and its
+      // modular APIs. Authenticate that client with an Admin-issued custom token
+      // instead of using a shared password or an unauthenticated client. This
+      // keeps the existing service layer compatible while making server-side
+      // Firestore requests carry the server=true claim required by the rules.
+      const customToken = await adminAuth.createCustomToken(serverUid, { server: true });
+      const signedIn = await signInWithCustomToken(auth, customToken);
+      if (signedIn.user?.uid !== serverUid) {
+        throw new Error('Server Firebase client authentication returned an unexpected UID.');
+      }
+
       console.log(
-        '[RestaurantOS Server] Backend server identity claim prepared via Firebase Admin SDK.',
+        '[RestaurantOS Server] Backend server identity authenticated with Admin-issued custom token.',
         { projectId: FIREBASE_ADMIN_PROJECT_ID, serverUid }
       );
     } catch (authErr: any) {
-      // Firebase Auth management APIs are not required for Admin SDK
-      // Firestore access. In particular, an unavailable Identity Toolkit API
-      // must not kill the Cloud Run process before it starts listening.
-      console.warn(
-        '[RestaurantOS Server] Firebase Auth claim setup skipped; continuing with Admin SDK:',
+      // The current service layer performs Firestore operations with the Firebase
+      // JS SDK, so failing to establish the server identity would make privileged
+      // requests fail with permission denied. Keep startup alive, but report a
+      // controlled false result so endpoints return SERVER_AUTH_UNAVAILABLE.
+      console.error(
+        '[RestaurantOS Server] Firebase server identity authentication failed:',
         authErr?.message || authErr
       );
+      isServerAuthenticated = false;
+      return false;
     }
 
     isServerAuthenticated = true;
