@@ -1,11 +1,16 @@
 /**
  * Resolve a RestaurantOS API endpoint.
  *
- * Localhost and Cloud Run are same-origin, while GitHub Pages/AI Studio previews
- * are static frontend hosts and therefore must use the trusted production API.
- * VITE_API_BASE_URL remains an optional explicit override.
+ * Production browsers use the authoritative Cloud Run API unless they are already
+ * running on that exact Cloud Run origin. Local development keeps localhost same-origin
+ * and may use an explicit VITE_API_BASE_URL override.
+ *
+ * This is intentionally deterministic: GitHub Pages and Google AI Studio are frontend
+ * hosts, so /api/* must never be sent back to their SPA shell (which returns index.html
+ * with HTTP 200 instead of JSON).
  */
 const PRODUCTION_API_BASE_URL = 'https://restaurantos-xqi52dpwga-el.a.run.app';
+const PRODUCTION_API_HOST = new URL(PRODUCTION_API_BASE_URL).hostname;
 
 export function getApiUrl(endpoint: string): string {
   const cleanPath = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
@@ -18,31 +23,18 @@ export function getApiUrl(endpoint: string): string {
 
     const host = window.location.hostname.toLowerCase();
     const isLocal = host === 'localhost' || host === '127.0.0.1';
-    // Google AI Studio preview runs the RestaurantOS Express + Vite development
-    // server on the same preview origin. Keep /api/* same-origin there so checkout,
-    // customer tracking, and owner APIs do not depend on a deleted/stale production
-    // Cloud Run URL during AI Studio validation.
-    // Only non-AI-Studio *.run.app hosts are treated as deployed Cloud Run API hosts.
-    const isAiStudioPreview = host.startsWith('ais-dev-') || host.endsWith('.ai.studio');
-    const isCloudRun = host.endsWith('.run.app') && !isAiStudioPreview;
-    const isGitHubPages = host === 'scrrana2000-sys.github.io' || host.endsWith('.github.io');
+    const isProductionCloudRun = host === PRODUCTION_API_HOST;
 
-    if (isAiStudioPreview) {
-      // Real AI Studio preview hosts run the RestaurantOS Express + Vite server
-      // on the same origin. Never send checkout/order APIs to a stale external
-      // base URL from a preview build; that can return the SPA HTML shell (200)
-      // instead of the JSON API response.
+    if (isLocal) {
+      // Local development may intentionally point at another local/test API.
+      baseUrl = configured || window.location.origin;
+    } else if (isProductionCloudRun) {
+      // Keep the deployed API same-origin.
       baseUrl = window.location.origin;
-    } else if (isGitHubPages) {
-      // GitHub Pages is static hosting: /api/* falls through to index.html (HTTP 200 text/html).
-      // Always send server API calls to the live Cloud Run backend from this host.
-      baseUrl = PRODUCTION_API_BASE_URL;
-    } else if (configured && (isLocal || !configured.includes('localhost'))) {
-      baseUrl = configured;
     } else {
-      baseUrl = isLocal || isAiStudioPreview || isCloudRun
-        ? window.location.origin
-        : PRODUCTION_API_BASE_URL;
+      // GitHub Pages, AI Studio and every other static/browser host must call the
+      // authoritative production API instead of their SPA /api/* fallback.
+      baseUrl = PRODUCTION_API_BASE_URL;
     }
   } else {
     const configured = (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL || '').trim();
@@ -50,7 +42,7 @@ export function getApiUrl(endpoint: string): string {
   }
 
   const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-  return `${cleanBaseUrl}/${cleanPath}`;
+  return cleanBaseUrl + '/' + cleanPath;
 }
 
 export { PRODUCTION_API_BASE_URL };
