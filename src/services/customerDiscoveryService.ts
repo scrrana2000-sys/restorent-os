@@ -8,7 +8,8 @@ import {
   where,
   limit as firestoreLimit,
   startAfter,
-  orderBy
+  orderBy,
+  documentId
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
@@ -121,15 +122,28 @@ export async function discoverRestaurants(
         ? where('cityLower', '==', cityTerms[0])
         : where('cityLower', 'in', cityTerms.slice(0, 10));
 
-      const q = query(
+      const queryParts: any[] = [
         publicCol,
         firestoreCityFilter,
+        orderBy(documentId())
+      ];
+      if (criteria.cursor) {
+        queryParts.push(startAfter(criteria.cursor));
+      }
+      queryParts.push(
         firestoreLimit(pageSize * 3) // Fetch a slightly larger batch for in-memory status/area/cuisine filtering
       );
+      const q = query(...queryParts);
+
       snapshot = await getDocs(q);
     } else {
       // Fallback if city is not set but an explicit search query was entered by the user
-      const q = query(publicCol, firestoreLimit(MAX_PAGE_SIZE));
+      const queryParts: any[] = [publicCol, orderBy(documentId())];
+      if (criteria.cursor) {
+        queryParts.push(startAfter(criteria.cursor));
+      }
+      queryParts.push(firestoreLimit(MAX_PAGE_SIZE));
+      const q = query(...queryParts);
       snapshot = await getDocs(q);
     }
 
@@ -229,7 +243,11 @@ export async function discoverRestaurants(
 
     const hasMore = items.length > pageSize;
     const finalItems = hasMore ? items.slice(0, pageSize) : items;
-    const nextCursor = hasMore && finalItems.length > 0 ? finalItems[finalItems.length - 1].restaurantId : null;
+    // Public restaurant documents are keyed by restaurantId, so the returned
+    // restaurantId is also a stable Firestore document-id cursor.
+    const nextCursor = hasMore && finalItems.length > 0
+      ? finalItems[finalItems.length - 1].restaurantId
+      : null;
 
     return {
       restaurants: finalItems,
