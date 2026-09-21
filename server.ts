@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { auth } from './src/config/firebase';
 import { submitCustomerOnlineOrder } from './src/services/customerCheckoutService';
+import { submitServerOnlineOrder } from './src/server/onlineOrderService';
 import { sanitizeCustomerOrder } from './src/services/customerOrderTrackingService';
 import { resolveRestaurantBySlug } from './src/services/customerDiscoveryService';
 import { collection, getDocs, getDoc, query, where } from 'firebase/firestore';
@@ -666,15 +667,6 @@ app.post('/api/submit-online-order', async (req, res) => {
       }
     }
 
-    const serverAuthenticated = await ensureServerAuthenticated();
-    if (!serverAuthenticated) {
-      return res.status(503).json({
-        success: false,
-        error: 'SERVER_AUTH_UNAVAILABLE',
-        message: 'Order processing service is temporarily unavailable.'
-      });
-    }
-
     const {
       intent,
       cart,
@@ -718,17 +710,23 @@ app.post('/api/submit-online-order', async (req, res) => {
 
     const guestTrackingToken = randomBytes(32).toString('base64url');
 
-    const result = await submitCustomerOnlineOrder({
+    if (!cart || !customerDetails || !orderType || !paymentMethod) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_CHECKOUT_DATA',
+        message: 'Cart, customer details, order type, and payment method are required.'
+      });
+    }
+
+    const result = await submitServerOnlineOrder({
       intent,
       cart,
       restaurantProfile,
-      menuItems,
       orderType,
       customerDetails,
       deliveryDetails,
       paymentMethod,
       idempotencyKey,
-      operatingProfile,
       customerId: effectiveCustomerId,
       customerEmail: effectiveCustomerEmail,
       customerTrackingToken: guestTrackingToken
