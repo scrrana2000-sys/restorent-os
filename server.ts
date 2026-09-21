@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { auth } from './src/config/firebase';
-import { submitCustomerOnlineOrder } from './src/services/customerCheckoutService';
 import { submitServerOnlineOrder } from './src/server/onlineOrderService';
 import { sanitizeCustomerOrder } from './src/services/customerOrderTrackingService';
 import { resolveRestaurantBySlug } from './src/services/customerDiscoveryService';
