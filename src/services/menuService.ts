@@ -16,16 +16,6 @@ import { Category, CategoryFormData, MenuItem, MenuItemFormData } from '../types
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { enforcePermission } from '../utils/permissions';
 
-// -------------------------------------------------------------
-// CATEGORIES
-// -------------------------------------------------------------
-
-export function subscribeToCategories(
-  restaurantId: string,
-  callback: (categories: Category[]) => void,
-  onError?: (err: unknown) => void
-) {
-  const colRef = collection(db, 'restaurants', restaurantId, 'categories');
   const categoryCache = new Map<string, Category[]>();
 const menuItemCache = new Map<string, MenuItem[]>();
 
@@ -101,6 +91,18 @@ export function invalidateMenuCache(restaurantId: string): void {
   menuItemCache.delete(cleanId);
 }
 
+
+
+// -------------------------------------------------------------
+// CATEGORIES
+// -------------------------------------------------------------
+
+export function subscribeToCategories(
+  restaurantId: string,
+  callback: (categories: Category[]) => void,
+  onError?: (err: unknown) => void
+) {
+  const colRef = collection(db, 'restaurants', restaurantId, 'categories');
 const q = query(colRef, orderBy('sortOrder', 'asc'));
 
   return onSnapshot(
