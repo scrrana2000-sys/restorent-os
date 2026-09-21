@@ -16,8 +16,8 @@ import {
 import { useRestaurant } from './RestaurantContext';
 import {
   ensureRestaurantTrial,
-  subscribeToRestaurantSubscription,
-  subscribeToSubscriptionHistory,
+  getRestaurantSubscription,
+  getSubscriptionHistoryOnce,
   activatePaidSubscription
 } from '../services/subscriptionService';
 import {
@@ -40,6 +40,7 @@ interface SubscriptionContextType {
   closePaymentModal: () => void;
   processPaymentAndActivate: (planId: string, cycle: BillingCycle) => Promise<boolean>;
   refreshSubscription: () => Promise<void>;
+  loadSubscriptionHistory: () => Promise<void>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -60,7 +61,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return evaluateSubscriptionEntitlements(subscription);
   }, [subscription]);
 
-  // Load and subscribe to subscription document
+  // Load the current subscription once. The owner console does not keep a
+  // subscription or billing-history listener alive while other pages are open.
   useEffect(() => {
     if (!restaurantId) {
       setSubscription(null);
@@ -69,75 +71,41 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
+    let isMounted = true;
     setLoading(true);
     setError(null);
 
-    let unsubSub: (() => void) | null = null;
-    let unsubHist: (() => void) | null = null;
-    let isMounted = true;
-
-    async function initSubscription() {
-      let initializedSubscription: RestaurantSubscription | null = null;
-
+    (async () => {
       try {
-        // Server-authoritatively create the one-time 7-day trial when the
-        // restaurant has no subscription yet. Use the returned document
-        // immediately so the UI never renders a false "expired" state while
-        // waiting for the realtime listener to deliver the same document.
-        initializedSubscription = await ensureRestaurantTrial(restaurantId!);
-        if (isMounted && initializedSubscription) {
-          setSubscription(initializedSubscription);
+        let current = await getRestaurantSubscription(restaurantId);
+
+        // Backfill/initialize only when the document is missing or incomplete.
+        if (!current || !current.operationalAccessUntil) {
+          try {
+            current = await ensureRestaurantTrial(restaurantId);
+          } catch (trialErr: any) {
+            console.warn('[SubscriptionContext] Trial initialization notice:', trialErr?.message || trialErr);
+          }
+        }
+
+        if (isMounted) {
+          setSubscription(current);
+          setLoading(false);
         }
       } catch (err: any) {
-        console.warn('[SubscriptionContext] Trial initialization notice:', err?.message || err);
+        if (isMounted) {
+          console.warn('[SubscriptionContext] Subscription read notice:', err);
+          setError(err?.message || 'Unable to load subscription status.');
+          setLoading(false);
+        }
       }
-
-      if (!isMounted) return;
-
-      // Realtime listener for subscription. The initial server result above
-      // remains authoritative until this listener provides the same/current
-      // Firestore document, preventing a transient lock screen on first login.
-      unsubSub = subscribeToRestaurantSubscription(
-        restaurantId!,
-        (sub) => {
-          if (isMounted) {
-            // Keep a valid first-login/Auth-time trial in memory if the
-            // subscription document has not been persisted yet. Once Firestore
-            // has the real document, the listener naturally replaces it.
-            setSubscription(sub || initializedSubscription);
-            setLoading(false);
-          }
-        },
-        (err) => {
-          if (isMounted) {
-            console.warn('[SubscriptionContext] Listener warning:', err);
-            setLoading(false);
-          }
-        }
-      );
-
-      // Realtime listener for history
-      unsubHist = subscribeToSubscriptionHistory(
-        restaurantId!,
-        (records) => {
-          if (isMounted) {
-            setHistory(records);
-          }
-        },
-        (err) => {
-          if (isMounted) console.warn('[SubscriptionContext] History listener warning:', err);
-        }
-      );
-    }
-
-    initSubscription();
+    })();
 
     return () => {
       isMounted = false;
-      if (unsubSub) unsubSub();
-      if (unsubHist) unsubHist();
     };
   }, [restaurantId]);
+
 
   const openPaymentModal = useCallback((planId: string, cycle: BillingCycle = 'annual') => {
     setSelectedPlanModal({ planId, cycle });
@@ -292,9 +260,27 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const refreshSubscription = useCallback(async () => {
     if (!restaurantId) return;
     try {
-      await ensureRestaurantTrial(restaurantId);
+      let current = await getRestaurantSubscription(restaurantId);
+      if (!current || !current.operationalAccessUntil) {
+        current = await ensureRestaurantTrial(restaurantId);
+      }
+      setSubscription(current);
     } catch (err) {
       console.warn('[SubscriptionContext] Refresh warning:', err);
+    }
+  }, [restaurantId]);
+
+  const loadSubscriptionHistory = useCallback(async () => {
+    if (!restaurantId) {
+      setHistory([]);
+      return;
+    }
+    try {
+      const records = await getSubscriptionHistoryOnce(restaurantId);
+      setHistory(records);
+    } catch (err) {
+      console.warn('[SubscriptionContext] History load warning:', err);
+      setHistory([]);
     }
   }, [restaurantId]);
 
@@ -318,7 +304,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       openPaymentModal,
       closePaymentModal,
       processPaymentAndActivate,
-      refreshSubscription
+      refreshSubscription,
+      loadSubscriptionHistory
     }),
     [
       subscription,
@@ -332,7 +319,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       openPaymentModal,
       closePaymentModal,
       processPaymentAndActivate,
-      refreshSubscription
+      refreshSubscription,
+      loadSubscriptionHistory
     ]
   );
 
