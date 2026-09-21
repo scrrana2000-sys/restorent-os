@@ -219,6 +219,7 @@ export class PaymentService implements IPaymentService {
 
       let createdPaymentDoc: Payment | null = null;
       let cachedPaymentDoc: Payment | null = null;
+      let resultingDueAmountMinor: number | null = null;
 
       const maxRetries = 3;
       let attempt = 0;
@@ -290,6 +291,7 @@ export class PaymentService implements IPaymentService {
             }
 
             const newDueAmountMinor = Math.max(0, currentGrandTotal - newPaidAmountMinor);
+            resultingDueAmountMinor = newDueAmountMinor;
 
             const paymentPayload: Record<string, any> = {
               id: newPaymentRef.id,
@@ -412,7 +414,9 @@ export class PaymentService implements IPaymentService {
         }
       });
 
-      if (resolvedStatus === 'completed') {
+      // Finalization is only relevant after the order becomes fully paid.
+      // Partial payments no longer trigger a second Cloud Run/API workflow.
+      if (resolvedStatus === 'completed' && resultingDueAmountMinor === 0) {
         try {
           await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
             cleanRestaurantId,
