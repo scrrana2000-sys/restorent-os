@@ -43,8 +43,27 @@ export async function ensureServerAuthenticated(): Promise<boolean> {
         if (err?.code !== 'auth/user-not-found') throw err;
         serverUser = await adminAuth.createUser({
           uid: serverUid,
+          email: 'system-server@restaurantos.app',
+          emailVerified: true,
           disabled: false
         });
+      }
+
+      // Existing system users created before this backend-authentication hardening
+      // may not have the reserved email used by a few legacy service guards. Keep that
+      // identity consistent without exposing any password-based login path.
+      if (serverUser.email !== 'system-server@restaurantos.app') {
+        try {
+          serverUser = await adminAuth.updateUser(serverUid, {
+            email: 'system-server@restaurantos.app',
+            emailVerified: true
+          });
+        } catch (identityErr: any) {
+          console.warn(
+            '[RestaurantOS Server] Could not normalize system identity email; continuing with UID-based custom token:',
+            identityErr?.message || identityErr
+          );
+        }
       }
 
       const currentClaims = serverUser.customClaims || {};
