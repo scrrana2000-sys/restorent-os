@@ -5,7 +5,6 @@ import { Table } from '../../types/table';
 import { formatMoney, fromMoneyMinor, toMoneyMinor, isValidMoney } from '../../utils/money';
 import { getFormattedTableLabel } from '../../utils/tableLabel';
 import { paymentService } from '../../services/paymentService';
-import { orderService } from '../../services/orderService';
 import { tableService } from '../../services/tableService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { useRestaurant } from '../../context/RestaurantContext';
@@ -141,11 +140,21 @@ export const ReceivePaymentModal: React.FC<ReceivePaymentModalProps> = ({
         sessionId
       );
 
-      // Fetch fresh order snapshot
-      const updatedOrder = await orderService.getOrderById(restaurant.restaurantId, order.id);
-      
+      // The payment transaction already returned a successful payment. Avoid
+      // an extra Firestore order read just to refresh the modal; update the
+      // local order snapshot optimistically instead.
+      const newPaidMinor = order.paidAmountMinor + payAmountMinor;
+      const newDueMinor = Math.max(0, order.grandTotalMinor - newPaidMinor);
+      const updatedOrder: Order = {
+        ...order,
+        paidAmountMinor: newPaidMinor,
+        dueAmountMinor: newDueMinor,
+        paymentStatus: newDueMinor === 0 ? 'paid' : 'partially_paid',
+        status: newDueMinor === 0 && order.status === 'served' ? 'completed' : order.status
+      };
+
       if (onPaymentSuccess) {
-        onPaymentSuccess(updatedOrder || order, createdPayment);
+        onPaymentSuccess(updatedOrder, createdPayment);
       }
       onClose();
     } catch (err: any) {
