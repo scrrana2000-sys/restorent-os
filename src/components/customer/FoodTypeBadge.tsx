@@ -17,7 +17,11 @@ export const FoodTypeBadge: React.FC<FoodTypeBadgeProps> = ({
   showLabel = false,
   className = ''
 }) => {
-  const normalized = (foodType || 'veg').toLowerCase();
+  const normalized = typeof foodType === 'string' ? foodType.toLowerCase() : 'veg';
+  // Defensive normalization: malformed/legacy menu data must never crash the
+  // customer menu when a sidebar or cart interaction causes a re-render.
+  const safeSize: 'sm' | 'md' | 'lg' =
+    size === 'sm' || size === 'lg' || size === 'md' ? size : 'md';
 
   const sizeClasses = {
     sm: {
@@ -38,7 +42,7 @@ export const FoodTypeBadge: React.FC<FoodTypeBadgeProps> = ({
       triangle: 'border-l-[5px] border-r-[5px] border-b-[8px]',
       text: 'text-xs'
     }
-  }[size];
+  }[safeSize];
 
   if (normalized === 'veg') {
     return (
