@@ -15,7 +15,7 @@ import { Order, OrderItemModifier, CustomerSnapshot } from '../types/order';
 import { KOT } from '../types/kot';
 import { CartState, CartItem } from '../types/cart';
 import { RestaurantOperatingProfile } from '../config/restaurantOperatingModes';
-import { getApiUrl } from '../utils/apiConfig';
+import { getApiUrl, PRODUCTION_API_BASE_URL } from '../utils/apiConfig';
 import { auth, db } from '../config/firebase';
 import { getActivePlanEntitlements } from './subscriptionService';
 import { doc, getDoc } from 'firebase/firestore';
@@ -454,24 +454,44 @@ export async function submitCustomerOnlineOrder(
       headers['Authorization'] = `Bearer ${idToken}`;
     }
 
-    const response = await fetch(getApiUrl('/api/submit-online-order'), {
-      method: 'POST',
-      headers: {
-        ...headers,
-        Accept: 'application/json'
-      },
-      credentials: 'omit',
-      body: JSON.stringify({
-        ...input,
-        customerId: customerId || (auth.currentUser ? auth.currentUser.uid : null),
-        customerEmail
-      })
+    const apiHeaders = {
+      ...headers,
+      Accept: 'application/json'
+    };
+    const requestBody = JSON.stringify({
+      ...input,
+      customerId: customerId || (auth.currentUser ? auth.currentUser.uid : null),
+      customerEmail
     });
 
-    // Never blindly call response.json(): an upstream proxy, stale deployment, or
-    // SPA fallback can return HTML (often starting with <!doctype html>). Surface a
-    // useful API error instead of exposing the misleading JSON parser exception.
-    const responseText = await response.text();
+    const primaryApiUrl = getApiUrl('/api/submit-online-order');
+    let response = await fetch(primaryApiUrl, {
+      method: 'POST',
+      headers: apiHeaders,
+      credentials: 'omit',
+      body: requestBody
+    });
+
+    // A stale SPA host, reverse proxy, or cached frontend can accidentally answer
+    // /api/* with index.html (HTTP 200 text/html). Retry once against the immutable
+    // production API endpoint using the same idempotency key before surfacing an error.
+    // The canonical server workflow is idempotent for clientRequestId/idempotencyKey.
+    let responseText = await response.text();
+    const isHtmlResponse = /text\/html/i.test(response.headers.get('content-type') || '') ||
+      /^\s*<(?:!doctype\s+html|html\b|head\b)/i.test(responseText);
+
+    const productionApiUrl = `${PRODUCTION_API_BASE_URL}/api/submit-online-order`;
+    if (isHtmlResponse && primaryApiUrl !== productionApiUrl) {
+      console.warn('[RestaurantOS] Primary order API returned HTML; retrying against production Cloud Run API.');
+      response = await fetch(productionApiUrl, {
+        method: 'POST',
+        headers: apiHeaders,
+        credentials: 'omit',
+        body: requestBody
+      });
+      responseText = await response.text();
+    }
+
     let responseData: any = null;
     try {
       responseData = responseText ? JSON.parse(responseText) : null;
