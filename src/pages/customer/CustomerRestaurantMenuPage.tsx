@@ -116,6 +116,17 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
     return () => window.removeEventListener('restaurantos_order_tracked', handleOrderTracked);
   }, [refreshActiveOrders]);
 
+  // Legacy/defensive bridge for customer sidebar instances that do not receive
+  // the checkout callback directly. Always open the real checkout modal.
+  useEffect(() => {
+    const handleOpenCheckout = () => {
+      setIsSidebarOpen(false);
+      setIsCheckoutModalOpen(true);
+    };
+    window.addEventListener('restaurantos_open_checkout', handleOpenCheckout);
+    return () => window.removeEventListener('restaurantos_open_checkout', handleOpenCheckout);
+  }, []);
+
   // Deep-linking: check URL params for ?track=orderId or #track?orderId=...
   useEffect(() => {
     if (typeof window === 'undefined') return;
