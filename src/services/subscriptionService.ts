@@ -234,7 +234,10 @@ export async function getActivePlanEntitlements(restaurantId: string): Promise<S
 
   try {
     let sub = await getRestaurantSubscription(cleanId);
-    if (!sub) {
+    // Existing legacy subscription documents may predate operationalAccessUntil.
+    // Always pass such documents through ensureRestaurantTrial() so the trusted
+    // backend can backfill the native Firestore Timestamp before gated writes.
+    if (!sub || !sub.operationalAccessUntil) {
       try {
         sub = await ensureRestaurantTrial(cleanId);
       } catch (trialError) {
