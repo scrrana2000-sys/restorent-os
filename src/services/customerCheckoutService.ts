@@ -85,8 +85,9 @@ async function buildAuthoritativeCustomerCartState(cart: CustomerCart, notes?: s
   if (!Array.isArray(cart.items) || cart.items.length === 0) throw new Error('Cart is empty.');
   if (cart.items.length > 30) throw new Error('Maximum 30 unique items allowed per order.');
 
-  const items: CartItem[] = [];
-  for (const clientItem of cart.items) {
+  // Catalog reads are independent per cart item. Fetch them in parallel so
+  // checkout latency does not grow linearly with the number of items.
+  const items = await Promise.all(cart.items.map(async (clientItem) => {
     if (!Number.isInteger(Number(clientItem.quantity)) || Number(clientItem.quantity) < 1 || Number(clientItem.quantity) > 100) {
       throw new Error(`Invalid quantity for item "${clientItem.name || clientItem.itemId}".`);
     }
@@ -103,9 +104,11 @@ async function buildAuthoritativeCustomerCartState(cart: CustomerCart, notes?: s
     const catalogTaxRate = Number(data.taxRate);
     if (!Number.isFinite(catalogPrice) || catalogPrice < 0 || catalogPrice > 10000000) throw new Error(`Invalid price for "${data.name}".`);
     if (!Number.isFinite(catalogTaxRate) || catalogTaxRate < 0 || catalogTaxRate > 100) throw new Error(`Invalid tax rate for "${data.name}".`);
+
     let unitPriceMinor = Math.round(catalogPrice * 100);
     let variantId: string | undefined;
     let variantName: string | undefined;
+
     if (clientItem.selectedVariantId || clientItem.selectedVariantName) {
       const variants = Array.isArray(data.variants) ? data.variants : [];
       const variant = variants.find((v) =>
@@ -123,6 +126,7 @@ async function buildAuthoritativeCustomerCartState(cart: CustomerCart, notes?: s
     const addons = Array.isArray(clientItem.selectedAddons) ? clientItem.selectedAddons : [];
     const sourceAddons = Array.isArray(data.addons) ? data.addons : (Array.isArray(data.addOns) ? data.addOns : []);
     const modifiers: OrderItemModifier[] = [];
+
     for (const clientAddon of addons) {
       const addon = sourceAddons.find((a) => a.id === clientAddon.addonId);
       if (!addon || addon.isAvailable === false) throw new Error(`Selected add-on for "${data.name}" is unavailable.`);
@@ -131,7 +135,7 @@ async function buildAuthoritativeCustomerCartState(cart: CustomerCart, notes?: s
       modifiers.push({ id: addon.id, name: addon.name, priceMinor: Math.round(addonPrice * 100) });
     }
 
-    items.push({
+    const canonicalItem: CartItem = {
       cartItemId: clientItem.cartItemId || `cart-item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       itemId: snap.id,
       nameSnapshot: data.name,
@@ -144,16 +148,18 @@ async function buildAuthoritativeCustomerCartState(cart: CustomerCart, notes?: s
       quantity: Number(clientItem.quantity),
       notes: clientItem.itemNotes || '',
       modifiers: modifiers.length ? modifiers : undefined
-    });
+    };
 
     // Preserve the selected variant in the snapshot without trusting client pricing.
-    if (variantId && variantName && items[items.length - 1]) {
-      items[items.length - 1].modifiers = [
+    if (variantId && variantName) {
+      canonicalItem.modifiers = [
         { id: variantId, name: `Option: ${variantName}`, priceMinor: 0 },
-        ...(items[items.length - 1].modifiers || [])
+        ...(canonicalItem.modifiers || [])
       ];
     }
-  }
+
+    return canonicalItem;
+  }));
   return { items, notes: notes || '' };
 }
 
