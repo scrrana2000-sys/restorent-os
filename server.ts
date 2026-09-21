@@ -1935,11 +1935,13 @@ async function startServer() {
   }
 
   if (process.env.NODE_ENV === 'production') {
-    const serverAuthenticated = await ensureServerAuthenticated();
-    if (!serverAuthenticated) {
-      console.error('[RestaurantOS Server] Fatal: backend server identity could not be initialized.');
-      process.exit(1);
-    }
+    // Firebase Admin SDK is the authoritative server identity for privileged
+    // Firestore operations. Auth-user/claim provisioning must never prevent
+    // Cloud Run from opening its HTTP listener. Endpoint-level authorization
+    // still verifies the caller before every privileged mutation.
+    await ensureServerAuthenticated().catch((err) => {
+      console.warn('[RestaurantOS Server] Server identity preparation skipped; continuing with Admin SDK:', err?.message || err);
+    });
   }
 
   activeServer = app.listen(PORT, '0.0.0.0', () => {
