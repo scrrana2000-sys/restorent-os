@@ -50,7 +50,8 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
     signInWithGoogle,
     signOut,
     updateProfile,
-    clearAuthError
+    clearAuthError,
+    refreshProfile
   } = useCustomerAuth();
 
   const currentUid = customer?.customerId || firebaseUser?.uid || null;
@@ -64,6 +65,15 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
   const [name, setName] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+
+  // Profile is a page/modal-scoped read. An existing Firebase session does
+  // not trigger Firestore until the customer actually opens their profile.
+  useEffect(() => {
+    if (!isOpen || !firebaseUser || customer) return;
+    refreshProfile().catch((err) => {
+      console.warn('[CustomerProfile] Profile refresh warning:', err);
+    });
+  }, [isOpen, firebaseUser, customer, refreshProfile]);
 
   // Load orders when modal is open
   useEffect(() => {
