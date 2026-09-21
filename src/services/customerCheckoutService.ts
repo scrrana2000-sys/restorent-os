@@ -435,9 +435,14 @@ export async function submitCustomerOnlineOrder(
     throw new Error('Customer contact details are required for online order submission.');
   }
 
-  // 1. If running on the client/browser, route the submission through our secure server API endpoint
-  const isTest = typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
-  if (typeof window !== 'undefined' && !isTest) {
+  // 1. Browser/customer checkout MUST always use the server API.
+  // Never fall back to the browser Firestore/idempotency path: guest customers
+  // intentionally have no Firebase Auth session, so IdempotencyService would
+  // reject them with "Authenticated user is required for idempotency operations."
+  const isBrowser = typeof window !== 'undefined';
+  const isTest = !isBrowser && typeof process !== 'undefined'
+    && (process.env?.NODE_ENV === 'test' || process.env?.VITEST === 'true');
+  if (isBrowser) {
     let idToken = input.idToken;
     if (!idToken && typeof auth !== 'undefined' && auth.currentUser) {
       try {
