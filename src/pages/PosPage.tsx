@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useAuth } from '../context/AuthContext';
-import { subscribeToCategories, subscribeToMenuItems } from '../services/menuService';
+import { getCategoriesOnce, getMenuItemsOnce } from '../services/menuService';
 import { orderService } from '../services/orderService';
 import { kotService } from '../services/kotService';
 import { tableSessionService } from '../services/tableSessionService';
@@ -77,7 +77,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
 
   // Payment Due Center state
   const [paymentDueOrders, setPaymentDueOrders] = useState<Order[]>([]);
-  const [paymentDueLoading, setPaymentDueLoading] = useState<boolean>(true);
+  const [paymentDueLoading, setPaymentDueLoading] = useState<boolean>(false);
   const [paymentDueError, setPaymentDueError] = useState<string | null>(null);
   const [isPaymentDueModalOpen, setIsPaymentDueModalOpen] = useState<boolean>(false);
 
@@ -120,45 +120,36 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     [cartItems]
   );
 
-  // 1. Subscribe to real-time Categories and MenuItems
+  // 1. Load only the POS menu data needed by this page.
+  // One-shot + browser cache replaces always-on realtime listeners.
   useEffect(() => {
     if (!restaurantId) return;
 
+    let cancelled = false;
     setMenuLoading(true);
     setMenuError(null);
 
-    let unsubCats = () => {};
-    let unsubItems = () => {};
+    (async () => {
+      try {
+        const [cats, items] = await Promise.all([
+          getCategoriesOnce(restaurantId),
+          getMenuItemsOnce(restaurantId)
+        ]);
 
-    try {
-      unsubCats = subscribeToCategories(
-        restaurantId,
-        (cats) => {
-          setCategories(cats.filter((c) => c.isActive));
-        },
-        (err) => console.error('Categories error:', err)
-      );
-
-      unsubItems = subscribeToMenuItems(
-        restaurantId,
-        (items) => {
-          setMenuItems(items);
-          setMenuLoading(false);
-        },
-        (err: any) => {
-          console.error('Menu items error:', err);
-          setMenuError(err.message || 'Failed to load menu items');
-          setMenuLoading(false);
-        }
-      );
-    } catch (err: any) {
-      setMenuError(err.message || 'Error subscribing to menu data');
-      setMenuLoading(false);
-    }
+        if (cancelled) return;
+        setCategories(cats.filter((c) => c.isActive));
+        setMenuItems(items);
+      } catch (err: any) {
+        if (cancelled) return;
+        console.error('[POS] Menu load error:', err);
+        setMenuError(err?.message || 'Failed to load menu data');
+      } finally {
+        if (!cancelled) setMenuLoading(false);
+      }
+    })();
 
     return () => {
-      unsubCats();
-      unsubItems();
+      cancelled = true;
     };
   }, [restaurantId]);
 
@@ -183,29 +174,32 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     return () => unsubscribe();
   }, [restaurantId, activeSession?.id]);
 
-  // Subscribe to real-time payment due orders
+  // Payment-due orders are loaded only when the payment-due modal is opened.
   useEffect(() => {
-    if (!restaurantId) return;
+    if (!restaurantId || !isPaymentDueModalOpen) return;
 
+    let cancelled = false;
     setPaymentDueLoading(true);
     setPaymentDueError(null);
 
-    const unsubscribe = orderService.subscribeToPaymentDueOrders(
-      restaurantId,
-      (dueOrders) => {
-        setPaymentDueOrders(dueOrders);
-        setPaymentDueLoading(false);
-        setPaymentDueError(null);
-      },
-      (err) => {
-        console.error('[PosPage] Payment due subscription error:', err);
+    orderService.getPaymentDueOrders(restaurantId)
+      .then((orders) => {
+        if (cancelled) return;
+        setPaymentDueOrders(orders);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        console.error('[PosPage] Payment due load error:', err);
         setPaymentDueError(err?.message || 'Failed to load payment due orders.');
-        setPaymentDueLoading(false);
-      }
-    );
+      })
+      .finally(() => {
+        if (!cancelled) setPaymentDueLoading(false);
+      });
 
-    return () => unsubscribe();
-  }, [restaurantId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [restaurantId, isPaymentDueModalOpen]);
 
   const totalPaymentDueMinor = useMemo(() => {
     return paymentDueOrders.reduce((sum, ord) => {
