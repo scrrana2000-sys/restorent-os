@@ -172,6 +172,19 @@ export async function getOrCreateInitialRestaurant(
         console.warn('[RestaurantOS Idempotency] Failed to reconcile user profile pointer:', linkErr);
       }
       await ensureOwnerMembership(existing, userId, userEmail, ownerName);
+      const existingCustomerRef = doc(db, 'customers', userId);
+      try {
+        const existingCustomerSnap = await getDoc(existingCustomerRef);
+        if (existingCustomerSnap.exists()) {
+          await setDoc(existingCustomerRef, {
+            accountStatus: 'blocked',
+            blockedAt: serverTimestamp(),
+            blockedReason: 'restaurant_owner'
+          }, { merge: true });
+        }
+      } catch (customerBlockErr) {
+        console.warn('[RestaurantOS Account Lifecycle] Existing owner/customer reconciliation warning:', customerBlockErr);
+      }
       return existing;
     }
   } catch (queryErr) {
