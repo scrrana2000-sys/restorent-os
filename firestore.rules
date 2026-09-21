@@ -825,7 +825,10 @@ service cloud.firestore {
       // ==========================================================
  
        match /idempotency/{key} {
-         allow read: if isServer() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+         allow read: if isServer() || (isSignedIn() && (
+           !exists(/databases/$(database)/documents/restaurants/$(restaurantId)/idempotency/$(key))
+           || resource.data.createdBy == request.auth.uid
+         ));
          allow create: if (
              isServer()
              && request.resource.data.restaurantId == restaurantId
@@ -858,7 +861,10 @@ service cloud.firestore {
        }
  
        match /idempotencyKeys/{key} {
-         allow read: if isServer() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+         allow read: if isServer() || (isSignedIn() && (
+           !exists(/databases/$(database)/documents/restaurants/$(restaurantId)/idempotency/$(key))
+           || resource.data.createdBy == request.auth.uid
+         ));
          allow create: if (
              isServer()
              && request.resource.data.restaurantId == restaurantId
