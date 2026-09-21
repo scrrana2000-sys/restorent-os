@@ -15,6 +15,7 @@ ENV ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://restaurantos-xqi52d
 ENV PUBLIC_APP_URL=https://restaurantos01.ai.studio
 
 COPY --from=build /app/package.json ./
+COPY --from=build /app/firebase-applet-config.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-server ./dist-server

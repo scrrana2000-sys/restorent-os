@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   PRODUCTION_PUBLIC_URL,
   PRODUCTION_ORIGIN,
@@ -13,6 +13,26 @@ import {
 
 describe('GitHub Pages Production Invitation URL Migration Suite', () => {
   describe('1. Canonical Production Constants & URL Resolution', () => {
+    const originalViteUrl = (import.meta.env as any).VITE_PUBLIC_APP_URL;
+    const originalProcessUrl = process.env.PUBLIC_APP_URL;
+
+    beforeEach(() => {
+      delete (import.meta.env as any).VITE_PUBLIC_APP_URL;
+      delete process.env.PUBLIC_APP_URL;
+    });
+
+    afterEach(() => {
+      if (originalViteUrl !== undefined) {
+        (import.meta.env as any).VITE_PUBLIC_APP_URL = originalViteUrl;
+      } else {
+        delete (import.meta.env as any).VITE_PUBLIC_APP_URL;
+      }
+      if (originalProcessUrl !== undefined) {
+        process.env.PUBLIC_APP_URL = originalProcessUrl;
+      } else {
+        delete process.env.PUBLIC_APP_URL;
+      }
+    });
     it('defines the canonical production GitHub Pages URL', () => {
       expect(PRODUCTION_PUBLIC_URL).toBe('https://scrrana2000-sys.github.io/restorent-os/');
       expect(PRODUCTION_ORIGIN).toBe('https://scrrana2000-sys.github.io/restorent-os');
