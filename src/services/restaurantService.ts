@@ -146,6 +146,7 @@ export async function getOrCreateInitialRestaurant(
   const initDocId = `rest_init_${sanitizeId}`;
   const initRestRef = doc(db, 'restaurants', initDocId);
   const userRef = doc(db, 'users', userId);
+  const customerRef = doc(db, 'customers', userId);
 
   // 1. Pre-check: Check if user already owns any restaurant via collection query
   try {
@@ -180,6 +181,10 @@ export async function getOrCreateInitialRestaurant(
   // 2. Perform atomic, transaction-backed provisioning guard
   try {
     const result = await runTransaction(db, async (transaction) => {
+      // Read identity documents before writes so an existing customer profile is
+      // atomically blocked when this Firebase UID becomes a restaurant owner.
+      const customerSnap = await transaction.get(customerRef);
+
       // Re-verify user profile
       const userSnap = await transaction.get(userRef);
       if (userSnap.exists()) {
@@ -230,6 +235,13 @@ export async function getOrCreateInitialRestaurant(
         }
         const initData = { restaurantId: initRestSnap.id, ...rawInitData } as Restaurant;
         transaction.set(userRef, { userId, restaurantId: initDocId, initialRestaurantId: initDocId }, { merge: true });
+        if (customerSnap.exists()) {
+          transaction.set(customerRef, {
+            accountStatus: 'blocked',
+            blockedAt: serverTimestamp(),
+            blockedReason: 'restaurant_owner'
+          }, { merge: true });
+        }
         return initData;
       }
 
@@ -265,6 +277,13 @@ export async function getOrCreateInitialRestaurant(
 
       transaction.set(initRestRef, newRestaurant);
       transaction.set(userRef, { userId, restaurantId: initDocId, initialRestaurantId: initDocId }, { merge: true });
+      if (customerSnap.exists()) {
+        transaction.set(customerRef, {
+          accountStatus: 'blocked',
+          blockedAt: serverTimestamp(),
+          blockedReason: 'restaurant_owner'
+        }, { merge: true });
+      }
 
       return newRestaurant;
     });
