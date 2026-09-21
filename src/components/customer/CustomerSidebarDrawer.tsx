@@ -501,24 +501,6 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
               </span>
             </button>
 
-            {/* Checkout notice inside sidebar */}
-            {checkoutNoticeOpen && (
-              <div className="p-3 bg-indigo-50 border border-indigo-150 rounded-xl text-[10px] text-indigo-950 flex items-start gap-1.5 animate-in fade-in duration-150">
-                <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
-                <div className="space-y-0.5 flex-1">
-                  <span className="font-bold block">Checkout Flow Ready (M9-H)</span>
-                  <p className="text-indigo-700 leading-relaxed">
-                    Complete address, payment options, and order details are enabled in Milestone M9-H.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setCheckoutNoticeOpen(false)}
-                  className="p-0.5 text-indigo-400 hover:text-indigo-700"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
           </div>
         )}
       </div>
