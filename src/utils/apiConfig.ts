@@ -5,7 +5,7 @@
  * are static frontend hosts and therefore must use the trusted production API.
  * VITE_API_BASE_URL remains an optional explicit override.
  */
-const PRODUCTION_API_BASE_URL = 'https://restaurantos-xqi52dpwgo-as.a.run.app';
+const PRODUCTION_API_BASE_URL = 'https://restaurantos-xqi52dpwga-el.a.run.app';
 
 export function getApiUrl(endpoint: string): string {
   const cleanPath = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
