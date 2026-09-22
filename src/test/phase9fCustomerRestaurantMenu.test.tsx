@@ -183,7 +183,8 @@ const mockItemsA: MenuItem[] = [
     taxRate: 5,
     taxInclusive: true,
     foodType: 'nonVeg',
-    isAvailable: false, // SOLD OUT
+    isAvailable: true,
+    isOnlineAvailable: false, // ONLINE SOLD OUT ONLY
     sku: 'SKU-MR01',
     sortOrder: 2
   },
@@ -473,7 +474,14 @@ describe('M9-F Customer Restaurant Public Menu Master Suite', () => {
       expect(screen.getByText('Currently Unavailable')).toBeInTheDocument();
     });
 
-    it('(12) items with variants or add-ons display "Customize" button', async () => {
+    it('(12) POS stock and online availability remain independent', () => {
+      const result = organizePublicMenu('rest-tenant-a', mockCategoriesA, mockItemsA);
+      const item = result.allItems.find((entry) => entry.itemId === 'item-mutton-rogan')!;
+      expect(item.isAvailable).toBe(true);
+      expect(item.isOnlineAvailable).toBe(false);
+    });
+
+    it('(13) items with variants or add-ons display "Customize" button', async () => {
       render(<CustomerRestaurantMenuPage initialProfile={mockProfileA} />);
 
       await waitFor(() => {
@@ -484,7 +492,7 @@ describe('M9-F Customer Restaurant Public Menu Master Suite', () => {
       expect(screen.getByText('Customizable options available')).toBeInTheDocument();
     });
 
-    it('(13) clicking "Customize" opens customization modal', async () => {
+    it('(14) clicking "Customize" opens customization modal', async () => {
       render(<CustomerRestaurantMenuPage initialProfile={mockProfileA} />);
 
       await waitFor(() => {
@@ -497,7 +505,7 @@ describe('M9-F Customer Restaurant Public Menu Master Suite', () => {
       expect(screen.getByText('Add-ons & Extras')).toBeInTheDocument();
     });
 
-    it('(14) standard items without variants trigger direct onAddToCart with minor unit paise price', async () => {
+    it('(15) standard items without variants trigger direct onAddToCart with minor unit paise price', async () => {
       const handleAddToCart = vi.fn();
 
       render(
