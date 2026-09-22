@@ -23,10 +23,12 @@ import { Category, MenuItem } from '../../types/menu';
 import {
   resolveRestaurantBySlug,
   resolveRestaurantByPublicCode,
-  resolveRestaurantById
+  resolveRestaurantById,
+  subscribeToPublicRestaurantProfile
 } from '../../services/customerDiscoveryService';
 import {
   fetchPublicMenu,
+  subscribeToPublicMenu,
   PublicMenuData
 } from '../../services/customerMenuService';
 import {
@@ -216,6 +218,35 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
   useEffect(() => {
     loadRestaurantAndMenu();
   }, [loadRestaurantAndMenu]);
+  useEffect(() => {
+    const restaurantId = restaurant?.restaurantId;
+    if (!restaurantId) return;
+
+    // Customer website listens to the same public projection used by the
+    // POS live-operations controls. Status/service changes therefore take
+    // effect without a page refresh.
+    const unsubscribeProfile = subscribeToPublicRestaurantProfile(
+      restaurantId,
+      (profile) => {
+        if (profile) setRestaurant(profile);
+      },
+      (err) => console.warn('[RestaurantOS Customer] Public restaurant live-status notice:', err)
+    );
+
+    const unsubscribeMenu = subscribeToPublicMenu(
+      restaurantId,
+      (nextMenu) => {
+        setMenuData(nextMenu);
+      },
+      (err) => console.warn('[RestaurantOS Customer] Public menu live-sync notice:', err)
+    );
+
+    return () => {
+      unsubscribeProfile();
+      unsubscribeMenu();
+    };
+  }, [restaurant?.restaurantId]);
+
 
   // Navigation handlers
   const handleBack = () => {
