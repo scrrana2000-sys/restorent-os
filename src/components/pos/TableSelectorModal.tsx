@@ -11,7 +11,7 @@ interface TableSelectorModalProps {
   onClose: () => void;
   selectedTable: Table | null;
   activeSession: TableSession | null;
-  onSelectTableAndSession: (table: Table, session: TableSession) => void;
+  onSelectTableAndSession: (table: Table, session: TableSession | null) => void;
   onCloseTableSession?: (table: Table, session: TableSession | null) => Promise<void>;
 }
 
@@ -32,7 +32,7 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const [chosenTable, setChosenTable] = useState<Table | null>(selectedTable);
-  const [guestCount, setGuestCount] = useState<number>(2);
+  const [guestCount] = useState<number>(2);
   const [submitting, setSubmitting] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
@@ -68,34 +68,30 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
     setSessionError(null);
 
     try {
-      // 1. Check if there's already an active session for this table
-      let session = await tableSessionService.getActiveSession(
+      // Selecting a free table must NOT make it occupied. The session opens only
+      // when the first dine-in order is actually sent/paid.
+      if (!table.activeSessionId) {
+        onSelectTableAndSession({ ...table, activeSessionId: null }, null);
+        onClose();
+        return;
+      }
+
+      // An already occupied table is selectable and keeps its existing session.
+      const session = await tableSessionService.getActiveSession(
         restaurantId,
         table.id,
         table.activeSessionId
       );
 
-      // 2. If no active session exists, open a new one
       if (!session) {
-        session = await tableSessionService.openSession(
-          restaurantId,
-          table.id,
-          guestCount,
-          user?.uid || 'staff',
-          `req_session_${table.id}_${Date.now()}`
-        );
+        throw new Error('This table is marked active but its session could not be found. Please refresh tables.');
       }
 
-      const tableWithSession: Table = {
-        ...table,
-        activeSessionId: session.id
-      };
-
-      onSelectTableAndSession(tableWithSession, session);
+      onSelectTableAndSession({ ...table, activeSessionId: session.id }, session);
       onClose();
     } catch (err: any) {
-      console.error('Failed to open or select table session:', err);
-      setSessionError(err.message || 'Could not select or open session for this table.');
+      console.error('Failed to select table:', err);
+      setSessionError(err.message || 'Could not select this table.');
     } finally {
       setSubmitting(false);
     }
