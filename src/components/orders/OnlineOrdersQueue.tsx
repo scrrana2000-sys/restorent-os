@@ -38,6 +38,7 @@ interface OnlineOrdersQueueProps {
   focusedOrderId?: string | null;
   onClearFocusedOrder?: () => void;
   onViewBillModal?: (order: Order) => void;
+  onCollectPayment?: (order: Order) => void;
 }
 
 type QueueTab = 'pending' | 'preparing' | 'ready' | 'history';
@@ -45,7 +46,8 @@ type QueueTab = 'pending' | 'preparing' | 'ready' | 'history';
 export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
   focusedOrderId,
   onClearFocusedOrder,
-  onViewBillModal
+  onViewBillModal,
+  onCollectPayment
 }) => {
   const { restaurant } = useRestaurant();
   const { user } = useAuth();
@@ -688,6 +690,19 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
 
                   {/* Contextual Primary Actions */}
                   <div className="flex items-center gap-2">
+                    {!isPrepaid && onCollectPayment && (
+                      <button
+                        type="button"
+                        data-testid={`btn-collect-due-${order.id}`}
+                        onClick={() => onCollectPayment(order)}
+                        disabled={isActionSubmitting}
+                        className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
+                        title="Collect outstanding payment before handover"
+                      >
+                        <Banknote className="w-3.5 h-3.5" />
+                        <span>Collect Due</span>
+                      </button>
+                    )}
                     {isPending && (
                       <>
                         <button
