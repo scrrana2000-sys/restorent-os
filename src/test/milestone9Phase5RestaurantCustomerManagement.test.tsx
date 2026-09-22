@@ -306,18 +306,18 @@ describe('Milestone 9 Phase 5 — Restaurant Customer Management / CRM Foundatio
     });
   });
 
-  describe('5. Guest Customer Handling (No Fake Accounts, No Auto-Merging)', () => {
-    it('keeps guest orders distinct without fabricating fake customer UIDs or auto-merging', async () => {
+  describe('5. Guest Customer Handling & Mobile History Grouping', () => {
+    it('groups POS guest orders by mobile without fabricating fake customer UIDs', async () => {
       const res = await restaurantCustomerService.getRestaurantCustomers('rest-A');
       const guestEntries = res.customers.filter((c) => !c.isRegistered);
 
-      // There are 2 guest orders in mock data (ord-103 and ord-104)
-      expect(guestEntries.length).toBe(2);
-      guestEntries.forEach((g) => {
-        expect(g.customerId).toBeNull();
-        expect(g.id.startsWith('guest_')).toBe(true);
-        expect(g.isRegistered).toBe(false);
-      });
+      // The same mobile number represents one restaurant-scoped guest customer with two orders.
+      expect(guestEntries.length).toBe(1);
+      expect(guestEntries[0].customerId).toBeNull();
+      expect(guestEntries[0].id).toBe('phone_9123456780');
+      expect(guestEntries[0].isRegistered).toBe(false);
+      expect(guestEntries[0].orderCount).toBe(2);
+      expect(guestEntries[0].recentOrders.length).toBe(2);
     });
   });
 
@@ -332,7 +332,7 @@ describe('Milestone 9 Phase 5 — Restaurant Customer Management / CRM Foundatio
       const byPhone = await restaurantCustomerService.getRestaurantCustomers('rest-A', {
         searchQuery: '9123456780'
       });
-      expect(byPhone.customers.length).toBe(2); // The 2 guest orders
+      expect(byPhone.customers.length).toBe(1); // Same mobile is one guest customer history
     });
 
     it('filters customers by registered category', async () => {
@@ -355,8 +355,9 @@ describe('Milestone 9 Phase 5 — Restaurant Customer Management / CRM Foundatio
       const multiOrder = await restaurantCustomerService.getRestaurantCustomers('rest-A', {
         categoryFilter: 'multi_order'
       });
-      expect(multiOrder.customers.length).toBe(1);
-      expect(multiOrder.customers[0].customerId).toBe('cust-user-1');
+      expect(multiOrder.customers.length).toBe(2);
+      expect(multiOrder.customers.some((c) => c.customerId === 'cust-user-1')).toBe(true);
+      expect(multiOrder.customers.some((c) => c.id === 'phone_9123456780')).toBe(true);
     });
   });
 
@@ -364,9 +365,9 @@ describe('Milestone 9 Phase 5 — Restaurant Customer Management / CRM Foundatio
     it('computes accurate restaurant customer summary metrics', async () => {
       const { metrics } = await restaurantCustomerService.getRestaurantCustomers('rest-A');
 
-      expect(metrics.totalCustomers).toBe(3); // 1 registered + 2 guest entries
+      expect(metrics.totalCustomers).toBe(2); // 1 registered + 1 phone-linked guest
       expect(metrics.registeredCustomersCount).toBe(1);
-      expect(metrics.guestCustomersCount).toBe(2);
+      expect(metrics.guestCustomersCount).toBe(1);
       expect(metrics.totalOrders).toBe(4);
 
       // Revenue: 52500 + 21000 + 23100 = 96600 paise (ord-104 is cancelled so not counted in revenue)
