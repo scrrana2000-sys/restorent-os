@@ -849,6 +849,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
               onAddToCart={handleAddToCart}
               cartItemQuantityMap={cartItemQuantityMap}
               onUpdateQuantityByItemId={handleUpdateQuantityByItemId}
+              onToggleAvailability={handleTogglePosItemAvailability}
             />
           </div>
         </div>
