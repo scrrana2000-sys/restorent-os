@@ -25,7 +25,7 @@ import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersMod
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
 import { OnlineOrdersQueue } from '../components/orders/OnlineOrdersQueue';
 import { LiveOperationsControlPanel } from '../components/pos/LiveOperationsControlPanel';
-import { toggleItemAvailability } from '../services/menuService';
+import { toggleItemOnlineAvailability } from '../services/menuService';
 import { VoiceOrderModal } from '../components/voice/VoiceOrderModal';
 import { AdminView } from '../components/layout/Sidebar';
 import { useModalBackHandler } from '../hooks/useModalBackHandler';
@@ -971,8 +971,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
             await updateRestaurantSettings(data);
           }}
           onToggleItemAvailability={async (itemId, isAvailable) => {
-            await toggleItemAvailability(restaurantId, itemId, isAvailable);
-            setMenuItems((prev) => prev.map((item) => item.itemId === itemId ? { ...item, isAvailable } : item));
+            await toggleItemOnlineAvailability(restaurantId, itemId, isAvailable);
+            setMenuItems((prev) => prev.map((item) => item.itemId === itemId ? { ...item, isOnlineAvailable: isAvailable } : item));
           }}
         />
       )}
