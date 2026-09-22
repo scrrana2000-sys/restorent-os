@@ -121,7 +121,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
 
     const timeoutId = window.setTimeout(() => {
       setStatusMessage(null);
-    }, 3000);
+    }, 10000);
 
     return () => window.clearTimeout(timeoutId);
   }, [statusMessage]);
