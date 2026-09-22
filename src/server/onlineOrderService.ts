@@ -1369,16 +1369,20 @@ export async function submitServerPosOrder(input: {
       updatedAt: new Date()
     }, { merge: true });
   }
-  await writeAudit(restaurantId, 'order', order.id, 'order_created', input.createdBy, {
+  // The canonical order/KOT mutation is complete. Auditing is not user-blocking.
+  void writeAudit(restaurantId, 'order', order.id, 'order_created', input.createdBy, {
     orderNumber: order.orderNumber,
     grandTotalMinor: order.grandTotalMinor,
     orderType: order.orderType,
     kotId: kot?.id || null
-  });
-  if (kot) await writeAudit(restaurantId, 'kot', kot.id, 'kot_created', input.createdBy, {
-    kotNumber: kot.kotNumber,
-    orderId: order.id,
-    status: kot.status
-  });
+  }).catch((error) => console.warn('[RestaurantOS Server] POS order audit notice:', error));
+
+  if (kot) {
+    void writeAudit(restaurantId, 'kot', kot.id, 'kot_created', input.createdBy, {
+      kotNumber: kot.kotNumber,
+      orderId: order.id,
+      status: kot.status
+    }).catch((error) => console.warn('[RestaurantOS Server] POS KOT audit notice:', error));
+  }
   return { order, kot };
 }
