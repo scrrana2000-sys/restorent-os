@@ -255,7 +255,17 @@ async function loadCatalogItems(restaurantId: string, cart: CustomerCart): Promi
 
   const result = new Map<string, any>();
   for (const [itemId, snap] of entries) {
-    if (snap.exists) result.set(itemId, snap.data());
+    if (!snap.exists) {
+      throw new Error(`Menu item "${itemId}" is no longer available in this restaurant.`);
+    }
+    const data = snap.data();
+    if (data.restaurantId && data.restaurantId !== restaurantId) {
+      throw new Error(`Menu item "${itemId}" belongs to a different restaurant.`);
+    }
+    if (data.isAvailable === false) {
+      throw new Error(`"${data.name || itemId}" is currently unavailable. Please remove it from your cart and try again.`);
+    }
+    result.set(itemId, data);
   }
   return result;
 }
