@@ -1360,6 +1360,108 @@ app.post('/api/orders/partial-cancel-items', async (req, res) => {
   }
 });
 
+app.post('/api/orders/online-handover', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Bearer authentication token is required.' });
+
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const orderId = String(req.body?.orderId || '').trim();
+    if (!restaurantId || !orderId) {
+      return res.status(400).json({ success: false, error: 'MISSING_PARAMETERS', message: 'restaurantId and orderId are required.' });
+    }
+
+    // Online handover is an operational order action. Authorize it at the
+    // trusted server boundary so stale browser permission caches cannot reject
+    // an otherwise valid owner/manager/cashier/captain action.
+    const staffCheck = await verifyRestaurantStaffRole(
+      authUser.uid,
+      idToken,
+      restaurantId,
+      ['owner', 'manager', 'cashier', 'captain']
+    );
+    if (!staffCheck.authorized) {
+      return res.status(staffCheck.code || 403).json({
+        success: false,
+        error: staffCheck.error || 'FORBIDDEN',
+        message: staffCheck.message || 'Caller is not authorized to complete this online order.'
+      });
+    }
+
+    if (!(await ensureServerAuthenticated())) {
+      return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted order service is unavailable.' });
+    }
+
+    const orderRef = adminDb.doc(`restaurants/${restaurantId}/orders/${orderId}`);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) {
+      return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order does not exist.' });
+    }
+
+    const order = orderSnap.data() as any;
+    if (String(order.restaurantId || '') !== restaurantId) {
+      return res.status(403).json({ success: false, error: 'TENANT_MISMATCH', message: 'Order does not belong to this restaurant.' });
+    }
+    if (order.status === 'cancelled') {
+      return res.status(409).json({ success: false, error: 'ORDER_CANCELLED', message: 'Cancelled orders cannot be handed over.' });
+    }
+    if (order.status === 'completed') {
+      return res.json({ success: true, order: { id: orderSnap.id, ...order } });
+    }
+
+    const dueAmount = Number(order.dueAmountMinor ?? Math.max(0, Number(order.grandTotalMinor || 0) - Number(order.paidAmountMinor || 0)));
+    if (dueAmount > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'PAYMENT_DUE',
+        message: `Outstanding due of ₹${(dueAmount / 100).toFixed(2)} must be collected before handover.`
+      });
+    }
+
+    const kotsSnap = await adminDb.collection(`restaurants/${restaurantId}/kots`)
+      .where('orderId', '==', orderId)
+      .get();
+
+    const batch = adminDb.batch();
+    let batchWrites = 0;
+    for (const kotDoc of kotsSnap.docs) {
+      const kot = kotDoc.data() as any;
+      if (kot.status === 'ready') {
+        batch.update(kotDoc.ref, {
+          status: 'served',
+          servedAt: new Date(),
+          updatedAt: new Date(),
+          updatedBy: authUser.uid
+        });
+        batchWrites += 1;
+      } else if (kot.status !== 'served' && kot.status !== 'cancelled') {
+        return res.status(409).json({
+          success: false,
+          error: 'KOT_NOT_READY',
+          message: `Kitchen ticket ${kot.kotNumber || kotDoc.id} is still in status "${kot.status}".`
+        });
+      }
+    }
+
+    if (batchWrites > 0) await batch.commit();
+
+    const { orderService } = await import('./src/services/orderService');
+    const result = await orderService.completeOrder(restaurantId, orderId, authUser.uid);
+
+    return res.json({ success: true, order: result });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Online handover failed:', err);
+    return res.status(400).json({
+      success: false,
+      error: 'ONLINE_HANDOVER_FAILED',
+      message: err?.message || 'Failed to complete online order handover.'
+    });
+  }
+});
+
 app.post('/api/orders/complete', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
