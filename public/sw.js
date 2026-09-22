@@ -1,5 +1,5 @@
 // RestaurantOS Production PWA Service Worker
-const CACHE_NAME = 'restaurantos-v3';
+const CACHE_NAME = 'restaurantos-v4';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -103,7 +103,33 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-First for static assets (images, icons, fonts, manifest) with background refresh
+  // JavaScript and CSS bundles are content-hashed on every deployment.
+  // Network-first prevents a new index.html from referencing a bundle that an
+  // older service-worker cache no longer contains (the previous cause of
+  // "Failed to fetch dynamically imported module" crashes after deployments).
+  const isVersionedAsset =
+    url.pathname.includes('/assets/') &&
+    (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'));
+
+  if (isVersionedAsset) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-First for non-versioned static assets (images, icons, fonts, manifest)
+  // with background refresh.
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
