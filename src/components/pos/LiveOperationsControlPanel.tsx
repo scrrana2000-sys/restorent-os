@@ -20,7 +20,6 @@ export const LiveOperationsControlPanel: React.FC<LiveOperationsControlPanelProp
 }) => {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  if (!isOpen) return null;
 
   const caps = restaurant?.restaurantCapabilities || defaults;
   const onlineOrderingEnabled = restaurant?.onlineOrderingEnabled !== false;
@@ -55,6 +54,8 @@ export const LiveOperationsControlPanel: React.FC<LiveOperationsControlPanelProp
   const toggleCapability = async (key: 'deliveryEnabled' | 'takeawayEnabled') => {
     await update(key, { restaurantCapabilities: { ...caps, [key]: !caps[key] } });
   };
+
+  if (!isOpen) return null;
 
   return (
     <div id="live-operations-control-panel" className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
