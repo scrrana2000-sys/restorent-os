@@ -706,7 +706,10 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
   );
 
   const profile = getRestaurantOperatingProfile(restaurant);
-  const createKot = profile.capabilities.kitchenEnabled;
+  // Online orders must remain pending until restaurant staff explicitly accepts them.
+  // Acceptance then creates/sends the KOT to the kitchen. This prevents the order
+  // from bypassing the Pending queue and keeps the kitchen lifecycle strictly ordered.
+  const createKot = false;
 
   const signaturePayload = {
     restaurantId,
