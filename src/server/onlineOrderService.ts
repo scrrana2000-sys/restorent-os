@@ -1092,11 +1092,11 @@ export async function submitServerPosOrder(input: {
     kotNumber: `KOT-${Date.now().toString(36).toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}`,
     restaurantId,
     orderId: orderRef.id,
-    orderNumber,
+    orderNumber: orderPayload.orderNumber,
     orderType: input.orderType,
     tableId: orderPayload.tableId || null,
     tableSessionId: orderPayload.tableSessionId || null,
-    items: orderItems.map(item => ({
+    items: canonicalItems.map(item => ({
       itemId: item.itemId,
       nameSnapshot: item.nameSnapshot,
       shortNameSnapshot: item.shortNameSnapshot,
