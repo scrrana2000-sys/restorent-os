@@ -16,6 +16,19 @@ export interface PdfBillOptions {
 }
 
 /**
+ * jsPDF's built-in WinAnsi fonts do not reliably render the Indian rupee glyph.
+ * Keep PDF monetary values ASCII-safe so PDF viewers do not expand/garble digits.
+ */
+function formatPdfMoney(minorUnits: number, currencySymbol = '₹'): string {
+  const value = Number(minorUnits || 0) / 100;
+  const formatted = value.toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  return currencySymbol === '₹' ? `INR ${formatted}` : `${currencySymbol}${formatted}`;
+}
+
+/**
  * Creates a formatted jsPDF document instance representing the GST Tax Invoice / Bill.
  */
 export function generateBillPdfDocument(
@@ -193,24 +206,24 @@ export function generateBillPdfDocument(
     y += 3;
   };
 
-  addSummaryRow('Subtotal:', formatMoney(order.subtotalMinor, symbol));
+  addSummaryRow('Subtotal:', formatPdfMoney(order.subtotalMinor, symbol));
 
   if (order.discountMinor > 0) {
-    addSummaryRow('Discount:', `-${formatMoney(order.discountMinor, symbol)}`);
+    addSummaryRow('Discount:', `-${formatPdfMoney(order.discountMinor, symbol)}`);
   }
 
   if (order.taxableAmountMinor && order.taxableAmountMinor > 0) {
-    addSummaryRow('Taxable Value:', formatMoney(order.taxableAmountMinor, symbol));
+    addSummaryRow('Taxable Value:', formatPdfMoney(order.taxableAmountMinor, symbol));
   }
 
   if (order.cgstMinor > 0) {
-    addSummaryRow('CGST:', formatMoney(order.cgstMinor, symbol));
+    addSummaryRow('CGST:', formatPdfMoney(order.cgstMinor, symbol));
   }
   if (order.sgstMinor > 0) {
-    addSummaryRow('SGST:', formatMoney(order.sgstMinor, symbol));
+    addSummaryRow('SGST:', formatPdfMoney(order.sgstMinor, symbol));
   }
   if (order.igstMinor > 0) {
-    addSummaryRow('IGST:', formatMoney(order.igstMinor, symbol));
+    addSummaryRow('IGST:', formatPdfMoney(order.igstMinor, symbol));
   }
 
   doc.setLineWidth(0.3);
@@ -219,15 +232,15 @@ export function generateBillPdfDocument(
 
   // Grand Total Highlight
   doc.setFontSize(8.5);
-  addSummaryRow('Grand Total:', formatMoney(order.grandTotalMinor, symbol), true);
+  addSummaryRow('Grand Total:', formatPdfMoney(order.grandTotalMinor, symbol), true);
 
   doc.setFontSize(7);
   const paidMinor = order.paidAmountMinor ?? 0;
   const dueMinor = order.dueAmountMinor ?? 0;
 
-  addSummaryRow('Paid Amount:', formatMoney(paidMinor, symbol));
+  addSummaryRow('Paid Amount:', formatPdfMoney(paidMinor, symbol));
   if (dueMinor > 0) {
-    addSummaryRow('Due Amount:', formatMoney(dueMinor, symbol), true);
+    addSummaryRow('Due Amount:', formatPdfMoney(dueMinor, symbol), true);
   }
 
   // Payment Status Badge
@@ -239,7 +252,7 @@ export function generateBillPdfDocument(
     doc.text('PAYMENT STATUS: FULLY PAID', pageWidth / 2, y, { align: 'center' });
   } else {
     doc.setTextColor(200, 40, 40);
-    doc.text(`PAYMENT STATUS: DUE ${formatMoney(dueMinor, symbol)}`, pageWidth / 2, y, { align: 'center' });
+    doc.text(`PAYMENT STATUS: DUE ${formatPdfMoney(dueMinor, symbol)}`, pageWidth / 2, y, { align: 'center' });
   }
   doc.setTextColor(0, 0, 0);
   y += 4;
