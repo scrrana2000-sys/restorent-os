@@ -81,7 +81,7 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
         <div className="flex items-center justify-between gap-2 sm:gap-4">
           <h2 className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 min-w-0 truncate">
             <span className="truncate">
-              RESTAURANTS NEAR {location?.city || 'BENGALURU'}
+              Restaurants near {location?.city || 'Bengaluru'}
             </span>
             {totalCount > 0 && (
               <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-black rounded-full shrink-0">
@@ -101,7 +101,7 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
               onClick={() => setShowFilters(!showFilters)}
               className={`p-2.5 sm:p-3 text-xs font-bold rounded-xl sm:rounded-2xl flex items-center justify-center transition-all cursor-pointer select-none border shrink-0 min-w-[38px] min-h-[38px] sm:min-w-[44px] sm:min-h-[44px] relative ${
                 showFilters
-                  ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white border-transparent shadow-[2px_4px_12px_rgba(234,88,12,0.25)]'
+                  ? 'bg-orange-600 text-white border-orange-600 shadow-xs'
                   : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 shadow-xs'
               }`}
               title={showFilters ? "Hide Filters" : "Show Filters"}
