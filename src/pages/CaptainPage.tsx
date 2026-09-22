@@ -160,15 +160,55 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
     return map;
   }, [activeSessions]);
 
+  // Resolve the single canonical bill for each active table session.
+  // A table can contain legacy duplicate orders from before session-level bill
+  // merging was enforced. Prefer the session's activeOrderId, then fall back to
+  // the most recently updated active order so the waiter never sees an older
+  // bill while Payment Due Center is showing the current merged bill.
   const orderByTableMap = useMemo(() => {
     const map = new Map<string, Order>();
-    for (const o of orders) {
-      if (o.tableId && o.status !== 'completed' && o.status !== 'cancelled') {
-        map.set(o.tableId, o);
+    const activeOrderById = new Map<string, Order>();
+
+    for (const order of orders) {
+      if (order.status === 'completed' || order.status === 'cancelled') continue;
+      activeOrderById.set(order.id, order);
+    }
+
+    const toMillis = (value: any): number => {
+      if (!value) return 0;
+      if (typeof value.toMillis === 'function') return value.toMillis();
+      if (value instanceof Date) return value.getTime();
+      const parsed = new Date(value).getTime();
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const activeSessionByTable = new Map<string, TableSession>();
+    for (const session of activeSessions) {
+      if (session.status === 'open') {
+        activeSessionByTable.set(session.tableId, session);
       }
     }
+
+    // First pass: choose the newest active order per table as a safe fallback.
+    for (const order of activeOrderById.values()) {
+      if (!order.tableId) continue;
+      const current = map.get(order.tableId);
+      if (!current || toMillis(order.updatedAt) > toMillis(current.updatedAt)) {
+        map.set(order.tableId, order);
+      }
+    }
+
+    // Second pass: session.activeOrderId is authoritative when present.
+    for (const [tableId, session] of activeSessionByTable) {
+      if (!session.activeOrderId) continue;
+      const canonicalOrder = activeOrderById.get(session.activeOrderId);
+      if (canonicalOrder && canonicalOrder.tableSessionId === session.id) {
+        map.set(tableId, canonicalOrder);
+      }
+    }
+
     return map;
-  }, [orders]);
+  }, [orders, activeSessions]);
 
   // Lookup map from tableId to Table
   const tableMap = useMemo(() => {
