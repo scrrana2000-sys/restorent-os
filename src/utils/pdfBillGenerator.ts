@@ -2,7 +2,6 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Order } from '../types/order';
 import { Restaurant } from '../types/restaurant';
-import { formatMoney } from './money';
 import {
   formatWhatsAppPhoneNumber,
   generateWhatsAppBillUrl,
