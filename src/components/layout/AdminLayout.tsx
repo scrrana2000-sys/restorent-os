@@ -11,7 +11,7 @@ import { useModalBackHandler } from '../../hooks/useModalBackHandler';
 import { VoiceAssistantWidget } from '../voice/VoiceAssistantWidget';
 import { Order } from '../../types/order';
 import { subscribeToNewOnlineOrders } from '../../services/onlineOrderNotificationService';
-import { playNewOrderSoundAlert, isSoundAlertEnabled, setSoundAlertEnabled } from '../../utils/soundAlert';
+import { playNewOrderSoundAlert, unlockNewOrderSoundAlert, isSoundAlertEnabled, setSoundAlertEnabled } from '../../utils/soundAlert';
 import { NewOnlineOrderNotification } from '../notifications/NewOnlineOrderNotification';
 
 interface AdminLayoutProps {
@@ -38,19 +38,19 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
   useEffect(() => {
     const restaurantId = restaurant?.restaurantId;
-    // Online-order notifications are page-scoped. Do not keep an orders
-    // listener alive while the user is on POS, dashboard, inventory, etc.
-    if (!restaurantId || !['pos', 'orders', 'kitchen'].includes(currentView)) {
+    // Notifications are global inside the authenticated admin shell so an
+    // incoming customer order is never missed because the staff is currently
+    // on Dashboard, POS, Kitchen, Orders, etc.
+    if (!restaurantId) {
       setPendingOnlineOrders([]);
       return;
     }
 
     const unsubscribe = subscribeToNewOnlineOrders(restaurantId, {
       onNewOrder: (newOrder) => {
-        // Attempt sound alert (catches autoplay errors gracefully internally)
+        // The popup is the primary visual alert; sound is attempted immediately.
         playNewOrderSoundAlert().catch(() => {});
 
-        // Add new order to stack if not already present
         setPendingOnlineOrders((prev) => {
           if (prev.some((o) => o.id === newOrder.id)) return prev;
           return [newOrder, ...prev];
@@ -64,7 +64,34 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     return () => {
       unsubscribe();
     };
-  }, [restaurant?.restaurantId, currentView]);
+  }, [restaurant?.restaurantId]);
+
+  // Mobile Chrome/Android requires a real user gesture before Web Audio can
+  // be used reliably later for a realtime notification. Unlock it once on the
+  // first interaction anywhere in the authenticated admin shell.
+  useEffect(() => {
+    if (!soundEnabled) return;
+
+    let unlocked = false;
+    const unlock = () => {
+      if (unlocked) return;
+      unlocked = true;
+      unlockNewOrderSoundAlert().catch(() => {});
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('keydown', unlock, true);
+      window.removeEventListener('touchstart', unlock, true);
+    };
+
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('keydown', unlock, true);
+    window.addEventListener('touchstart', unlock, true);
+
+    return () => {
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('keydown', unlock, true);
+      window.removeEventListener('touchstart', unlock, true);
+    };
+  }, [soundEnabled]);
 
   const handleDismissOnlineOrder = (orderId: string) => {
     setPendingOnlineOrders((prev) => prev.filter((o) => o.id !== orderId));
@@ -98,6 +125,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     const next = !soundEnabled;
     setSoundEnabled(next);
     setSoundAlertEnabled(next);
+    if (next) {
+      // This handler is itself a user gesture, so use it to unlock audio.
+      unlockNewOrderSoundAlert().catch(() => {});
+    }
   };
 
   // Deterministic Back button handling for mobile sidebar menu
