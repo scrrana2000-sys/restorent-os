@@ -103,11 +103,19 @@ export function subscribeToPublicRestaurantProfile(
   return onSnapshot(
     ref,
     (snap) => {
-      if (!snap.exists()) {
-        onUpdate(null);
+      // DocumentSnapshot has exists() + data(); older query-style test
+      // doubles may only expose docs/empty, so ignore those safely.
+      const exists = typeof (snap as any).exists === 'function'
+        ? (snap as any).exists()
+        : typeof (snap as any).exists === 'boolean'
+          ? (snap as any).exists
+          : typeof (snap as any).data === 'function';
+
+      if (!exists || typeof (snap as any).data !== 'function') {
         return;
       }
-      const data = snap.data();
+
+      const data = (snap as any).data();
       const status = (data.publicStatus as PublicRestaurantStatus) || 'active';
       const onlineOrderingEnabled = data.onlineOrderingEnabled !== false;
       onUpdate({
