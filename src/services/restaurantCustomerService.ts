@@ -1,4 +1,4 @@
-import { collection, query, getDocs, orderBy, where } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, where, limit } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { Order } from '../types/order';
 import {
@@ -15,6 +15,70 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreError';
  * Strictly adheres to tenant boundaries: only aggregates customer records from
  * orders placed at the specified restaurant.
  */
+  /**
+   * Finds an existing restaurant customer by mobile number.
+   * POS billing stores a normalized 10-digit Indian mobile number in the order snapshot.
+   * Legacy +91/space/dash variants are also searched so existing history can be recovered.
+   */
+  async findCustomerByPhone(
+    restaurantId: string,
+    phone: string
+  ): Promise<RestaurantCustomer | null> {
+    const cleanRestaurantId = restaurantId?.trim();
+    const digits = String(phone || '').replace(/\D/g, '').slice(-10);
+    if (!cleanRestaurantId || digits.length !== 10) return null;
+
+    await enforcePermission(cleanRestaurantId, 'view_orders');
+
+    const variants = [
+      digits,
+      `91${digits}`,
+      `+91${digits}`,
+      `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`,
+      `+91 ${digits.slice(0, 5)}-${digits.slice(5)}`,
+      `${digits.slice(0, 5)} ${digits.slice(5)}`
+    ];
+
+    try {
+      const ordersCol = collection(db, 'restaurants', cleanRestaurantId, 'orders');
+      const q = query(ordersCol, where('customerSnapshot.phone', 'in', variants.slice(0, 10)), limit(50));
+      const snap = await getDocs(q);
+      const orders = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Order))
+        .sort((a, b) => parseTimestampToMillis(b.createdAt) - parseTimestampToMillis(a.createdAt));
+
+      if (orders.length === 0) return null;
+
+      const latest = orders[0];
+      const spend = orders.filter((o) => o.status !== 'cancelled').reduce((sum, o) => sum + (o.grandTotalMinor || 0), 0);
+      const completed = orders.filter((o) => o.status === 'completed' || o.status === 'served').length;
+      const cancelled = orders.filter((o) => o.status === 'cancelled').length;
+
+      return {
+        id: `phone_${digits}`,
+        customerId: null,
+        isRegistered: false,
+        name: latest.customerSnapshot?.name || 'Customer',
+        email: latest.customerSnapshot?.email || null,
+        phone: digits,
+        address: latest.customerSnapshot?.address || null,
+        orderCount: orders.length,
+        completedOrderCount: completed,
+        cancelledOrderCount: cancelled,
+        totalSpendMinor: spend,
+        averageOrderValueMinor: orders.length ? Math.round(spend / orders.length) : 0,
+        firstOrderDate: this.formatDate(orders[orders.length - 1].createdAt),
+        lastOrderDate: this.formatDate(latest.createdAt),
+        lastOrderType: latest.orderType,
+        lastOrderStatus: latest.status,
+        lastOrderNumber: latest.orderNumber,
+        recentOrders: orders
+      };
+    } catch (err: unknown) {
+      throw handleFirestoreError(err, OperationType.LIST, `restaurants/${cleanRestaurantId}/orders`);
+    }
+  }
+
 export class RestaurantCustomerService {
   /**
    * Retrieves aggregated customer profiles and activities for a given restaurant.
