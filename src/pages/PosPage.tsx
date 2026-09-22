@@ -574,11 +574,15 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
 
       if (!currentSession) {
         try {
-          currentSession = await tableSessionService.getActiveSession(
-            restaurantId,
-            selectedTable.id,
-            selectedTable.activeSessionId
-          );
+          // Free tables from the warmed selector have no session ID. Skip an
+          // unnecessary lookup; openSession atomically checks the table again.
+          if (selectedTable.activeSessionId) {
+            currentSession = await tableSessionService.getActiveSession(
+              restaurantId,
+              selectedTable.id,
+              selectedTable.activeSessionId
+            );
+          }
           if (!currentSession) {
             currentSession = await tableSessionService.openSession(
               restaurantId,
