@@ -166,9 +166,14 @@ export function isInvitationRoute(): boolean {
 /**
  * Builds the canonical public digital invoice / PDF bill URL for a customer.
  */
-export function buildPublicBillUrl(orderId: string, restaurantId?: string): string {
+export function buildPublicBillUrl(
+  orderId: string,
+  restaurantId?: string,
+  accessToken?: string | null
+): string {
   const cleanOrderId = (orderId || '').trim();
   const cleanRestId = (restaurantId || '').trim();
+  const cleanAccessToken = (accessToken || '').trim();
   const baseUrl = getPublicAppBaseUrl();
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
@@ -176,6 +181,9 @@ export function buildPublicBillUrl(orderId: string, restaurantId?: string): stri
   queryParams.set('bill', cleanOrderId);
   if (cleanRestId) {
     queryParams.set('rest', cleanRestId);
+  }
+  if (cleanAccessToken) {
+    queryParams.set('accessToken', cleanAccessToken);
   }
 
   return `${normalizedBase}?${queryParams.toString()}`;
