@@ -253,22 +253,9 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
         return;
       }
 
-      // Completing an online order is a handover action. First move every active
-      // KOT for this order from READY -> SERVED, then let the canonical order
-      // completion pipeline enforce the final completed transition.
-      const kots = await kotService.getKOTsForOrder(restaurantId, order.id);
-      for (const kot of kots) {
-        if (kot.status === 'ready') {
-          await kotService.updateKOTStatus(
-            restaurantId,
-            kot.id,
-            'served',
-            user?.uid || 'staff',
-            `handover_${order.id}_${kot.id}`
-          );
-        }
-      }
-
+      // Online handover is handled atomically at the trusted server boundary.
+      // Do not perform a client-side KOT permission check first: that can use a
+      // stale browser role cache and reject a valid owner/manager/cashier/captain.
       await orderService.completeOnlineOrder(
         restaurantId,
         order.id,
