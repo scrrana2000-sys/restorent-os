@@ -323,6 +323,13 @@ describe('PHASE 4.3: FINAL OPERATIONAL FLOW — PAYMENT → AUTO COMPLETE → AU
       if (queryObj.colRef?.path?.includes('orders')) {
         return { docs: [{ id: orderId, data: () => mockOrder }] } as any;
       }
+      if (queryObj.colRef?.path?.includes('payments')) {
+        const requestedOrderId = queryObj.clauses?.find((clause: any) => clause.field === 'orderId')?.val;
+        const amountMinor = requestedOrderId ? paymentAmountsByOrder[requestedOrderId] : undefined;
+        return amountMinor
+          ? { docs: [{ id: 'PAY-' + requestedOrderId, data: () => ({ id: 'PAY-' + requestedOrderId, orderId: requestedOrderId, amountMinor, status: 'completed' }) }] } as any
+          : { docs: [] } as any;
+      }
       return { docs: [] } as any;
     });
 
@@ -465,6 +472,13 @@ describe('PHASE 4.3: FINAL OPERATIONAL FLOW — PAYMENT → AUTO COMPLETE → AU
             { id: order2Id, data: () => mockOrder2Unpaid }
           ]
         } as any;
+      }
+      if (queryObj.colRef?.path?.includes('payments')) {
+        const requestedOrderId = queryObj.clauses?.find((clause: any) => clause.field === 'orderId')?.val;
+        const amountMinor = requestedOrderId ? paymentAmountsByOrder[requestedOrderId] : undefined;
+        return amountMinor
+          ? { docs: [{ id: 'PAY-' + requestedOrderId, data: () => ({ id: 'PAY-' + requestedOrderId, orderId: requestedOrderId, amountMinor, status: 'completed' }) }] } as any
+          : { docs: [] } as any;
       }
       return { docs: [] } as any;
     });
