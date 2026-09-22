@@ -616,19 +616,22 @@ export class KOTService implements IKOTService {
       // A repeated request for the already-current status is a safe no-op.
       if (!transitioned) {
         if (cleanKey) {
-          await idempotencyService.recordSuccess(
+          void idempotencyService.recordSuccess(
             cleanRestaurantId,
             cleanKey,
             'update_kot_status',
             { kotId: cleanKotId, newStatus, updatedBy },
             cleanKotId,
             undefined
-          );
+          ).catch((error) => console.warn('[KOTService] Idempotency completion notice:', error));
         }
         return;
       }
 
-      await auditService.logEvent(cleanRestaurantId, {
+      // The KOT status transaction is the user-visible critical path. Parent
+      // aggregation, audit and finalization are eventual consistency work and
+      // should not make every kitchen tap wait for several extra reads/writes.
+      void auditService.logEvent(cleanRestaurantId, {
         restaurantId: cleanRestaurantId,
         entityType: 'kot',
         entityId: cleanKotId,
@@ -641,35 +644,33 @@ export class KOTService implements IKOTService {
           newStatus,
           updatedBy: resolvedUserId
         }
-      });
+      }).catch((error) => console.warn('[KOTService] KOT audit notice:', error));
 
       if (cleanKey) {
-        await idempotencyService.recordSuccess(
+        void idempotencyService.recordSuccess(
           cleanRestaurantId,
           cleanKey,
           'update_kot_status',
           { kotId: cleanKotId, newStatus, updatedBy },
           cleanKotId,
           undefined
-        );
+        ).catch((error) => console.warn('[KOTService] Idempotency completion notice:', error));
       }
 
-      // Synchronize parent order status based on all sibling KOT statuses.
-      await this.syncParentOrderStatus(cleanRestaurantId, kotBefore.orderId, resolvedUserId);
+      void this.syncParentOrderStatus(
+        cleanRestaurantId,
+        kotBefore.orderId,
+        resolvedUserId
+      ).catch((error) => console.warn('[KOTService] Parent order sync notice:', error));
 
-      // Never run completion/session auto-finalization while a KOT is merely
-      // waiting, preparing, or ready. Only explicit handover (served) or
-      // cancellation may trigger finalization.
       if (newStatus === 'served' || newStatus === 'cancelled') {
-        try {
-          await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
-            cleanRestaurantId,
-            kotBefore.orderId,
-            resolvedUserId
-          );
-        } catch (autoErr) {
-          console.warn('[KOTService] Notice: auto-completion/session-closure check after KOT status update encountered:', autoErr);
-        }
+        void orderFinalizationService.evaluateAndFinalizeOrderAndSession(
+          cleanRestaurantId,
+          kotBefore.orderId,
+          resolvedUserId
+        ).catch((error) => {
+          console.warn('[KOTService] Background order finalization notice:', error);
+        });
       }
 
     } catch (err) {
