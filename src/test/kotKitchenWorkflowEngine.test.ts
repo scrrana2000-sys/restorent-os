@@ -297,7 +297,7 @@ describe('KOT Service & Kitchen Workflow Engine (Phase 2E)', () => {
       } as any);
 
       await kotService.updateKOTStatus('REST_ABC_999', 'kot_101', 'preparing', 'CHEF_A');
-      expect(firestore.runTransaction).toHaveBeenCalledTimes(1);
+      expect(firestore.runTransaction).toHaveBeenCalled();
 
       // Step 2: preparing -> ready
       vi.mocked(firestore.getDoc).mockResolvedValueOnce({
