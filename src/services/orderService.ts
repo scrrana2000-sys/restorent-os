@@ -479,6 +479,7 @@ export class OrderService implements IOrderService {
         totalTaxMinor: finalCalculationResult.totalTaxMinor,
         grandTotalMinor: finalCalculationResult.grandTotalMinor,
         dueAmountMinor,
+        ...(customerSnapshot ? { customerSnapshot } : {}),
         updatedAt: serverTimestamp(),
         updatedBy: resolvedUserId
       };
