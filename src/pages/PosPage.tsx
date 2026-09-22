@@ -7,7 +7,7 @@ import { kotService } from '../services/kotService';
 import { tableSessionService } from '../services/tableSessionService';
 import { Category, MenuItem } from '../types/menu';
 import { CartItem } from '../types/cart';
-import { Order, OrderType } from '../types/order';
+import { CustomerSnapshot, Order, OrderType } from '../types/order';
 import { KOT } from '../types/kot';
 import { Table, TableSession } from '../types/table';
 import { DiscountSpec } from '../types/discount';
@@ -25,6 +25,7 @@ import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersMod
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
 import { OnlineOrdersQueue } from '../components/orders/OnlineOrdersQueue';
 import { LiveOperationsControlPanel } from '../components/pos/LiveOperationsControlPanel';
+import { CustomerBillingModal } from '../components/pos/CustomerBillingModal';
 import { toggleItemOnlineAvailability } from '../services/menuService';
 import { VoiceOrderModal } from '../components/voice/VoiceOrderModal';
 import { AdminView } from '../components/layout/Sidebar';
@@ -96,6 +97,9 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   const [isBillModalOpen, setIsBillModalOpen] = useState(false);
   const [isHeldOrdersModalOpen, setIsHeldOrdersModalOpen] = useState(false);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [customerSnapshot, setCustomerSnapshot] = useState<CustomerSnapshot | null>(null);
+  const [pendingCustomerAction, setPendingCustomerAction] = useState<'payment' | null>(null);
 
   const [activeOrderForPayment, setActiveOrderForPayment] = useState<Order | null>(null);
   const [activeOrderForBill, setActiveOrderForBill] = useState<Order | null>(null);
@@ -117,6 +121,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   useModalBackHandler(isPaymentModalOpen, () => setIsPaymentModalOpen(false), 'pos-payment-modal');
   useModalBackHandler(isBillModalOpen, () => setIsBillModalOpen(false), 'pos-bill-modal');
   useModalBackHandler(isVoiceModalOpen, () => setIsVoiceModalOpen(false), 'pos-voice-modal');
+  useModalBackHandler(isCustomerModalOpen, () => setIsCustomerModalOpen(false), 'pos-customer-modal');
   useModalBackHandler(!!sentOrderInfo, () => setSentOrderInfo(null), 'pos-order-sent-modal');
 
   const symbol = restaurant?.currencySymbol || '₹';
@@ -416,6 +421,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     setCartItems([]);
     setOrderDiscount(undefined);
     setOrderNotes('');
+    setCustomerSnapshot(null);
   }, []);
 
   // Voice Add Batch To Cart
@@ -515,10 +521,31 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     setHeldDrafts((prev) => prev.filter((d) => d.id !== id));
   };
 
+  const handleOpenCustomer = () => {
+    setPendingCustomerAction(null);
+    setIsCustomerModalOpen(true);
+  };
+
+  const handleCustomerSelected = (snapshot: CustomerSnapshot) => {
+    setCustomerSnapshot(snapshot);
+    const nextAction = pendingCustomerAction;
+    setPendingCustomerAction(null);
+    setIsCustomerModalOpen(false);
+    if (nextAction === 'payment') {
+      void handleOpenPayment(snapshot);
+    }
+  };
+
   // Create Order & KOT Flow (Adaptive based on operating mode)
-  const handleCreateKot = async () => {
+  const handleCreateKot = async (customerOverride: CustomerSnapshot | null = customerSnapshot) => {
     if (cartItems.length === 0) {
       setStatusMessage({ type: 'error', text: 'Cart is empty.' });
+      return;
+    }
+
+    if (customerOverride === null) {
+      setPendingCustomerAction('payment');
+      setIsCustomerModalOpen(true);
       return;
     }
 
@@ -582,7 +609,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         tableSessionId: targetSessionId || null,
         notes: orderNotes,
         createdBy: user?.uid || 'pos_cashier',
-        clientRequestId: clientReqId
+        clientRequestId: clientReqId,
+        customerSnapshot: customerOverride
       });
 
       // Success state
@@ -609,7 +637,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   };
 
   // Payment Open Flow (Adaptive based on operating mode)
-  const handleOpenPayment = async () => {
+  const handleOpenPayment = async (customerOverride: CustomerSnapshot | null = customerSnapshot) => {
     if (cartItems.length === 0) {
       setStatusMessage({ type: 'error', text: 'Cart is empty.' });
       return;
@@ -675,7 +703,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         tableSessionId: targetSessionId || null,
         notes: orderNotes,
         createdBy: user?.uid || 'pos_cashier',
-        clientRequestId: clientReqId
+        clientRequestId: clientReqId,
+        customerSnapshot: customerOverride
       });
 
       setActiveOrderForPayment(newOrder);
@@ -840,10 +869,23 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
             showCreateKot={operatingProfile?.posBehavior?.showCreateKot ?? true}
             primaryAction={operatingProfile?.posBehavior?.defaultCheckoutAction ?? 'send_to_kitchen'}
             isSubmitting={isSubmitting}
+            customerSnapshot={customerSnapshot}
+            onOpenCustomer={handleOpenCustomer}
           />
         </div>
 
-        {/* Mobile Sticky Floating Cart Bar (Matching Reference Image) */}
+        <CustomerBillingModal
+        isOpen={isCustomerModalOpen}
+        onClose={() => {
+          setIsCustomerModalOpen(false);
+          setPendingCustomerAction(null);
+        }}
+        restaurantId={restaurantId}
+        initialCustomer={customerSnapshot}
+        onSelectCustomer={handleCustomerSelected}
+      />
+
+      {/* Mobile Sticky Floating Cart Bar (Matching Reference Image) */}
         {activeMobileTab === 'menu' && cartItemsCount > 0 && (
           <div className="lg:hidden fixed bottom-[calc(56px+env(safe-area-inset-bottom,0px)+8px)] left-3 right-3 max-w-lg mx-auto z-20 pointer-events-auto animate-in slide-in-from-bottom-3 duration-200">
             <div className="bg-slate-900/95 backdrop-blur-md text-white rounded-xl px-3.5 py-2 shadow-xl border border-slate-800 flex items-center justify-between gap-3">
