@@ -24,6 +24,8 @@ import { BillReceiptModal } from '../components/pos/BillReceiptModal';
 import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersModal';
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
 import { OnlineOrdersQueue } from '../components/orders/OnlineOrdersQueue';
+import { LiveOperationsControlPanel } from '../components/pos/LiveOperationsControlPanel';
+import { toggleItemAvailability } from '../services/menuService';
 import { VoiceOrderModal } from '../components/voice/VoiceOrderModal';
 import { AdminView } from '../components/layout/Sidebar';
 import { useModalBackHandler } from '../hooks/useModalBackHandler';
@@ -37,7 +39,8 @@ interface PosPageProps {
 
 export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }) => {
   const { restaurant, operatingProfile, loading: restaurantLoading, error: restaurantError } = useRestaurant();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { updateSettings: updateRestaurantSettings } = useRestaurant();
   const restaurantId = restaurant?.restaurantId || '';
 
   // Menu Categories & Items state
@@ -86,6 +89,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   // Live online-order counter and management center for POS.
   const [onlineOrderCount, setOnlineOrderCount] = useState<number>(0);
   const [isOnlineOrdersModalOpen, setIsOnlineOrdersModalOpen] = useState<boolean>(false);
+  const [isLiveOperationsOpen, setIsLiveOperationsOpen] = useState<boolean>(false);
 
   // Modals
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
@@ -725,6 +729,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         onOpenPaymentDue={() => setIsPaymentDueModalOpen(true)}
         onlineOrderCount={onlineOrderCount}
         onOpenOnlineOrders={() => setIsOnlineOrdersModalOpen(true)}
+        onlineOrderingLive={restaurant?.publicStatus === 'active' && restaurant?.onlineOrderingEnabled !== false}
+        onOpenLiveOperations={() => setIsLiveOperationsOpen(true)}
         cartItemsCount={cartItemsCount}
         onOpenCart={() => setActiveMobileTab((prev) => (prev === 'cart' ? 'menu' : 'cart'))}
         onOpenMobileMenu={onOpenMobileMenu}
@@ -951,6 +957,25 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         onResumeDraft={handleResumeDraft}
         onDeleteDraft={handleDeleteDraft}
       />
+
+      {profile?.role === 'owner' && (
+        <LiveOperationsControlPanel
+          isOpen={isLiveOperationsOpen}
+          onClose={() => setIsLiveOperationsOpen(false)}
+          restaurant={restaurant}
+          menuItems={menuItems}
+          onUpdateRestaurant={async (data) => {
+            await import('../context/RestaurantContext').then(() => undefined);
+            // The active RestaurantContext update function is wired below through the
+            // local callback to keep the panel independent from global context details.
+            await updateRestaurantSettings(data);
+          }}
+          onToggleItemAvailability={async (itemId, isAvailable) => {
+            await toggleItemAvailability(restaurantId, itemId, isAvailable);
+            setMenuItems((prev) => prev.map((item) => item.itemId === itemId ? { ...item, isAvailable } : item));
+          }}
+        />
+      )}
 
       <div
         id="pos-online-orders-modal"
