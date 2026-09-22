@@ -28,6 +28,7 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
   const restaurantId = restaurant?.restaurantId || '';
 
   const [tables, setTables] = useState<Table[]>([]);
+  const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +44,7 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
     setError(null);
     setChosenTable(selectedTable);
 
-    const unsubscribe = tableService.subscribeToTables(
+    const unsubscribeTables = tableService.subscribeToTables(
       restaurantId,
       (updatedTables) => {
         setTables(updatedTables);
@@ -56,7 +57,19 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
       }
     );
 
-    return () => unsubscribe();
+    // Occupancy is derived from OPEN table sessions, not the physical table's
+    // cached status/activeSessionId. This prevents a stale lock from making a
+    // table appear permanently Active after its session was closed.
+    const unsubscribeSessions = tableSessionService.subscribeToActiveSessions(
+      restaurantId,
+      (sessions) => setActiveSessions(sessions),
+      (err) => console.error('Active table sessions subscription error:', err)
+    );
+
+    return () => {
+      unsubscribeTables();
+      unsubscribeSessions();
+    };
   }, [isOpen, restaurantId, selectedTable]);
 
   if (!isOpen) return null;
@@ -70,18 +83,18 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
     try {
       // Selecting a free table must NOT make it occupied. The session opens only
       // when the first dine-in order is actually sent/paid.
-      if (!table.activeSessionId) {
+      // Resolve occupancy from the actual open-session stream. A stale
+      // activeSessionId on the physical table must not block a free table.
+      const openSession = activeSessions.find((session) => session.tableId === table.id) || null;
+
+      if (!openSession) {
         onSelectTableAndSession({ ...table, activeSessionId: null }, null);
         onClose();
         return;
       }
 
-      // An already occupied table is selectable and keeps its existing session.
-      const session = await tableSessionService.getActiveSession(
-        restaurantId,
-        table.id,
-        table.activeSessionId
-      );
+      // An occupied table keeps its existing open session.
+      const session = openSession;
 
       if (!session) {
         throw new Error('This table is marked active but its session could not be found. Please refresh tables.');
@@ -189,7 +202,7 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-4 gap-2">
               {tables.map((tbl) => {
                 const isSelected = selectedTable?.id === tbl.id;
-                const isOccupied = !!tbl.activeSessionId;
+                const isOccupied = activeSessions.some((session) => session.tableId === tbl.id);
 
                 return (
                   <button
@@ -250,11 +263,11 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
 
         {/* Footer */}
         <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
-          {selectedTable && selectedTable.activeSessionId ? (
+          {selectedTable && activeSessions.some((session) => session.tableId === selectedTable.id) ? (
             <button
               type="button"
               disabled={submitting}
-              onClick={() => handleManualCloseTable(selectedTable)}
+              onClick={() => handleManualCloseTable({ ...selectedTable, activeSessionId: activeSessions.find((s) => s.tableId === selectedTable.id)?.id || null })}
               className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs active:scale-95"
             >
               Close Table {selectedTable.tableNumber}
