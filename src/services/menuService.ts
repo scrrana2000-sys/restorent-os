@@ -288,6 +288,7 @@ export async function createMenuItem(
       taxInclusive: !!data.taxInclusive,
       foodType: data.foodType || 'veg',
       isAvailable: data.isAvailable !== undefined ? data.isAvailable : true,
+      isOnlineAvailable: data.isOnlineAvailable !== false,
       sku: data.sku?.trim() || '',
       sortOrder: Number(data.sortOrder) || 0,
       createdAt: serverTimestamp(),
@@ -359,6 +360,24 @@ export async function toggleItemAvailability(
   }
 }
 
+export async function toggleItemOnlineAvailability(
+  restaurantId: string,
+  itemId: string,
+  isOnlineAvailable: boolean
+): Promise<void> {
+  await enforcePermission(restaurantId, 'access_items');
+  try {
+    const ref = doc(db, 'restaurants', restaurantId, 'items', itemId);
+    await updateDoc(ref, {
+      isOnlineAvailable,
+      updatedAt: serverTimestamp()
+    });
+    invalidateMenuCache(restaurantId);
+  } catch (error) {
+    throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${restaurantId}/items/${itemId}`);
+  }
+}
+
 export const menuService = {
   subscribeToCategories,
   getCategoriesOnce,
@@ -372,6 +391,7 @@ export const menuService = {
   updateMenuItem,
   deleteMenuItem,
   toggleItemAvailability,
+  toggleItemOnlineAvailability,
   invalidateMenuCache
 };
 
