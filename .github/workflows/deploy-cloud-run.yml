@@ -151,4 +151,9 @@ jobs:
             sleep 10
           done
           echo "::error::Cloud Run latest revision did not become ready within 10 minutes."
+          echo "=== Cloud Run revision diagnostics ==="
+          REVISION="$CREATED"
+          gcloud run revisions describe "$REVISION" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(metadata.name,status.conditions,status.containerStatuses,spec.containers)' || true
+          echo "=== Recent Cloud Run logs for the revision ==="
+          gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$CLOUD_RUN_SERVICE AND resource.labels.revision_name=$REVISION" --project "$GCP_PROJECT_ID" --limit=80 --order=desc --format='value(timestamp,severity,textPayload,jsonPayload.message)' || true
           exit 1
