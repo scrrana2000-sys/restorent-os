@@ -61,7 +61,10 @@ export const PublicRestaurantCard: React.FC<PublicRestaurantCardProps> = ({
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-50 via-slate-50 to-amber-50">
-            <Utensils className="w-10 h-10 text-orange-200 group-hover:scale-110 transition-transform" />
+            <div className="flex flex-col items-center justify-center text-center px-4">
+              <Building className="w-10 h-10 text-orange-300 mb-1" aria-hidden="true" />
+              <span className="text-xs font-semibold text-slate-500 truncate max-w-full">{restaurant.name}</span>
+            </div>
           </div>
         )}
 
@@ -87,9 +90,9 @@ export const PublicRestaurantCard: React.FC<PublicRestaurantCardProps> = ({
           </span>
         </div>
 
-        {/* Logo overlay */}
-        <div className="absolute -bottom-4 left-4">
-          <div className="w-12 h-12 rounded-xl bg-white border-2 border-white shadow-md overflow-hidden flex items-center justify-center shrink-0">
+        {/* Logo */}
+        <div className="absolute bottom-3 left-4">
+          <div className="w-12 h-12 rounded-xl bg-white border-2 border-white shadow-md overflow-hidden flex items-center justify-center shrink-0" aria-label={`${restaurant.name} logo`}>
             {restaurant.logoUrl ? (
               <img
                 src={restaurant.logoUrl}
