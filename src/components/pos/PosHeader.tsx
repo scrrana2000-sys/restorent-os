@@ -149,7 +149,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
             <button
               id="live-operations-header-btn"
               type="button"
-              onClick={onOpenLiveOperations}
+              onClick={(event) => {\n                event.preventDefault();\n                event.stopPropagation();\n                onOpenLiveOperations();\n              }}
               className={`flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-black active:scale-95 transition-all ${
                 onlineOrderingLive
                   ? 'bg-emerald-50 border border-emerald-300 text-emerald-900 hover:bg-emerald-100'
