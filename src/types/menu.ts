@@ -47,7 +47,10 @@ export interface MenuItem {
   taxRate: number;
   taxInclusive: boolean;
   foodType: FoodType;
+  /** Restaurant/POS stock availability. Independent from online ordering. */
   isAvailable: boolean;
+  /** Customer website ordering availability. Defaults to true for legacy items. */
+  isOnlineAvailable?: boolean;
   isActive?: boolean;
   sku: string;
   sortOrder: number;
@@ -68,7 +71,10 @@ export type MenuItemFormData = {
   taxRate: number;
   taxInclusive: boolean;
   foodType: FoodType;
+  /** Restaurant/POS stock availability. */
   isAvailable: boolean;
+  /** Customer website ordering availability. Defaults to true. */
+  isOnlineAvailable?: boolean;
   sku: string;
   sortOrder: number;
 };
