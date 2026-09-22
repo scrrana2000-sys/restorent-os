@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Tag,
   CreditCard,
+  User,
   PauseCircle,
   Flame,
   Utensils,
@@ -41,6 +42,8 @@ interface CartPanelProps {
   onCloseTable?: () => void;
   showCreateKot?: boolean;
   primaryAction?: 'send_to_kitchen' | 'direct_payment';
+  customerSnapshot?: { name?: string; phone?: string } | null;
+  onOpenCustomer?: () => void;
 }
 
 export const CartPanel: React.FC<CartPanelProps> = ({
@@ -62,7 +65,9 @@ export const CartPanel: React.FC<CartPanelProps> = ({
   symbol = '₹',
   onCloseTable,
   showCreateKot = true,
-  primaryAction = 'send_to_kitchen'
+  primaryAction = 'send_to_kitchen',
+  customerSnapshot = null,
+  onOpenCustomer
 }) => {
   const [editingNotesItemId, setEditingNotesItemId] = useState<string | null>(null);
   const [noteInput, setNoteInput] = useState('');
@@ -170,20 +175,37 @@ export const CartPanel: React.FC<CartPanelProps> = ({
           </div>
         </div>
 
-        {cartItems.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm('Clear all items from current cart?')) {
-                onClearCart();
-              }
-            }}
-            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors active:scale-95"
-            title="Clear Cart"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-1.5">
+          {onOpenCustomer && (
+            <button
+              type="button"
+              onClick={onOpenCustomer}
+              className={`px-2 py-1 rounded-lg border text-[10px] font-black flex items-center gap-1 transition-colors ${
+                customerSnapshot?.phone
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-indigo-50 hover:text-indigo-700'
+              }`}
+              title="Add customer name and mobile for bill history"
+            >
+              <User className="w-3 h-3" />
+              <span>{customerSnapshot?.name || 'Customer'}</span>
+            </button>
+          )}
+          {cartItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Clear all items from current cart?')) {
+                  onClearCart();
+                }
+              }}
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors active:scale-95"
+              title="Clear Cart"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Middle Cart Item List — Compact Receipt Style */}
