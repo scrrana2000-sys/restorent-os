@@ -204,6 +204,13 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     return () => unsubscribe();
   }, [restaurantId, paymentDueReloadToken]);
 
+  // Open the POS online-order center when the global incoming-order notification is tapped.
+  useEffect(() => {
+    const handleOpenOnlineOrders = () => setIsOnlineOrdersModalOpen(true);
+    window.addEventListener('ros-open-online-orders', handleOpenOnlineOrders);
+    return () => window.removeEventListener('ros-open-online-orders', handleOpenOnlineOrders);
+  }, []);
+
   // Keep a live count of pending online orders on the POS terminal.
   useEffect(() => {
     if (!restaurantId) return;
@@ -966,6 +973,11 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
             <OnlineOrdersQueue
+              onCollectPayment={(orderToCollect) => {
+                setIsOnlineOrdersModalOpen(false);
+                setActiveOrderForPayment(orderToCollect);
+                setIsPaymentModalOpen(true);
+              }}
               onViewBillModal={(order) => {
                 setIsOnlineOrdersModalOpen(false);
                 setActiveOrderForBill(order);
