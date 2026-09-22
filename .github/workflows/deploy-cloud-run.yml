@@ -136,10 +136,13 @@ jobs:
       - name: Wait for new Cloud Run revision and verify API
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 30); do
             CREATED="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestCreatedRevisionName)')"
             READY="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestReadyRevisionName)')"
-            echo "Cloud Run revision status: created=$CREATED ready=$READY (attempt $attempt/60)"
+            echo "Cloud Run revision status: created=$CREATED ready=$READY (attempt $attempt/30)"
+            if [ "$attempt" = "1" ] || [ "$attempt" = "10" ]; then
+              gcloud run revisions describe "$CREATED" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(status.conditions,status.containerStatuses)' || true
+            fi
             if [ -n "$CREATED" ] && [ "$CREATED" = "$READY" ]; then
               URL="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')"
               test -n "$URL"
@@ -150,7 +153,7 @@ jobs:
             fi
             sleep 10
           done
-          echo "::error::Cloud Run latest revision did not become ready within 10 minutes."
+          echo "::error::Cloud Run latest revision did not become ready within 5 minutes."
           echo "=== Cloud Run revision diagnostics ==="
           REVISION="$CREATED"
           gcloud run revisions describe "$REVISION" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(metadata.name,status.conditions,status.containerStatuses,spec.containers)' || true
