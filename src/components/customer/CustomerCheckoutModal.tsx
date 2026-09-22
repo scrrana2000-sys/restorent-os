@@ -143,9 +143,27 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
   const [submittedKot, setSubmittedKot] = useState<KOT | null>(null);
 
-  const idempotencyKeyRef = useRef<string>(
-    `chk_${cart?.restaurantId || 'guest'}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-  );
+  const idempotencyKeyRef = useRef<string>('');
+
+  const createFreshIdempotencyKey = () =>
+    `chk_${cart?.restaurantId || 'guest'}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+  // A checkout modal instance may be reused after an order is completed.
+  // Each newly opened checkout must represent a new order attempt, with a fresh
+  // idempotency key and a clean success/error state. Otherwise the previous order
+  // can reappear or the server can legitimately return the previous idempotent result.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    idempotencyKeyRef.current = createFreshIdempotencyKey();
+    setCurrentStep('form');
+    setValidationResult(null);
+    setCreatedIntent(null);
+    setSubmittedOrder(null);
+    setSubmittedKot(null);
+    setSubmitError(null);
+    setIsSubmitting(false);
+  }, [isOpen]);
 
   // Auto-set available order type on load
   useEffect(() => {
