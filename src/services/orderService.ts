@@ -1248,7 +1248,9 @@ export class OrderService implements IOrderService {
         updatedAt: now
       };
 
-      await auditService.logEvent(cleanRestaurantId, {
+      // Persisting the order is the critical path. Audit and recipe stock
+      // reconciliation can converge after the order is visible to the operator.
+      void auditService.logEvent(cleanRestaurantId, {
         restaurantId: cleanRestaurantId,
         entityType: 'order',
         entityId: createdOrder.id,
@@ -1260,7 +1262,7 @@ export class OrderService implements IOrderService {
           orderType: createdOrder.orderType,
           tableSessionId: createdOrder.tableSessionId || null
         }
-      });
+      }).catch((error) => console.warn('[OrderService] Order creation audit notice:', error));
 
       if (cleanKey) {
         await idempotencyService.recordSuccess(
@@ -1273,56 +1275,56 @@ export class OrderService implements IOrderService {
         );
       }
 
-      // Automatic recipe stock consumption for confirmed order: tracked authoritatively
-      try {
-        const consumptionResult = await stockConsumptionService.consumeStockForOrderViaBackend(cleanRestaurantId, {
-          orderId: createdOrder.id,
-          orderNumber: createdOrder.orderNumber,
-          items: createdOrder.items.map((i) => ({
-            itemId: i.itemId,
-            quantity: i.quantity,
-            nameSnapshot: i.nameSnapshot
-          })),
-          clientRequestId: cleanKey ? `${cleanKey}_consumption` : undefined
-        });
-
-        const status = consumptionResult.consumptions.length > 0 ? 'consumed' : 'not_applicable';
-        createdOrder.stockConsumptionStatus = status;
-        const orderRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', createdOrder.id);
-        await updateDoc(orderRef, {
-          stockConsumptionStatus: status,
-          stockConsumptionError: null,
-          updatedAt: serverTimestamp()
-        });
-      } catch (consumptionErr: any) {
-        console.warn('Recipe stock consumption notice:', consumptionErr);
-        const errMsg = consumptionErr?.message || 'Stock consumption failed';
-        createdOrder.stockConsumptionStatus = 'failed';
-        createdOrder.stockConsumptionError = errMsg;
+      void (async () => {
         try {
+          const consumptionResult = await stockConsumptionService.consumeStockForOrderViaBackend(cleanRestaurantId, {
+            orderId: createdOrder.id,
+            orderNumber: createdOrder.orderNumber,
+            items: createdOrder.items.map((i) => ({
+              itemId: i.itemId,
+              quantity: i.quantity,
+              nameSnapshot: i.nameSnapshot
+            })),
+            clientRequestId: cleanKey ? `${cleanKey}_consumption` : undefined
+          });
+
+          const status = consumptionResult.consumptions.length > 0 ? 'consumed' : 'not_applicable';
+          createdOrder.stockConsumptionStatus = status;
           const orderRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', createdOrder.id);
           await updateDoc(orderRef, {
-            stockConsumptionStatus: 'failed',
-            stockConsumptionError: errMsg,
+            stockConsumptionStatus: status,
+            stockConsumptionError: null,
             updatedAt: serverTimestamp()
           });
+        } catch (consumptionErr: any) {
+          console.warn('Recipe stock consumption notice:', consumptionErr);
+          const errMsg = consumptionErr?.message || 'Stock consumption failed';
+          createdOrder.stockConsumptionStatus = 'failed';
+          createdOrder.stockConsumptionError = errMsg;
+          try {
+            const orderRef = doc(db, 'restaurants', cleanRestaurantId, 'orders', createdOrder.id);
+            await updateDoc(orderRef, {
+              stockConsumptionStatus: 'failed',
+              stockConsumptionError: errMsg,
+              updatedAt: serverTimestamp()
+            });
 
-          await auditService.logEvent(cleanRestaurantId, {
-            restaurantId: cleanRestaurantId,
-            entityType: 'order',
-            entityId: createdOrder.id,
-            action: 'stock_consumption_failed',
-            actorUid: createdOrder.createdBy || auth.currentUser?.uid || 'system',
-            metadata: {
-              orderNumber: createdOrder.orderNumber,
-              error: errMsg
-            }
-          });
-        } catch (updateErr) {
-          console.warn('Failed to record stockConsumptionStatus on order:', updateErr);
+            await auditService.logEvent(cleanRestaurantId, {
+              restaurantId: cleanRestaurantId,
+              entityType: 'order',
+              entityId: createdOrder.id,
+              action: 'stock_consumption_failed',
+              actorUid: createdOrder.createdBy || auth.currentUser?.uid || 'system',
+              metadata: {
+                orderNumber: createdOrder.orderNumber,
+                error: errMsg
+              }
+            });
+          } catch (updateErr) {
+            console.warn('Failed to record stockConsumptionStatus on order:', updateErr);
+          }
         }
-      }
-
+      })();
       return createdOrder;
     } catch (err: unknown) {
       if (cleanKey) {
