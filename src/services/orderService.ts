@@ -2504,6 +2504,29 @@ export class OrderService implements IOrderService {
     const cleanRestaurantId = restaurantId.trim();
     const cleanOrderId = orderId.trim();
     const resolvedUserId = actorUid || auth.currentUser?.uid || 'staff';
+    const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+
+    // Customer online handover is a server-authoritative operational action.
+    // Route browser requests through the trusted endpoint so a stale client
+    // permission cache cannot reject a valid staff handover.
+    if (typeof window !== 'undefined' && !isTestRuntime) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('Authentication is required to complete an order.');
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch((await import('../utils/apiConfig')).getApiUrl('/api/orders/online-handover'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ restaurantId: cleanRestaurantId, orderId: cleanOrderId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.success || !payload?.order) {
+        throw new Error(payload?.message || 'Online order handover failed.');
+      }
+      return payload.order as Order;
+    }
 
     await this.completeOrder(cleanRestaurantId, cleanOrderId, resolvedUserId);
 
