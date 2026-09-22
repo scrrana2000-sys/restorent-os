@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Table, TableSession } from '../../types/table';
 import { Order } from '../../types/order';
 import { KOT } from '../../types/kot';
+import { reconcileOrderFinancials } from '../../utils/orderFinancials';
 import {
   X,
   Users,
@@ -83,9 +84,10 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
   }
 
   // Active order metrics
-  const isOrderActive = order && order.status !== 'completed' && order.status !== 'cancelled';
-  const dueAmountMinor = order
-    ? (order.dueAmountMinor ?? Math.max(0, (order.grandTotalMinor || 0) - (order.paidAmountMinor || 0)))
+  const displayOrder = order ? reconcileOrderFinancials(order) : null;
+  const isOrderActive = !!displayOrder && displayOrder.status !== 'completed' && displayOrder.status !== 'cancelled';
+  const dueAmountMinor = displayOrder && displayOrder.status !== 'cancelled'
+    ? (displayOrder.dueAmountMinor ?? Math.max(0, (displayOrder.grandTotalMinor || 0) - (displayOrder.paidAmountMinor || 0)))
     : 0;
   const isOrderFullyPaid = isOrderActive && dueAmountMinor === 0;
 
@@ -101,7 +103,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
     if (!order) return;
     setActionError(null);
     try {
-      await onSendKotToKitchen(order.id, table.id);
+      await onSendKotToKitchen(displayOrder.id, table.id);
     } catch (err: any) {
       setActionError(err?.message || 'Failed to dispatch KOT to kitchen.');
     }
@@ -111,11 +113,11 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
     if (!order || !onCompleteOrder) return;
     setActionError(null);
     try {
-      await onCompleteOrder(order.id);
-      setActionSuccess(`Order #${order.orderNumber} completed successfully.`);
+      await onCompleteOrder(displayOrder.id);
+      setActionSuccess(`Order #${displayOrder.orderNumber} completed successfully.`);
       setTimeout(() => setActionSuccess(null), 3000);
     } catch (err: any) {
-      setActionError(err?.message || 'Failed to complete order.');
+      setActionError(err?.message || 'Failed to complete displayOrder.');
     }
   };
 
@@ -127,13 +129,13 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
     }
     setActionError(null);
     try {
-      await onCancelOrder(order.id, cancelReason.trim());
+      await onCancelOrder(displayOrder.id, cancelReason.trim());
       setShowCancelPrompt(false);
       setCancelReason('');
-      setActionSuccess(`Order #${order.orderNumber} cancelled.`);
+      setActionSuccess(`Order #${displayOrder.orderNumber} cancelled.`);
       setTimeout(() => setActionSuccess(null), 3000);
     } catch (err: any) {
-      setActionError(err?.message || 'Failed to cancel order.');
+      setActionError(err?.message || 'Failed to cancel displayOrder.');
     }
   };
 
@@ -148,12 +150,12 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
         return;
       } else if (dueAmountMinor > 0) {
         setActionError(
-          `Cannot close session: Order "${order.orderNumber || order.id}" has an unpaid balance of ₹${(dueAmountMinor / 100).toFixed(2)}. Please settle the bill or cancel the order first.`
+          `Cannot close session: Order "${displayOrder.orderNumber || displayOrder.id}" has an unpaid balance of ₹${(dueAmountMinor / 100).toFixed(2)}. Please settle the bill or cancel the order first.`
         );
         return;
       } else if (hasActiveCookingKots) {
         setActionError(
-          `Cannot close session: Kitchen is still preparing ${activeCookingKots.length} ticket(s) for Order "${order.orderNumber || order.id}". Kitchen orders must be served or cancelled first.`
+          `Cannot close session: Kitchen is still preparing ${activeCookingKots.length} ticket(s) for Order "${displayOrder.orderNumber || displayOrder.id}". Kitchen orders must be served or cancelled first.`
         );
         return;
       }
@@ -176,10 +178,10 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
     setActionError(null);
     try {
       if (onCloseSessionWithAutoResolve) {
-        await onCloseSessionWithAutoResolve(session.id, order.id);
+        await onCloseSessionWithAutoResolve(session.id, displayOrder.id);
       } else {
         if (onCompleteOrder) {
-          await onCompleteOrder(order.id);
+          await onCompleteOrder(displayOrder.id);
         }
         await onCloseSession(session.id);
       }
@@ -296,7 +298,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
               <div>
                 <p className="font-bold text-white text-sm">Complete Order & Close Session?</p>
                 <p className="text-slate-300 mt-1">
-                  Order <strong>#{order.orderNumber}</strong> is fully settled (₹0.00 due) and all items are served.
+                  Order <strong>#{displayOrder.orderNumber}</strong> is fully settled (₹0.00 due) and all items are served.
                   Would you like to complete this order and close the table session now?
                 </p>
               </div>
@@ -329,7 +331,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
             <div className="flex items-start gap-2.5">
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-bold text-white text-sm">Cancel Order #{order.orderNumber}?</p>
+                <p className="font-bold text-white text-sm">Cancel Order #{displayOrder.orderNumber}?</p>
                 <p className="text-slate-300 mt-0.5">
                   Cancelling will mark this order as cancelled, allowing you to immediately close or reuse the table.
                 </p>
@@ -372,21 +374,21 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
               <div className="flex items-center gap-2">
                 <Utensils className="w-4 h-4 text-indigo-400" />
                 <h3 className="text-sm font-bold text-white">
-                  {order ? `Order #${order.orderNumber}` : 'No Active Order'}
+                  {order ? `Order #${displayOrder.orderNumber}` : 'No Active Order'}
                 </h3>
               </div>
               {order && (
                 <div className="flex items-center gap-1.5">
                   <span
                     className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border whitespace-nowrap ${
-                      order.status === 'completed'
+                      displayOrder.status === 'completed'
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                        : order.status === 'cancelled'
+                        : displayOrder.status === 'cancelled'
                         ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                         : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
                     }`}
                   >
-                    {order.status}
+                    {displayOrder.status}
                   </span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${
@@ -407,11 +409,11 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                 <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800/90 text-center">
                   <div className="flex flex-col justify-center min-h-[44px]">
                     <span className="text-[10px] font-semibold text-slate-400 block leading-tight">Total</span>
-                    <span className="font-bold text-white text-xs sm:text-sm mt-0.5 leading-tight">₹{((order.grandTotalMinor || 0) / 100).toFixed(2)}</span>
+                    <span className="font-bold text-white text-xs sm:text-sm mt-0.5 leading-tight">₹{((displayOrder.grandTotalMinor || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex flex-col justify-center min-h-[44px] border-x border-slate-800">
                     <span className="text-[10px] font-semibold text-slate-400 block leading-tight">Paid</span>
-                    <span className="font-bold text-emerald-400 text-xs sm:text-sm mt-0.5 leading-tight">₹{((order.paidAmountMinor || 0) / 100).toFixed(2)}</span>
+                    <span className="font-bold text-emerald-400 text-xs sm:text-sm mt-0.5 leading-tight">₹{((displayOrder.paidAmountMinor || 0) / 100).toFixed(2)}</span>
                   </div>
                   <div className="flex flex-col justify-center min-h-[44px]">
                     <span className="text-[10px] font-semibold text-slate-400 block leading-tight">Due Balance</span>
@@ -496,9 +498,9 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
 
                 {/* Ordered Items List */}
                 <div className="space-y-1.5">
-                  <div className="text-xs text-slate-400 font-semibold">Ordered Items ({order.items?.length || 0}):</div>
+                  <div className="text-xs text-slate-400 font-semibold">Ordered Items ({displayOrder.items?.length || 0}):</div>
                   <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                    {order.items?.map((item, idx) => (
+                    {displayOrder.items?.map((item, idx) => (
                       <div
                         key={item.itemId + idx}
                         className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs"
@@ -516,7 +518,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                             </span>
                           )}
                           <span className="text-slate-300 text-xs font-mono font-bold">
-                            ₹{(((item.priceMinor || 0) * (item.quantity || 1)) / 100).toFixed(2)}
+                            ₹{(((item.unitPriceMinor || 0) * (item.quantity || 1)) / 100).toFixed(2)}
                           </span>
                         </div>
                       </div>
