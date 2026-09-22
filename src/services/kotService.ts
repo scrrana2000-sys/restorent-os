@@ -561,60 +561,72 @@ export class KOTService implements IKOTService {
       }
     }
 
-    // 1. Fetch current KOT document
-    const kot = await this.getKOTById(cleanRestaurantId, cleanKotId);
-    if (!kot) {
-      if (cleanKey) {
-        await idempotencyService.recordFailure(cleanRestaurantId, cleanKey, `KOT "${cleanKotId}" does not exist.`);
-      }
-      throw new Error(`KOT "${cleanKotId}" does not exist in restaurant "${cleanRestaurantId}".`);
-    }
-
-    // 2. Validate status transition
-    const transitionValidation = validateKOTStatusTransition(kot.status, newStatus);
-    if (!transitionValidation.isValid) {
-      if (cleanKey) {
-        await idempotencyService.recordFailure(cleanRestaurantId, cleanKey, transitionValidation.error || 'Invalid transition');
-      }
-      throw new Error(transitionValidation.error);
-    }
-
-    // If no change, no-op
-    if (kot.status === newStatus) {
-      if (cleanKey) {
-        await idempotencyService.recordSuccess(
-          cleanRestaurantId,
-          cleanKey,
-          'update_kot_status',
-          { kotId: cleanKotId, newStatus, updatedBy },
-          cleanKotId,
-          undefined
-        );
-      }
-      return;
-    }
-
-    // 3. Prepare status timestamp update
+    // 1. Read + validate + mutate inside one Firestore transaction.
+    // This prevents stale UI snapshots or double taps from skipping a lifecycle
+    // state (for example preparing -> ready -> served in one race).
     const resolvedUserId = updatedBy || auth.currentUser?.uid || 'system';
-    const updatePayload: Record<string, any> = {
-      status: newStatus,
-      updatedBy: resolvedUserId,
-      updatedAt: serverTimestamp()
-    };
-
-    if (newStatus === 'sentToKitchen') {
-      updatePayload.sentToKitchenAt = serverTimestamp();
-    } else if (newStatus === 'preparing') {
-      updatePayload.preparingAt = serverTimestamp();
-    } else if (newStatus === 'ready') {
-      updatePayload.readyAt = serverTimestamp();
-    } else if (newStatus === 'served') {
-      updatePayload.servedAt = serverTimestamp();
-    }
+    let kotBefore: KOT | null = null;
+    let transitioned = false;
 
     try {
       const docRef = doc(db, kotDocPath(cleanRestaurantId, cleanKotId));
-      await updateDoc(docRef, updatePayload);
+
+      await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(docRef);
+        if (!snap.exists()) {
+          throw new Error(`KOT "${cleanKotId}" does not exist in restaurant "${cleanRestaurantId}".`);
+        }
+
+        const currentKot = { id: snap.id, ...snap.data() } as KOT;
+        kotBefore = currentKot;
+
+        const transitionValidation = validateKOTStatusTransition(currentKot.status, newStatus);
+        if (!transitionValidation.isValid) {
+          throw new Error(transitionValidation.error || 'Invalid KOT status transition.');
+        }
+
+        if (currentKot.status === newStatus) {
+          return;
+        }
+
+        const updatePayload: Record<string, any> = {
+          status: newStatus,
+          updatedBy: resolvedUserId,
+          updatedAt: serverTimestamp()
+        };
+
+        if (newStatus === 'sentToKitchen') {
+          updatePayload.sentToKitchenAt = serverTimestamp();
+        } else if (newStatus === 'preparing') {
+          updatePayload.preparingAt = serverTimestamp();
+        } else if (newStatus === 'ready') {
+          updatePayload.readyAt = serverTimestamp();
+        } else if (newStatus === 'served') {
+          updatePayload.servedAt = serverTimestamp();
+        }
+
+        transaction.update(docRef, updatePayload);
+        transitioned = true;
+      });
+
+      if (!kotBefore) {
+        throw new Error(`KOT "${cleanKotId}" could not be loaded.`);
+      }
+
+      // A repeated request for the already-current status is a safe no-op.
+      if (!transitioned) {
+        if (cleanKey) {
+          await idempotencyService.recordSuccess(
+            cleanRestaurantId,
+            cleanKey,
+            'update_kot_status',
+            { kotId: cleanKotId, newStatus, updatedBy },
+            cleanKotId,
+            undefined
+          );
+        }
+        return;
+      }
 
       await auditService.logEvent(cleanRestaurantId, {
         restaurantId: cleanRestaurantId,
@@ -623,9 +635,9 @@ export class KOTService implements IKOTService {
         action: 'kot_status_changed',
         actorUid: resolvedUserId,
         metadata: {
-          kotNumber: kot.kotNumber,
-          orderId: kot.orderId,
-          oldStatus: kot.status,
+          kotNumber: kotBefore.kotNumber,
+          orderId: kotBefore.orderId,
+          oldStatus: kotBefore.status,
           newStatus,
           updatedBy: resolvedUserId
         }
@@ -642,19 +654,21 @@ export class KOTService implements IKOTService {
         );
       }
 
-      // Synchronize parent order status based on all sibling KOT statuses
-      await this.syncParentOrderStatus(cleanRestaurantId, kot.orderId, resolvedUserId);
+      // Synchronize parent order status based on all sibling KOT statuses.
+      await this.syncParentOrderStatus(cleanRestaurantId, kotBefore.orderId, resolvedUserId);
 
-      // Evaluate order completion and session closure
+      // Completion is evaluated only after an explicit SERVED transition (plus
+      // payment settlement), never as a side effect of READY/PREPARING.
       try {
         await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
           cleanRestaurantId,
-          kot.orderId,
+          kotBefore.orderId,
           resolvedUserId
         );
       } catch (autoErr) {
         console.warn('[KOTService] Notice: auto-completion/session-closure check after KOT status update encountered:', autoErr);
       }
+
     } catch (err) {
       if (cleanKey) {
         await idempotencyService.recordFailure(
