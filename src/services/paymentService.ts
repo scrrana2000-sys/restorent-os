@@ -400,7 +400,10 @@ export class PaymentService implements IPaymentService {
         throw new Error('Transaction succeeded but payment document was not instantiated.');
       }
 
-      await auditService.logEvent(cleanRestaurantId, {
+      // The payment transaction has already atomically written the payment and
+      // order balance. Audit/finalization are post-commit work and should not
+      // keep the cashier waiting on extra network round trips.
+      void auditService.logEvent(cleanRestaurantId, {
         restaurantId: cleanRestaurantId,
         entityType: 'payment',
         entityId: (createdPaymentDoc as Payment).id,
@@ -412,21 +415,22 @@ export class PaymentService implements IPaymentService {
           method: paymentInput.method,
           status: resolvedStatus
         }
-      });
+      }).catch((error) => console.warn('[PaymentService] Payment audit notice:', error));
 
       // Finalization is only relevant after the order becomes fully paid.
-      // Partial payments no longer trigger a second Cloud Run/API workflow.
-      if (resolvedStatus === 'completed' && resultingDueAmountMinor === 0) {
-        try {
-          await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
-            cleanRestaurantId,
-            cleanOrderId,
-            resolvedUserId
-          );
-        } catch (autoErr) {
-          console.warn('[PaymentService] Notice: auto-completion/session-closure check after payment encountered:', autoErr);
-        }
-      }
+// Partial payments no longer trigger a second Cloud Run/API workflow.
+if (resolvedStatus === 'completed' && resultingDueAmountMinor === 0) {
+  try {
+    await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
+      cleanRestaurantId,
+      cleanOrderId,
+      resolvedUserId
+    );
+  } catch (autoErr) {
+    console.warn('[PaymentService] Notice: auto-completion/session-closure check after payment encountered:', autoErr);
+  }
+}
+
 
       return createdPaymentDoc;
     } catch (err: any) {
