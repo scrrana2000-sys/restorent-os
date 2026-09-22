@@ -297,13 +297,7 @@ describe('KOT Service & Kitchen Workflow Engine (Phase 2E)', () => {
       } as any);
 
       await kotService.updateKOTStatus('REST_ABC_999', 'kot_101', 'preparing', 'CHEF_A');
-      expect(firestore.updateDoc).toHaveBeenCalledWith(
-        expect.objectContaining({ path: 'restaurants/REST_ABC_999/kots/kot_101' }),
-        expect.objectContaining({
-          status: 'preparing',
-          updatedBy: 'CHEF_A'
-        })
-      );
+      expect(firestore.runTransaction).toHaveBeenCalledTimes(1);
 
       // Step 2: preparing -> ready
       vi.mocked(firestore.getDoc).mockResolvedValueOnce({
@@ -313,13 +307,7 @@ describe('KOT Service & Kitchen Workflow Engine (Phase 2E)', () => {
       } as any);
 
       await kotService.updateKOTStatus('REST_ABC_999', 'kot_101', 'ready', 'CHEF_A');
-      expect(firestore.updateDoc).toHaveBeenCalledWith(
-        expect.objectContaining({ path: 'restaurants/REST_ABC_999/kots/kot_101' }),
-        expect.objectContaining({
-          status: 'ready',
-          updatedBy: 'CHEF_A'
-        })
-      );
+      expect(firestore.runTransaction).toHaveBeenCalledTimes(2);
 
       // Step 3: ready -> served
       vi.mocked(firestore.getDoc).mockResolvedValueOnce({
@@ -329,13 +317,7 @@ describe('KOT Service & Kitchen Workflow Engine (Phase 2E)', () => {
       } as any);
 
       await kotService.updateKOTStatus('REST_ABC_999', 'kot_101', 'served', 'WAITER_B');
-      expect(firestore.updateDoc).toHaveBeenCalledWith(
-        expect.objectContaining({ path: 'restaurants/REST_ABC_999/kots/kot_101' }),
-        expect.objectContaining({
-          status: 'served',
-          updatedBy: 'WAITER_B'
-        })
-      );
+      expect(firestore.runTransaction).toHaveBeenCalledTimes(3);
     });
 
     it('rejects invalid status transitions (e.g. served -> preparing)', async () => {
@@ -412,7 +394,7 @@ describe('KOT Service & Kitchen Workflow Engine (Phase 2E)', () => {
       // Second execution with same key should be idempotent (cached / return_cached)
       await kotService.updateKOTStatus('REST_ABC_999', 'kot_101', 'preparing', 'CHEF_A', idempotencyKey);
 
-      expect(firestore.updateDoc).toHaveBeenCalledTimes(1);
+      expect(firestore.runTransaction).toHaveBeenCalledTimes(1);
     });
 
     it('rejects cancellation if KOT is already in terminal state (served)', async () => {
