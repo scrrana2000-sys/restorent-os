@@ -25,7 +25,7 @@ export const LiveOperationsControlPanel: React.FC<LiveOperationsControlPanelProp
   const onlineOrderingEnabled = restaurant?.onlineOrderingEnabled !== false;
   const publicStatus: PublicStatus = (restaurant?.publicStatus as PublicStatus) || (restaurant?.isActive === false ? 'closed' : 'active');
   const websiteOnline = publicStatus === 'active' && onlineOrderingEnabled;
-  const availableCount = menuItems.filter(i => i.isAvailable !== false).length;
+  const availableCount = menuItems.filter(i => i.isOnlineAvailable !== false).length;
   const unavailableCount = menuItems.length - availableCount;
 
   const filteredItems = useMemo(() => {
@@ -106,7 +106,7 @@ export const LiveOperationsControlPanel: React.FC<LiveOperationsControlPanelProp
           <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
             <div className="p-4 sm:p-5 border-b border-slate-200">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div><div className="flex items-center gap-2"><Utensils className="w-4 h-4 text-indigo-600" /><h3 className="text-sm font-black text-slate-900">Live Item Availability</h3></div>
+                <div><div className="flex items-center gap-2"><Utensils className="w-4 h-4 text-indigo-600" /><h3 className="text-sm font-black text-slate-900">Online Item Availability</h3></div>
                   <div className="flex items-center gap-2 mt-1.5 text-[11px] font-semibold"><span className="text-emerald-700">{availableCount} available</span><span className="text-slate-300">•</span><span className="text-rose-600">{unavailableCount} unavailable</span></div>
                 </div>
                 <div className="relative sm:w-72"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search item..." className="w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-400" /></div>
@@ -114,12 +114,12 @@ export const LiveOperationsControlPanel: React.FC<LiveOperationsControlPanelProp
             </div>
             <div className="max-h-[42vh] overflow-y-auto divide-y divide-slate-100">
               {filteredItems.map(item => {
-                const available = item.isAvailable !== false;
-                const key = 'item-' + item.itemId;
+                const available = item.isOnlineAvailable !== false;
+                const key = 'online-item-' + item.itemId;
                 return (
                   <div key={item.itemId} className="px-4 sm:px-5 py-3.5 flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">{item.imageUrl ? <img src={item.imageUrl} alt="" className={'w-full h-full object-cover ' + (available ? '' : 'grayscale opacity-60')} /> : <div className="w-full h-full flex items-center justify-center text-slate-400"><Utensils className="w-5 h-5" /></div>}</div>
-                    <div className="flex-1 min-w-0"><p className={'text-xs sm:text-sm font-black truncate ' + (available ? 'text-slate-900' : 'text-slate-500')}>{item.name}</p><p className="text-[10px] text-slate-500">{available ? 'Customers can order this item' : 'Unavailable to customers'}</p></div>
+                    <div className="flex-1 min-w-0"><p className={'text-xs sm:text-sm font-black truncate ' + (available ? 'text-slate-900' : 'text-slate-500')}>{item.name}</p><p className="text-[10px] text-slate-500">{available ? 'Customers can order this item online' : 'Unavailable on customer website'}</p></div>
                     <button type="button" disabled={busyKey !== null} onClick={async () => { setBusyKey(key); try { await onToggleItemAvailability(item.itemId, !available); } finally { setBusyKey(null); } }} className={'relative w-16 h-9 rounded-full shrink-0 ' + (available ? 'bg-emerald-600' : 'bg-slate-300')} aria-label={(available ? 'Mark unavailable: ' : 'Mark available: ') + item.name}>
                       <span className={'absolute top-1 w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center ' + (available ? 'left-8' : 'left-1')}>{available ? <Check className="w-4 h-4 text-emerald-600" /> : <Power className="w-4 h-4 text-slate-400" />}</span>
                     </button>
