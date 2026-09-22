@@ -316,7 +316,7 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
                       src={restaurant.bannerImageUrl || restaurant.coverImageUrl!}
                       alt={restaurant.name}
                       referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover opacity-85"
+                      className="w-full h-full object-cover"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-950 via-slate-900 to-amber-950">
@@ -325,7 +325,7 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
                   )}
 
                   {/* Gradient overlay for readability */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/55 via-transparent to-black/10 pointer-events-none" />
 
                   {/* Status Overlay Badge */}
                   <div className="absolute top-4 left-4">
@@ -414,7 +414,7 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
                       <button
                         id="profile-view-menu-btn"
                         onClick={handleMenuClick}
-                        className="w-full sm:w-auto px-6 py-3 glass-neu-btn-primary font-bold text-sm rounded-2xl flex items-center justify-center gap-2 min-h-[44px]"
+                        className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 glass-neu-btn-primary rounded-xl text-sm font-bold flex items-center justify-center gap-2"
                       >
                         <span>View Menu</span>
                         <ChevronRight className="w-4 h-4 text-white" />
@@ -488,7 +488,7 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Order Capabilities Card */}
                 <div className="glass-neu-card rounded-3xl p-6 space-y-4">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-orange-500" />
                     Available Services
                   </h3>
@@ -580,7 +580,7 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
                         <p id="profile-full-address" className="text-slate-600 mt-0.5 leading-relaxed">
                           {restaurant.address || `${restaurant.area || ''}, ${restaurant.city}`}
                         </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
+                        <p className="text-xs text-slate-500 mt-0.5">
                           {restaurant.city}, {restaurant.state} {restaurant.postalCode ? `- ${restaurant.postalCode}` : ''}
                         </p>
                       </div>
@@ -606,9 +606,12 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
                     )}
 
                     {/* Canonical Identifier */}
-                    <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
-                      <span>Public Reference Code</span>
-                      <span className="font-mono font-bold text-slate-700">{restaurant.publicRestaurantCode}</span>
+                    <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between gap-4">
+                      <div>
+                        <span className="text-xs font-semibold text-slate-600 block">Public Reference Code</span>
+                        <span className="text-[11px] text-slate-400 block mt-0.5">Restaurant identifier</span>
+                      </div>
+                      <span className="shrink-0 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-mono font-bold text-slate-800">{restaurant.publicRestaurantCode}</span>
                     </div>
                   </div>
                 </div>
