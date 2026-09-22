@@ -2927,7 +2927,9 @@ export class OrderService implements IOrderService {
         updatedBy: resolvedUserId
       });
 
-      await auditService.logEvent(cleanRestaurantId, {
+      // Completion itself is the critical mutation. Audit logging and the
+      // session-closure evaluation can safely converge in the background.
+      void auditService.logEvent(cleanRestaurantId, {
         restaurantId: cleanRestaurantId,
         entityType: 'order',
         entityId: cleanOrderId,
@@ -2938,18 +2940,15 @@ export class OrderService implements IOrderService {
           grandTotalMinor: order.grandTotalMinor,
           paidAmountMinor: order.paidAmountMinor
         }
-      });
+      }).catch((error) => console.warn('[OrderService] Completion audit notice:', error));
 
-      // Evaluate table session auto-closure
-      try {
-        await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
-          cleanRestaurantId,
-          cleanOrderId,
-          resolvedUserId
-        );
-      } catch (autoErr) {
-        console.warn('[OrderService] Notice: auto session closure check after completeOrder encountered:', autoErr);
-      }
+      void orderFinalizationService.evaluateAndFinalizeOrderAndSession(
+        cleanRestaurantId,
+        cleanOrderId,
+        resolvedUserId
+      ).catch((error) => {
+        console.warn('[OrderService] Background session finalization notice:', error);
+      });
 
       return {
         ...order,
