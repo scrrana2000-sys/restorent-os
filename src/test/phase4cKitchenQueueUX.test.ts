@@ -24,6 +24,15 @@ vi.mock('firebase/firestore', () => {
     getDocs: vi.fn(),
     setDoc: vi.fn(),
     updateDoc: vi.fn(),
+    runTransaction: vi.fn(async (_db, callback: any) => {
+      const transaction = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(transaction);
+    }),
     query: vi.fn((colRef, ...clauses) => ({ type: 'query', colRef, clauses })),
     where: vi.fn((field, op, val) => ({ type: 'where', field, op, val })),
     orderBy: vi.fn((field, dir) => ({ type: 'orderBy', field, dir })),
