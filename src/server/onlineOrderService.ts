@@ -960,48 +960,111 @@ export async function submitServerPosOrder(input: {
   });
 
   const now = new Date();
-  const orderRef = adminDb.collection(`restaurants/${restaurantId}/orders`).doc();
-  const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
-  const orderItems: OrderItem[] = calculations.lineResults.map((line: any, index: number) => ({
-    itemId: canonicalItems[index].itemId,
-    nameSnapshot: canonicalItems[index].nameSnapshot,
-    shortNameSnapshot: canonicalItems[index].shortNameSnapshot,
-    imageUrlSnapshot: canonicalItems[index].imageUrlSnapshot || null,
-    foodTypeSnapshot: canonicalItems[index].foodTypeSnapshot || null,
-    quantity: canonicalItems[index].quantity,
-    unitPriceMinor: canonicalItems[index].unitPriceMinor,
-    taxRate: canonicalItems[index].taxRate,
-    taxInclusive: canonicalItems[index].taxInclusive,
-    discountMinor: line.discountMinor,
-    lineSubtotalMinor: line.subtotalMinor,
-    lineTaxMinor: line.totalTaxMinor,
-    lineTotalMinor: line.lineTotalMinor,
-    notes: canonicalItems[index].notes,
-    modifiers: canonicalItems[index].modifiers ? [...canonicalItems[index].modifiers!] : undefined
-  }));
+
+  // Dine-in uses one canonical bill per open table session.
+  // Additional POS submissions for the same session are appended to that bill
+  // and generate a new KOT only for the newly added items.
+  let existingSessionOrder: any = null;
+  if (input.orderType === 'dineIn' && input.tableSessionId) {
+    const existingSnap = await adminDb
+      .collection(`restaurants/${restaurantId}/orders`)
+      .where('tableSessionId', '==', input.tableSessionId)
+      .get();
+
+    for (const d of existingSnap.docs) {
+      const data = d.data() as any;
+      if (data.status !== 'cancelled' && data.status !== 'completed') {
+        existingSessionOrder = { id: d.id, ...data };
+        break;
+      }
+    }
+  }
+
+  const orderRef = existingSessionOrder
+    ? adminDb.doc(`restaurants/${restaurantId}/orders/${existingSessionOrder.id}`)
+    : adminDb.collection(`restaurants/${restaurantId}/orders`).doc();
+
+  let effectiveItems = canonicalItems;
+  let effectiveCalculations = calculations;
+  let effectivePaidAmountMinor = Number(existingSessionOrder?.paidAmountMinor || 0);
+
+  if (existingSessionOrder) {
+    const existingItems: CartItem[] = Array.isArray(existingSessionOrder.items)
+      ? existingSessionOrder.items.map((item: any, index: number) => ({
+          cartItemId: `existing_${index}_${item.itemId}`,
+          itemId: item.itemId,
+          nameSnapshot: item.nameSnapshot,
+          shortNameSnapshot: item.shortNameSnapshot || item.nameSnapshot || '',
+          imageUrlSnapshot: item.imageUrlSnapshot || null,
+          foodTypeSnapshot: item.foodTypeSnapshot || null,
+          quantity: Number(item.quantity) || 0,
+          unitPriceMinor: Number(item.unitPriceMinor) || 0,
+          taxRate: Number(item.taxRate) || 0,
+          taxInclusive: Boolean(item.taxInclusive),
+          notes: item.notes || '',
+          modifiers: Array.isArray(item.modifiers) ? [...item.modifiers] : []
+        }))
+      : [];
+
+    const mergedItems = [...existingItems];
+    for (const newItem of canonicalItems) {
+      const matchingIndex = mergedItems.findIndex((item) => {
+        if (item.itemId !== newItem.itemId) return false;
+        const a = Array.isArray(item.modifiers) ? item.modifiers : [];
+        const b = Array.isArray(newItem.modifiers) ? newItem.modifiers : [];
+        if (a.length !== b.length) return false;
+        return a.map((m: any) => m.id).sort().join(',') === b.map((m: any) => m.id).sort().join(',');
+      });
+
+      if (matchingIndex >= 0) {
+        mergedItems[matchingIndex].quantity += newItem.quantity;
+        if (newItem.notes?.trim()) {
+          const oldNotes = mergedItems[matchingIndex].notes || '';
+          mergedItems[matchingIndex].notes = oldNotes ? `${oldNotes}; ${newItem.notes}` : newItem.notes;
+        }
+      } else {
+        mergedItems.push({ ...newItem, cartItemId: `new_${Date.now()}_${newItem.itemId}` });
+      }
+    }
+
+    const mergedCalculation = calculateOrderTotals({
+      items: mergedItems.map(item => ({
+        quantity: item.quantity,
+        unitPriceMinor: item.unitPriceMinor,
+        taxRate: item.taxRate,
+        taxInclusive: item.taxInclusive,
+        discount: item.discount
+      })),
+      orderDiscount: input.cartState.orderDiscount || existingSessionOrder.orderDiscount,
+      taxJurisdiction: input.taxJurisdiction || 'intraState'
+    });
+
+    effectiveItems = mergedItems;
+    effectiveCalculations = mergedCalculation;
+  }
 
   const orderPayload: any = {
     restaurantId,
-    orderNumber,
+    orderNumber: existingSessionOrder?.orderNumber || orderNumber,
     customerId: null,
     orderType: input.orderType,
     source: input.source,
-    status: input.createKot ? 'sentToKitchen' : 'confirmed',
+    status: existingSessionOrder?.status || (input.createKot ? 'sentToKitchen' : 'confirmed'),
     tableId: input.orderType === 'dineIn' ? (input.tableId || null) : null,
     tableSessionId: input.orderType === 'dineIn' ? (input.tableSessionId || null) : null,
     items: orderItems,
     itemCount: orderItems.reduce((sum, item) => sum + item.quantity, 0),
-    subtotalMinor: calculations.subtotalMinor,
-    discountMinor: calculations.discountMinor,
-    taxableAmountMinor: calculations.taxableAmountMinor,
-    cgstMinor: calculations.cgstMinor,
-    sgstMinor: calculations.sgstMinor,
-    igstMinor: calculations.igstMinor,
-    totalTaxMinor: calculations.totalTaxMinor,
-    grandTotalMinor: calculations.grandTotalMinor,
-    paidAmountMinor: 0,
-    dueAmountMinor: calculations.grandTotalMinor,
-    paymentStatus: 'unpaid',
+    subtotalMinor: effectiveCalculations.subtotalMinor,
+    discountMinor: effectiveCalculations.discountMinor,
+    taxableAmountMinor: effectiveCalculations.taxableAmountMinor,
+    cgstMinor: effectiveCalculations.cgstMinor,
+    sgstMinor: effectiveCalculations.sgstMinor,
+    igstMinor: effectiveCalculations.igstMinor,
+    totalTaxMinor: effectiveCalculations.totalTaxMinor,
+    grandTotalMinor: effectiveCalculations.grandTotalMinor,
+    paidAmountMinor: effectivePaidAmountMinor,
+    dueAmountMinor: Math.max(0, effectiveCalculations.grandTotalMinor - effectivePaidAmountMinor),
+    paymentStatus: effectivePaidAmountMinor >= effectiveCalculations.grandTotalMinor ? 'paid' : effectivePaidAmountMinor > 0 ? 'partially_paid' : 'unpaid',
     notes: input.notes || input.cartState.notes || '',
     customerSnapshot: input.customerSnapshot || null,
     createdBy: input.createdBy,
@@ -1066,11 +1129,34 @@ export async function submitServerPosOrder(input: {
         updatedAt: now
       }, { merge: false });
     }
-    tx.create(orderRef, stripUndefined({ ...orderPayload, id: orderRef.id, createdAt: now, updatedAt: now }));
+
+    const sessionRef = input.orderType === 'dineIn' && input.tableSessionId
+      ? adminDb.doc(`restaurants/${restaurantId}/tableSessions/${input.tableSessionId}`)
+      : null;
+
+    if (existingSessionOrder) {
+      const mergedPayload = {
+        ...orderPayload,
+        id: existingSessionOrder.id,
+        updatedAt: now,
+        updatedBy: input.createdBy
+      };
+      tx.update(orderRef, stripUndefined(mergedPayload));
+      if (sessionRef) {
+        tx.set(sessionRef, { activeOrderId: existingSessionOrder.id, updatedAt: now }, { merge: true });
+      }
+    } else {
+      tx.create(orderRef, stripUndefined({ ...orderPayload, id: orderRef.id, createdAt: now, updatedAt: now }));
+      if (sessionRef) {
+        tx.set(sessionRef, { activeOrderId: orderRef.id, updatedAt: now }, { merge: true });
+      }
+    }
+
     if (kotRef && kot) tx.create(kotRef, stripUndefined(kot));
   });
 
-  const order = { id: orderRef.id, ...orderPayload, createdAt: now, updatedAt: now } as Order;
+
+  const order = { id: orderRef.id, ...orderPayload, createdAt: existingSessionOrder?.createdAt || now, updatedAt: now } as Order;
   if (idemRef) {
     await idemRef.set({
       status: 'completed',
