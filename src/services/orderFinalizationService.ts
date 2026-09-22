@@ -16,6 +16,29 @@ import { Payment } from '../types/payment';
 import { tableSessionService } from './tableSessionService';
 import { auditService } from './auditService';
 
+async function getVerifiedPaymentState(
+  restaurantId: string,
+  orderId: string
+): Promise<{ completedAmountMinor: number; hasPendingPayment: boolean }> {
+  const paymentsCol = collection(db, 'restaurants', restaurantId, 'payments');
+  const payQuery = query(paymentsCol, where('orderId', '==', orderId));
+  const paySnap = await getDocs(payQuery);
+
+  let completedAmountMinor = 0;
+  let hasPendingPayment = false;
+  (paySnap.docs || []).forEach((pd) => {
+    const payData = pd.data() as Payment;
+    if (payData.status === 'completed') {
+      const amount = Number(payData.amountMinor);
+      if (Number.isSafeInteger(amount) && amount > 0) completedAmountMinor += amount;
+    } else if (payData.status === 'pending') {
+      hasPendingPayment = true;
+    }
+  });
+
+  return { completedAmountMinor, hasPendingPayment };
+}
+
 export class OrderFinalizationService {
   /**
    * Evaluates whether an order should automatically transition to 'completed'
