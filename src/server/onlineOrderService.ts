@@ -1047,26 +1047,17 @@ export async function submitServerPosOrder(input: {
   createKot?: boolean;
 }): Promise<{ order: Order; kot: KOT | null }> {
   const restaurantId = cleanId(input.restaurantId, 'restaurantId');
-  const subSnap = await adminDb.doc(`restaurants/${restaurantId}/subscription/current`).get();
-  if (!subSnap.exists) throw new Error('Restaurant trial or subscription is not active.');
-  const sub = subSnap.data() || {};
-  const accessUntil = asMillis(sub.operationalAccessUntil);
-  if (!['trial', 'active', 'grace_period'].includes(String(sub.status)) || !accessUntil || Date.now() >= accessUntil) {
-    throw new Error('Restaurant trial or subscription has expired.');
-  }
-
-  if (input.orderType === 'dineIn' && !input.skipTableSessionValidation) {
-    const sessionId = cleanId(input.tableSessionId, 'tableSessionId');
-    const sessionSnap = await adminDb.doc(`restaurants/${restaurantId}/tableSessions/${sessionId}`).get();
-    if (!sessionSnap.exists || sessionSnap.data()?.restaurantId !== restaurantId || sessionSnap.data()?.status !== 'open') {
-      throw new Error('Selected table session is not open.');
-    }
-  }
-
   if (!Array.isArray(input.cartState.items) || input.cartState.items.length === 0) throw new Error('Cart is empty.');
 
+  // Subscription, table-session validation and catalog reads are independent.
+  // Run them concurrently to remove avoidable serial network latency.
+  const subscriptionPromise = adminDb.doc(`restaurants/${restaurantId}/subscription/current`).get();
+  const sessionPromise = input.orderType === 'dineIn' && !input.skipTableSessionValidation
+    ? adminDb.doc(`restaurants/${restaurantId}/tableSessions/${cleanId(input.tableSessionId, 'tableSessionId')}`).get()
+    : Promise.resolve(null);
+
   // Re-read authoritative menu price/tax/availability; client values are not trusted.
-  const canonicalItems: CartItem[] = await Promise.all(input.cartState.items.map(async (item) => {
+  const canonicalItemsPromise: Promise<CartItem[]> = Promise.all(input.cartState.items.map(async (item) => {
     const itemId = cleanId(item.itemId, 'itemId');
     const snap = await adminDb.doc(`restaurants/${restaurantId}/items/${itemId}`).get();
     if (!snap.exists) throw new Error(`Item "${item.nameSnapshot || itemId}" is no longer available.`);
@@ -1090,6 +1081,20 @@ export async function submitServerPosOrder(input: {
       quantity: Math.max(1, Math.min(100, Math.floor(Number(item.quantity) || 1)))
     };
   }));
+  const [subSnap, sessionSnap] = await Promise.all([subscriptionPromise, sessionPromise]);
+
+  if (!subSnap.exists) throw new Error('Restaurant trial or subscription is not active.');
+  const sub = subSnap.data() || {};
+  const accessUntil = asMillis(sub.operationalAccessUntil);
+  if (!['trial', 'active', 'grace_period'].includes(String(sub.status)) || !accessUntil || Date.now() >= accessUntil) {
+    throw new Error('Restaurant trial or subscription has expired.');
+  }
+
+  if (sessionSnap && (!sessionSnap.exists || sessionSnap.data()?.restaurantId !== restaurantId || sessionSnap.data()?.status !== 'open')) {
+    throw new Error('Selected table session is not open.');
+  }
+
+  const canonicalItems: CartItem[] = await canonicalItemsPromise;
 
   const calculations = calculateOrderTotals({
     items: canonicalItems.map(item => ({
@@ -1117,8 +1122,8 @@ export async function submitServerPosOrder(input: {
     const sessionRef = adminDb.doc(
       `restaurants/${restaurantId}/tableSessions/${input.tableSessionId}`
     );
-    const sessionForOrder = await sessionRef.get();
-    const activeOrderId = String(sessionForOrder.data()?.activeOrderId || '').trim();
+    // Reuse the already validated session snapshot; avoid a duplicate read.
+    const activeOrderId = String(sessionSnap?.data()?.activeOrderId || '').trim();
 
     if (activeOrderId) {
       const activeOrderSnap = await adminDb
