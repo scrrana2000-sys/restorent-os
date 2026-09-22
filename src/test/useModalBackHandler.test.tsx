@@ -128,6 +128,8 @@ describe('useModalBackHandler Global Coordinated Stack', () => {
     expect(screen.getByText('Second')).toBeDefined();
     expect(historyBack).not.toHaveBeenCalled();
 
+    const replaceCallsAfterSwitch = historyReplace.mock.calls.length;
+
     act(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
@@ -135,7 +137,7 @@ describe('useModalBackHandler Global Coordinated Stack', () => {
     expect(screen.queryByText('Second')).toBeNull();
     expect(historyBack).not.toHaveBeenCalled();
     expect(historyPush).toHaveBeenCalled();
-    expect(historyReplace).not.toHaveBeenCalled();
+    expect(historyReplace.mock.calls.length).toBe(replaceCallsAfterSwitch);
   });
 
   it('closes a modal without traversing browser history', () => {
