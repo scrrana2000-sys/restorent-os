@@ -393,9 +393,15 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
 
   try {
     // Resolve the user's restaurant role once, then serve all subsequent
-    // permission checks from memory. Firestore rules remain authoritative.
+    // permission checks from memory. Run owner/member lookups concurrently so
+    // a cold permission check does not add two serial Firestore round trips.
     const restRef = doc(db, 'restaurants', cleanRestaurantId);
-    const restSnap = await getDoc(restRef);
+    const memberRef = doc(db, 'restaurants', cleanRestaurantId, 'members', user.uid);
+    const [restSnap, memberSnap] = await Promise.all([
+      getDoc(restRef),
+      getDoc(memberRef)
+    ]);
+
     if (restSnap.exists()) {
       const restData = restSnap.data();
       if (restData.ownerId === user.uid) {
@@ -409,8 +415,6 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
       }
     }
 
-    const memberRef = doc(db, 'restaurants', cleanRestaurantId, 'members', user.uid);
-    const memberSnap = await getDoc(memberRef);
     if (memberSnap.exists()) {
       const memberData = memberSnap.data();
       const isActive =
