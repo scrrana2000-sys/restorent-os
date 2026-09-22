@@ -2027,12 +2027,12 @@ async function startServer() {
   }
 
   if (process.env.NODE_ENV === 'production') {
-    // Firebase Admin SDK is the authoritative server identity for privileged
-    // Firestore operations. Auth-user/claim provisioning must never prevent
-    // Cloud Run from opening its HTTP listener. Endpoint-level authorization
-    // still verifies the caller before every privileged mutation.
-    await ensureServerAuthenticated().catch((err) => {
-      console.warn('[RestaurantOS Server] Server identity preparation skipped; continuing with Admin SDK:', err?.message || err);
+    // Prepare the trusted server identity in the background. Never block the
+    // HTTP listener on Firebase Auth/Firestore provisioning: Cloud Run must be
+    // able to pass its startup health check immediately. Privileged endpoints
+    // still call ensureServerAuthenticated() at their authorization boundary.
+    void ensureServerAuthenticated().catch((err) => {
+      console.warn('[RestaurantOS Server] Background server identity preparation skipped; endpoint-level initialization will retry as needed:', err?.message || err);
     });
   }
 
