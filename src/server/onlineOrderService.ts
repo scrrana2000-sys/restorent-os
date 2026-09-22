@@ -1075,7 +1075,7 @@ export async function submitServerPosOrder(input: {
     await idemRef.set({
       status: 'completed',
       targetEntityId: order.id,
-      responseSnapshot: { order, kot },
+      responseSnapshot: stripUndefined({ order, kot }),
       updatedAt: new Date()
     }, { merge: true });
   }
