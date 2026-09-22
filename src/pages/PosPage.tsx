@@ -25,8 +25,9 @@ import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersMod
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
 import { OnlineOrdersQueue } from '../components/orders/OnlineOrdersQueue';
 import { LiveOperationsControlPanel } from '../components/pos/LiveOperationsControlPanel';
+import { PosItemAvailabilityPanel } from '../components/pos/PosItemAvailabilityPanel';
 import { CustomerBillingModal } from '../components/pos/CustomerBillingModal';
-import { toggleItemOnlineAvailability } from '../services/menuService';
+import { toggleItemAvailability, toggleItemOnlineAvailability } from '../services/menuService';
 import { VoiceOrderModal } from '../components/voice/VoiceOrderModal';
 import { AdminView } from '../components/layout/Sidebar';
 import { useModalBackHandler } from '../hooks/useModalBackHandler';
@@ -90,6 +91,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   const [onlineOrderCount, setOnlineOrderCount] = useState<number>(0);
   const [isOnlineOrdersModalOpen, setIsOnlineOrdersModalOpen] = useState<boolean>(false);
   const [isLiveOperationsOpen, setIsLiveOperationsOpen] = useState<boolean>(false);
+  const [isPosItemAvailabilityOpen, setIsPosItemAvailabilityOpen] = useState<boolean>(false);
 
   // Modals
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
@@ -122,6 +124,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   useModalBackHandler(isBillModalOpen, () => setIsBillModalOpen(false), 'pos-bill-modal');
   useModalBackHandler(isVoiceModalOpen, () => setIsVoiceModalOpen(false), 'pos-voice-modal');
   useModalBackHandler(isCustomerModalOpen, () => setIsCustomerModalOpen(false), 'pos-customer-modal');
+  useModalBackHandler(isPosItemAvailabilityOpen, () => setIsPosItemAvailabilityOpen(false), 'pos-item-availability-modal');
   useModalBackHandler(!!sentOrderInfo, () => setSentOrderInfo(null), 'pos-order-sent-modal');
 
   const symbol = restaurant?.currencySymbol || '₹';
@@ -717,6 +720,23 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     }
   };
 
+  const handleTogglePosItemAvailability = React.useCallback(async (itemId: string, isAvailable: boolean) => {
+    if (!restaurantId) return;
+    const previous = menuItems.find(item => item.itemId === itemId)?.isAvailable;
+    setMenuItems(prev => prev.map(item => item.itemId === itemId ? { ...item, isAvailable } : item));
+    try {
+      await toggleItemAvailability(restaurantId, itemId, isAvailable);
+      setStatusMessage({
+        type: 'success',
+        text: isAvailable ? 'Item is ON for POS billing.' : 'Item is OFF for POS billing.'
+      });
+    } catch (error: any) {
+      setMenuItems(prev => prev.map(item => item.itemId === itemId && previous !== undefined ? { ...item, isAvailable: previous } : item));
+      setStatusMessage({ type: 'error', text: error?.message || 'Failed to update POS item availability.' });
+      throw error;
+    }
+  }, [restaurantId, menuItems]);
+
   // Payment Settlement Success
   const handlePaymentSuccess = (updatedOrder: Order) => {
     handleClearCart();
@@ -759,6 +779,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         onOpenOnlineOrders={() => setIsOnlineOrdersModalOpen(true)}
         onlineOrderingLive={restaurant?.publicStatus === 'active' && restaurant?.onlineOrderingEnabled !== false}
         onOpenLiveOperations={() => setIsLiveOperationsOpen(true)}
+        onOpenPosItemAvailability={() => setIsPosItemAvailabilityOpen(true)}
         cartItemsCount={cartItemsCount}
         onOpenCart={() => setActiveMobileTab((prev) => (prev === 'cart' ? 'menu' : 'cart'))}
         onOpenMobileMenu={onOpenMobileMenu}
@@ -998,6 +1019,13 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         heldDrafts={heldDrafts}
         onResumeDraft={handleResumeDraft}
         onDeleteDraft={handleDeleteDraft}
+      />
+
+      <PosItemAvailabilityPanel
+        isOpen={isPosItemAvailabilityOpen}
+        onClose={() => setIsPosItemAvailabilityOpen(false)}
+        menuItems={menuItems}
+        onToggleItemAvailability={handleTogglePosItemAvailability}
       />
 
       {profile?.role === 'owner' && (
