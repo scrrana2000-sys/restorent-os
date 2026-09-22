@@ -137,7 +137,11 @@ describe('useModalBackHandler Global Coordinated Stack', () => {
     expect(screen.queryByText('Second')).toBeNull();
     expect(historyBack).not.toHaveBeenCalled();
     expect(historyPush).toHaveBeenCalled();
-    expect(historyReplace.mock.calls.length).toBe(replaceCallsAfterSwitch);
+
+    // The popstate handler restores the shared modal entry synchronously,
+    // then React runs the closing effect and clears that temporary marker.
+    // Neither operation traverses browser history.
+    expect(historyReplace.mock.calls.length).toBe(replaceCallsAfterSwitch + 1);
   });
 
   it('closes a modal without traversing browser history', () => {
