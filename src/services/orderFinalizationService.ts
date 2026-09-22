@@ -79,10 +79,32 @@ export class OrderFinalizationService {
       // 2. Evaluate Order Completion
       if (order.status !== 'cancelled') {
         if (order.status !== 'completed') {
-          const dueAmount =
-            order.dueAmountMinor ??
-            Math.max(0, (order.grandTotalMinor || 0) - (order.paidAmountMinor || 0));
-          const isPaid = dueAmount === 0;
+          // Payment is authoritative: never infer that a bill is paid from a
+          // stale/malformed order.paidAmountMinor or dueAmountMinor snapshot.
+          // A KOT being served must NEVER create/assume a payment.
+          const paymentsCol = collection(db, 'restaurants', cleanRestaurantId, 'payments');
+          const payQuery = query(paymentsCol, where('orderId', '==', cleanOrderId));
+          const paySnap = await getDocs(payQuery);
+          let verifiedPaidAmountMinor = 0;
+          let hasPendingPayment = false;
+
+          (paySnap.docs || []).forEach((pd) => {
+            const payData = pd.data() as Payment;
+            if (payData.status === 'completed') {
+              const amount = Number(payData.amountMinor);
+              if (Number.isSafeInteger(amount) && amount > 0) {
+                verifiedPaidAmountMinor += amount;
+              }
+            } else if (payData.status === 'pending') {
+              hasPendingPayment = true;
+            }
+          });
+
+          const grandTotalMinor = Number(order.grandTotalMinor || 0);
+          const isPaid =
+            Number.isSafeInteger(grandTotalMinor) &&
+            grandTotalMinor >= 0 &&
+            verifiedPaidAmountMinor === grandTotalMinor;
 
           // Check KOT status for this order
           const kotsCol = collection(db, 'restaurants', cleanRestaurantId, 'kots');
@@ -95,19 +117,6 @@ export class OrderFinalizationService {
             const kotData = kd.data() as KOT;
             if (kotData.status !== 'served' && kotData.status !== 'cancelled') {
               allKotsTerminal = false;
-            }
-          });
-
-          // Check for pending payment transactions
-          const paymentsCol = collection(db, 'restaurants', cleanRestaurantId, 'payments');
-          const payQuery = query(paymentsCol, where('orderId', '==', cleanOrderId));
-          const paySnap = await getDocs(payQuery);
-          let hasPendingPayment = false;
-          const payDocs = paySnap.docs || [];
-          payDocs.forEach((pd) => {
-            const payData = pd.data() as Payment;
-            if (payData.status === 'pending') {
-              hasPendingPayment = true;
             }
           });
 
@@ -131,8 +140,8 @@ export class OrderFinalizationService {
               metadata: {
                 orderNumber: order.orderNumber,
                 grandTotalMinor: order.grandTotalMinor,
-                paidAmountMinor: order.paidAmountMinor,
-                reason: 'auto_completed_payment_and_kot_terminal'
+                paidAmountMinor: verifiedPaidAmountMinor,
+                reason: 'auto_completed_after_verified_payment_and_kot_terminal'
               }
             });
 
