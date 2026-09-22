@@ -102,12 +102,12 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
   return (
     <div
       id="customer-sidebar-drawer-overlay"
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-start animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm md:bg-transparent md:backdrop-blur-none flex justify-start animate-in fade-in duration-200 md:pointer-events-none"
       onClick={onClose}
     >
       <div
         id="customer-sidebar-drawer"
-        className="w-80 max-w-[85vw] sm:max-w-xs bg-slate-50 h-full flex flex-col overflow-hidden shadow-2xl border-r border-slate-200 animate-in slide-in-from-left duration-200"
+        className="w-80 max-w-[85vw] sm:max-w-xs bg-slate-50 h-full flex flex-col overflow-hidden shadow-2xl border-r border-slate-200 animate-in slide-in-from-left duration-200 md:pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}
