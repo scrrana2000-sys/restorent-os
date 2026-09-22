@@ -2176,7 +2176,8 @@ export class OrderService implements IOrderService {
     restaurantId: string,
     orderId: string,
     actorUid: string,
-    prepTimeMinutes: number = 20
+    prepTimeMinutes: number = 20,
+    trustedServerAuthorized: boolean = false
   ): Promise<Order> {
     const cleanRestaurantId = restaurantId.trim();
     const cleanOrderId = orderId.trim();
@@ -2188,7 +2189,11 @@ export class OrderService implements IOrderService {
     // Avoid a stale client-side role cache blocking a valid owner/manager/cashier/captain
     // after staff membership changes. Direct/test execution keeps the service-level
     // permission guard.
-    if (typeof window === 'undefined' || isTestRuntime) {
+    // Browser requests are protected by the dedicated server route, which has
+    // already verified the caller's authenticated restaurant role. The server
+    // then performs the trusted Firestore write. Do not run the browser/client
+    // permission cache again on that trusted server path.
+    if (!trustedServerAuthorized && (typeof window === 'undefined' || isTestRuntime)) {
       await enforcePermission(cleanRestaurantId, 'modify_orders');
     }
 
