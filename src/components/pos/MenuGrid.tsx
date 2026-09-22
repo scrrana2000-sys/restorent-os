@@ -3,7 +3,7 @@ import { MenuItem } from '../../types/menu';
 import { formatMoney, toMoneyMinor } from '../../utils/money';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getItemFallbackVisual } from '../../utils/visualCategory';
-import { Plus, Minus, Star, Ban } from 'lucide-react';
+import { Plus, Minus, Star, Ban, Power } from 'lucide-react';
 
 interface MenuGridProps {
   items: MenuItem[];
@@ -13,6 +13,7 @@ interface MenuGridProps {
   onAddToCart: (item: MenuItem) => void;
   cartItemQuantityMap?: Record<string, number>;
   onUpdateQuantityByItemId?: (itemId: string, delta: number) => void;
+  onToggleAvailability?: (itemId: string, isAvailable: boolean) => Promise<void>;
 }
 
 interface MenuItemCardProps {
@@ -21,6 +22,7 @@ interface MenuItemCardProps {
   quantityInCart: number;
   onAddToCart: (item: MenuItem) => void;
   onUpdateQuantity?: (itemId: string, delta: number) => void;
+  onToggleAvailability?: (itemId: string, isAvailable: boolean) => Promise<void>;
 }
 
 const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
@@ -28,9 +30,11 @@ const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
   symbol,
   quantityInCart,
   onAddToCart,
-  onUpdateQuantity
+  onUpdateQuantity,
+  onToggleAvailability
 }) => {
   const [imgError, setImgError] = useState(false);
+  const [availabilityBusy, setAvailabilityBusy] = useState(false);
   const minorPrice = toMoneyMinor(item.price);
   const formattedPrice = formatMoney(minorPrice, symbol);
   const isVeg = item.foodType === 'veg';
@@ -138,12 +142,41 @@ const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
       {/* 2. Card Content: Title, Price, and Stepper/Add Button */}
       <div className="p-2.5 flex-1 flex flex-col justify-between gap-1.5">
         <div className="min-w-0">
-          <h4 className="h-5 text-xs sm:text-[13px] font-bold text-slate-900 leading-5 truncate" title={item.name}>
-            {item.name}
-          </h4>
-          <span className="text-xs sm:text-sm font-black text-slate-900 block mt-0.5">
-            {formattedPrice}
-          </span>
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <h4 className="h-5 text-xs sm:text-[13px] font-bold text-slate-900 leading-5 truncate" title={item.name}>
+                {item.name}
+              </h4>
+              <span className="text-xs sm:text-sm font-black text-slate-900 block mt-0.5">
+                {formattedPrice}
+              </span>
+            </div>
+            {onToggleAvailability && (
+              <button
+                type="button"
+                disabled={availabilityBusy}
+                onClick={async (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setAvailabilityBusy(true);
+                  try {
+                    await onToggleAvailability(item.itemId, !item.isAvailable);
+                  } finally {
+                    setAvailabilityBusy(false);
+                  }
+                }}
+                className={'shrink-0 h-7 min-w-[44px] px-1.5 rounded-md border text-[9px] font-black flex items-center justify-center gap-1 transition-colors ' +
+                  (item.isAvailable
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                    : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100')}
+                aria-label={(item.isAvailable ? 'Turn OFF ' : 'Turn ON ') + item.name}
+                title={item.isAvailable ? 'Turn this item OFF for POS' : 'Turn this item ON for POS'}
+              >
+                <Power className="w-3 h-3" />
+                <span>{item.isAvailable ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Bottom Action: Prominent '+ Add' or Stepper '[ - ] 1 [ + ]' */}
@@ -204,7 +237,8 @@ export const MenuGrid: React.FC<MenuGridProps> = React.memo(({
   onRetry,
   onAddToCart,
   cartItemQuantityMap = {},
-  onUpdateQuantityByItemId
+  onUpdateQuantityByItemId,
+  onToggleAvailability
 }) => {
   const { restaurant } = useRestaurant();
   const symbol = restaurant?.currencySymbol || '₹';
@@ -272,6 +306,7 @@ export const MenuGrid: React.FC<MenuGridProps> = React.memo(({
           quantityInCart={cartItemQuantityMap[item.itemId] || 0}
           onAddToCart={onAddToCart}
           onUpdateQuantity={onUpdateQuantityByItemId}
+          onToggleAvailability={onToggleAvailability}
         />
       ))}
     </div>
