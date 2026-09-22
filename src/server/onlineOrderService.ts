@@ -740,6 +740,13 @@ export async function acceptServerOnlineOrder(
   }
 
   const now = new Date();
+  // Order update and KOT lookup are independent once the authoritative order
+  // snapshot has been read. Start the lookup immediately to reduce total RTT.
+  const kotsQueryPromise = adminDb
+    .collection(`restaurants/${cleanRestaurantId}/kots`)
+    .where('orderId', '==', cleanOrderId)
+    .get();
+
   await orderRef.update({
     status: 'sentToKitchen',
     acceptedAt: now,
@@ -749,10 +756,7 @@ export async function acceptServerOnlineOrder(
     updatedBy: actorUid
   });
 
-  const kotsQuery = await adminDb
-    .collection(`restaurants/${cleanRestaurantId}/kots`)
-    .where('orderId', '==', cleanOrderId)
-    .get();
+  const kotsQuery = await kotsQueryPromise;
 
   let kot: KOT | null = null;
   const existingActiveKots = kotsQuery.docs.filter((d) => {
@@ -816,22 +820,31 @@ export async function acceptServerOnlineOrder(
     kot = kotPayload as KOT;
   }
 
-  const updatedSnap = await orderRef.get();
-  const updatedOrder = { id: updatedSnap.id, ...updatedSnap.data() } as Order;
+  // The mutation above is authoritative. Avoid an extra read just to build
+  // the response; we already have the complete order snapshot and updates.
+  const updatedOrder = {
+    ...orderData,
+    status: 'sentToKitchen',
+    acceptedAt: now,
+    acceptedBy: actorUid,
+    estimatedPrepMinutes: minutes,
+    updatedAt: now,
+    updatedBy: actorUid
+  } as Order;
 
-  await writeAudit(cleanRestaurantId, 'order', cleanOrderId, 'online_order_accepted', actorUid, {
+  void writeAudit(cleanRestaurantId, 'order', cleanOrderId, 'online_order_accepted', actorUid, {
     orderNumber: updatedOrder.orderNumber,
     orderType: updatedOrder.orderType,
     estimatedPrepMinutes: minutes,
     source: updatedOrder.source
-  });
+  }).catch((error) => console.warn('[RestaurantOS Server] Online acceptance audit notice:', error));
 
   if (kot) {
-    await writeAudit(cleanRestaurantId, 'kot', kot.id, 'kot_sent_to_kitchen', actorUid, {
+    void writeAudit(cleanRestaurantId, 'kot', kot.id, 'kot_sent_to_kitchen', actorUid, {
       kotNumber: kot.kotNumber,
       orderId: cleanOrderId,
       status: kot.status
-    });
+    }).catch((error) => console.warn('[RestaurantOS Server] Online acceptance KOT audit notice:', error));
   }
 
   return { order: updatedOrder, kot };
