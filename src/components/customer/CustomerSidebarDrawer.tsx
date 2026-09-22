@@ -120,7 +120,7 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
               <h2 className="text-sm font-black text-slate-900 tracking-tight">
                 RestaurantOS
               </h2>
-              <p className="text-[10px] font-extrabold text-orange-600 uppercase tracking-wider">
+              <p className="text-xs font-extrabold text-orange-600 tracking-wide">
                 Online Food Discovery
               </p>
             </div>
@@ -136,7 +136,7 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
         </div>
 
         {/* Drawer Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {/* Quick Navigation Menu Links */}
           <div className="bg-white rounded-2xl p-2 border border-slate-200/80 shadow-xs space-y-1">
             <button
@@ -218,7 +218,7 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
           {/* Section 1: Profile & Login Status */}
           <div className="bg-white rounded-2xl p-4 border border-slate-100/85 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+              <span className="text-xs font-extrabold text-slate-500 tracking-wide">
                 Profile Details
               </span>
               {customer && (
@@ -249,10 +249,10 @@ export const CustomerSidebarDrawer: React.FC<CustomerSidebarDrawerProps> = ({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h4 className="text-xs font-bold text-slate-800 truncate">
+                  <h3 className="text-xs font-bold text-slate-800 truncate">
                     {customer.name}
-                  </h4>
-                  <p className="text-[11px] text-slate-400 truncate">
+                  </h3>
+                  <p className="text-xs text-slate-500 truncate">
                     {customer.email}
                   </p>
                 </div>
