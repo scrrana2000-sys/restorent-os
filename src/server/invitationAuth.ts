@@ -553,9 +553,18 @@ export async function verifyRestaurantStaffRole(
 
   const baseUrl = getFirestoreBaseUrl();
   try {
-    const restaurantRes = await fetch(`${baseUrl}/restaurants/${encodeURIComponent(cleanRestaurantId)}`, {
-      headers: { Authorization: `Bearer ${idToken}` }
-    });
+    // Owner and member lookups are independent. Fetch them concurrently for
+    // non-owner staff so server authorization does not pay two serial network RTTs.
+    const authHeaders = { Authorization: `Bearer ${idToken}` };
+    const [restaurantRes, memberRes] = await Promise.all([
+      fetch(`${baseUrl}/restaurants/${encodeURIComponent(cleanRestaurantId)}`, {
+        headers: authHeaders
+      }),
+      fetch(
+        `${baseUrl}/restaurants/${encodeURIComponent(cleanRestaurantId)}/members/${encodeURIComponent(callerUid)}`,
+        { headers: authHeaders }
+      )
+    ]);
 
     if (restaurantRes.status === 401 || restaurantRes.status === 403) {
       return { authorized: false, code: 403, error: 'FORBIDDEN_RESTAURANT_ACCESS', message: 'Caller is not authorized to access this restaurant.' };
@@ -572,11 +581,6 @@ export async function verifyRestaurantStaffRole(
     if (ownerId === callerUid && roles.has('owner')) {
       return { authorized: true, code: 200, role: 'owner' };
     }
-
-    const memberRes = await fetch(
-      `${baseUrl}/restaurants/${encodeURIComponent(cleanRestaurantId)}/members/${encodeURIComponent(callerUid)}`,
-      { headers: { Authorization: `Bearer ${idToken}` } }
-    );
 
     if (!memberRes.ok) {
       return { authorized: false, code: 403, error: 'FORBIDDEN', message: 'Caller is not an active member of this restaurant.' };
