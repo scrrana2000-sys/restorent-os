@@ -2027,11 +2027,14 @@ async function startServer() {
   }
 
   if (process.env.NODE_ENV === 'production') {
-    // Prepare the trusted server identity in the background. Never block the
-    // HTTP listener on Firebase Auth/Firestore provisioning: Cloud Run must be
-    // able to pass its startup health check immediately. Privileged endpoints
-    // still call ensureServerAuthenticated() at their authorization boundary.
-    void ensureServerAuthenticated().catch((err) => {
+    // Prepare the trusted server identity in the background. This must never
+    // prevent the HTTP listener from starting; Cloud Run needs the listener
+    // available for its startup health check. Privileged endpoints still
+    // initialize the trusted server identity at their authorization boundary.
+    const prepareServerIdentity = async () => {
+      await ensureServerAuthenticated();
+    };
+    void prepareServerIdentity().catch((err) => {
       console.warn('[RestaurantOS Server] Background server identity preparation skipped; endpoint-level initialization will retry as needed:', err?.message || err);
     });
   }
