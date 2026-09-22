@@ -6,6 +6,7 @@ import {
   PauseCircle,
   Receipt,
   DollarSign,
+  Globe2,
   Menu,
   ShoppingCart,
   ChevronDown,
@@ -38,6 +39,8 @@ interface PosHeaderProps {
   paymentDueCount?: number;
   totalPaymentDueMinor?: number;
   onOpenPaymentDue?: () => void;
+  onlineOrderCount?: number;
+  onOpenOnlineOrders?: () => void;
   cartItemsCount?: number;
   onOpenCart?: () => void;
   onOpenMobileMenu?: () => void;
@@ -60,6 +63,8 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   paymentDueCount = 0,
   totalPaymentDueMinor = 0,
   onOpenPaymentDue,
+  onlineOrderCount = 0,
+  onOpenOnlineOrders,
   cartItemsCount = 0,
   onOpenCart,
   onOpenMobileMenu,
@@ -136,6 +141,29 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
         <div className="flex items-center gap-1.5 shrink-0">
           <OfflineSyncIndicator />
 
+          {/* Incoming Online Orders Quick Center */}
+          {onOpenOnlineOrders && (
+            <button
+              id="online-orders-header-btn"
+              type="button"
+              onClick={onOpenOnlineOrders}
+              className={`flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-bold active:scale-95 transition-all $
+                onlineOrderCount > 0
+                  ? 'bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 shadow-2xs'
+                  : 'bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700'
+              `}
+              title="Online Orders"
+            >
+              <Globe2 className={`w-3.5 h-3.5 shrink-0 ${onlineOrderCount > 0 ? 'text-emerald-700' : 'text-slate-500'}`} />
+              <span className="hidden sm:inline">Online</span>
+              {onlineOrderCount > 0 && (
+                <span className="px-1 py-0.2 min-w-[18px] text-[10px] font-black rounded-full bg-emerald-600 text-white text-center">
+                  {onlineOrderCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Payment Due Quick Center Button */}
           {onOpenPaymentDue && paymentDueCount > 0 && (
             <button
@@ -146,8 +174,11 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
               title="Payment Due Collection Center"
             >
               <DollarSign className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-              <span className="px-1 py-0.2 text-[10px] font-black rounded-full bg-amber-500 text-slate-950">
+              <span className="px-1 py-0.2 min-w-[18px] text-[10px] font-black rounded-full bg-amber-500 text-slate-950 text-center">
                 {paymentDueCount}
+              </span>
+              <span className="hidden sm:inline text-[10px] font-black font-mono">
+                {totalPaymentDueMinor > 0 ? `₹${(totalPaymentDueMinor / 100).toFixed(0)} due` : 'Due'}
               </span>
             </button>
           )}
