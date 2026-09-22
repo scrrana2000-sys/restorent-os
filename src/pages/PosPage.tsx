@@ -115,6 +115,17 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     text: string;
   } | null>(null);
 
+  // Auto-dismiss POS status notifications after 3 seconds.
+  useEffect(() => {
+    if (!statusMessage) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setStatusMessage(null);
+    }, 3000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [statusMessage]);
+
   // Deterministic back-button history management for mobile drawer/cart & modals
   useModalBackHandler(activeMobileTab === 'cart', () => setActiveMobileTab('menu'), 'pos-mobile-cart');
   useModalBackHandler(isTableModalOpen, () => setIsTableModalOpen(false), 'pos-table-modal');
