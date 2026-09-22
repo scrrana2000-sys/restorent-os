@@ -38,9 +38,8 @@ interface PosPageProps {
 }
 
 export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }) => {
-  const { restaurant, operatingProfile, loading: restaurantLoading, error: restaurantError } = useRestaurant();
+  const { restaurant, operatingProfile, loading: restaurantLoading, error: restaurantError, updateSettings: updateRestaurantSettings } = useRestaurant();
   const { user, profile } = useAuth();
-  const { updateSettings: updateRestaurantSettings } = useRestaurant();
   const restaurantId = restaurant?.restaurantId || '';
 
   // Menu Categories & Items state
