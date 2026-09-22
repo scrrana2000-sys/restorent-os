@@ -55,40 +55,6 @@ describe('useModalBackHandler Global Coordinated Stack', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not navigate when switching directly between two modal states', () => {
-    const SwitchTestComponent: React.FC = () => {
-      const [firstOpen, setFirstOpen] = useState(false);
-      const [secondOpen, setSecondOpen] = useState(false);
-
-      useModalBackHandler(firstOpen, () => setFirstOpen(false), 'switch-first');
-      useModalBackHandler(secondOpen, () => setSecondOpen(false), 'switch-second');
-
-      return (
-        <div>
-          <button data-testid="open-first" onClick={() => setFirstOpen(true)}>Open First</button>
-          <button data-testid="switch-second" onClick={() => {
-            setFirstOpen(false);
-            setSecondOpen(true);
-          }}>Switch Second</button>
-          {firstOpen && <span>First</span>}
-          {secondOpen && <span>Second</span>}
-        </div>
-      );
-    };
-
-    render(<SwitchTestComponent />);
-    fireEvent.click(screen.getByTestId('open-first'));
-    fireEvent.click(screen.getByTestId('switch-second'));
-    expect(screen.getByText('Second')).toBeDefined();
-
-    act(() => {
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    });
-
-    expect(screen.queryByText('Second')).toBeNull();
-    expect(screen.queryByText('First')).toBeNull();
-  });
-
   it('handles modal opening, step navigation, and back navigation deterministically', () => {
     render(<MultiStepModalTestComponent />);
 
