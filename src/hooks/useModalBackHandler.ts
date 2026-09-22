@@ -8,11 +8,10 @@ interface ModalEntry {
 const modalStack: ModalEntry[] = [];
 let isListenerAttached = false;
 let historyEntryActive = false;
-let pendingHistoryRemoval = false;
-let suppressNextPop = false;
 
 function pushSharedModalHistoryEntry() {
   if (typeof window === 'undefined' || historyEntryActive) return;
+
   try {
     window.history.pushState(
       { restaurantOSModal: true, timestamp: Date.now() },
@@ -25,38 +24,46 @@ function pushSharedModalHistoryEntry() {
   }
 }
 
-function scheduleSharedModalHistoryRemoval() {
-  if (typeof window === 'undefined' || !historyEntryActive || pendingHistoryRemoval) return;
+/**
+ * Clear our modal marker without traversing browser history.
+ *
+ * IMPORTANT: Never call history.back() for a normal React/UI modal close.
+ * That turns a harmless state change into real browser navigation and can
+ * make the AI Studio / Android-hosted app appear to reload.
+ */
+function clearSharedModalHistoryEntry() {
+  if (typeof window === 'undefined' || !historyEntryActive) return;
 
-  pendingHistoryRemoval = true;
-  queueMicrotask(() => {
-    pendingHistoryRemoval = false;
+  try {
+    const currentState =
+      window.history.state && typeof window.history.state === 'object'
+        ? { ...window.history.state }
+        : {};
 
-    // A second modal can replace the first one in the same React commit.
-    // In that case the existing shared history entry is reused and must not
-    // be consumed underneath the newly opened modal.
-    if (modalStack.length > 0 || !historyEntryActive) return;
+    delete (currentState as Record<string, unknown>).restaurantOSModal;
+    delete (currentState as Record<string, unknown>).timestamp;
 
-    suppressNextPop = true;
-    try {
-      window.history.back();
-    } catch (e) {
-      suppressNextPop = false;
-      console.warn('[useModalBackHandler] history cleanup failed:', e);
-    }
-  });
+    window.history.replaceState(
+      currentState,
+      '',
+      window.location.href
+    );
+  } catch (e) {
+    console.warn('[useModalBackHandler] replaceState cleanup failed:', e);
+  } finally {
+    historyEntryActive = false;
+  }
 }
 
 function registerModal(modalId: string, onClose: () => void) {
   const existing = modalStack.find((entry) => entry.modalId === modalId);
+
   if (existing) {
     existing.onClose = onClose;
-    pendingHistoryRemoval = false;
     return;
   }
 
   modalStack.push({ modalId, onClose });
-  pendingHistoryRemoval = false;
   pushSharedModalHistoryEntry();
 }
 
@@ -66,42 +73,35 @@ function unregisterModal(modalId: string) {
 
   modalStack.splice(index, 1);
 
-  // Keep the one shared browser history entry while another modal is open.
-  // Only remove it after the entire modal stack becomes empty.
+  // Keep the shared history entry while any modal remains open.
+  // When the stack becomes empty, clear the marker in-place. DO NOT navigate.
   if (modalStack.length === 0) {
-    scheduleSharedModalHistoryRemoval();
+    clearSharedModalHistoryEntry();
   }
 }
 
 function ensureGlobalListener() {
   if (isListenerAttached || typeof window === 'undefined') return;
+
   isListenerAttached = true;
 
   window.addEventListener('popstate', () => {
-    if (suppressNextPop) {
-      suppressNextPop = false;
-      historyEntryActive = false;
-      return;
-    }
-
     if (modalStack.length === 0) return;
 
-    // The browser/Android Back gesture has already consumed the shared
-    // modal entry. Invoke the top modal's back handler. If the modal stays
-    // open (for example a nested step changed), restore the same single
-    // entry. If it closes, its React effect cleanup removes the registration.
+    // A real browser/Android Back press has already consumed the modal
+    // history entry. Handle it at the UI layer instead of navigating further.
     historyEntryActive = false;
 
     const topModal = modalStack[modalStack.length - 1];
+
     try {
       topModal?.onClose();
     } catch (e) {
       console.warn('[useModalBackHandler] error in onClose during popstate:', e);
     }
 
-    // React state cleanup happens after the event. Recreate the shared entry
-    // now when there is still any registered modal. If the top modal closes,
-    // cleanup will later remove it while retaining the entry for lower modals.
+    // React state effects run after the event. If the modal remains open
+    // (for example a nested step changed), restore exactly one modal entry.
     if (modalStack.length > 0) {
       pushSharedModalHistoryEntry();
     }
@@ -118,6 +118,7 @@ export function useModalBackHandler(
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
     ensureGlobalListener();
 
     if (isOpen) {
@@ -128,6 +129,7 @@ export function useModalBackHandler(
       };
     }
 
+    // Remove any stale registration without touching browser history.
     unregisterModal(modalId);
     return () => {};
   }, [isOpen, modalId]);
