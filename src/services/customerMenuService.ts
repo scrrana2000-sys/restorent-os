@@ -65,8 +65,12 @@ export function organizePublicMenu(
 
   sortedItems.forEach((item) => {
     if (validCategoryIds.has(item.categoryId)) {
-      itemsByCategory[item.categoryId].push(item);
-      visibleItems.push(item);
+      const publicItem: MenuItem = {
+        ...item,
+        isOnlineAvailable: item.isOnlineAvailable !== false
+      };
+      itemsByCategory[item.categoryId].push(publicItem);
+      visibleItems.push(publicItem);
     }
   });
 
