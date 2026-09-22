@@ -187,19 +187,19 @@ export function getCustomerStatusDetails(
  */
 export function validateCustomerOrderAccess(order: Order, customerUid?: string | null): void {
   // If order belongs to an authenticated customer
-  if (financialOrder.customerId) {
+  if (order.customerId) {
     if (!customerUid) {
-      throw new Error('Authentication Required: Please sign in to view this customer financialOrder.');
+      throw new Error('Authentication Required: Please sign in to view this customer order.');
     }
-    if (financialOrder.customerId !== customerUid) {
-      throw new Error('Unauthorized: You do not have permission to view this financialOrder.');
+    if (order.customerId !== customerUid) {
+      throw new Error('Unauthorized: You do not have permission to view this order.');
     }
     return;
   }
 
   // For guest orders (customerId === null or undefined)
   // Only public online orders can be tracked by guests
-  if (financialOrder.source !== 'online') {
+  if (order.source !== 'online') {
     throw new Error('Order not found or inaccessible.');
   }
 }
@@ -387,22 +387,22 @@ export function subscribeToOrderTracking(
         const order = await fetchGuestTrackedOrder(cleanRestaurantId, cleanOrderId, token);
         if (!stopped) {
           saveTrackedOrder({
-            orderId: financialOrder.id,
-            restaurantId: financialOrder.restaurantId,
-            orderNumber: financialOrder.orderNumber || financialOrder.id,
-            orderType: financialOrder.orderType,
-            status: financialOrder.status,
-            grandTotalMinor: financialOrder.grandTotalMinor,
-            itemCount: financialOrder.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
-            placedAt: typeof financialOrder.createdAt === 'string' ? financialOrder.createdAt : new Date().toISOString(),
-            customerId: financialOrder.customerId,
+            orderId: order.id,
+            restaurantId: order.restaurantId,
+            orderNumber: order.orderNumber || order.id,
+            orderType: order.orderType,
+            status: order.status,
+            grandTotalMinor: order.grandTotalMinor,
+            itemCount: order.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
+            placedAt: typeof order.createdAt === 'string' ? order.createdAt : new Date().toISOString(),
+            customerId: order.customerId,
             trackingToken: token
           });
           onUpdate(order);
 
           // Stop polling after a terminal order state. Guest tracking keeps the
           // protected Cloud Run path, but avoids a request every few seconds.
-          if (['completed', 'served', 'cancelled'].includes(financialOrder.status)) {
+          if (['completed', 'served', 'cancelled'].includes(order.status)) {
             stopped = true;
             if (timer) clearInterval(timer);
             timer = null;
