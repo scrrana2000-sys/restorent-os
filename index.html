@@ -60,6 +60,36 @@
     </noscript>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      // Recover automatically from stale GitHub Pages chunks after a deployment.
+      // A single guarded reload avoids trapping users on the React error boundary
+      // when an older cached index references a removed hashed module.
+      (function() {
+        var recoveryKey = 'restaurantos_chunk_recovery_v1';
+        function recoverFromChunkError(message) {
+          if (!message || !/Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk/i.test(String(message))) return;
+          try {
+            if (sessionStorage.getItem(recoveryKey) === '1') return;
+            sessionStorage.setItem(recoveryKey, '1');
+            if (window.caches) {
+              caches.keys().then(function(names) {
+                return Promise.all(names.map(function(name) { return caches.delete(name); }));
+              }).catch(function() {});
+            }
+          } catch (_) {}
+          setTimeout(function() { window.location.reload(); }, 50);
+        }
+        window.addEventListener('error', function(event) {
+          recoverFromChunkError(event && (event.message || event.error && event.error.message));
+        });
+        window.addEventListener('unhandledrejection', function(event) {
+          recoverFromChunkError(event && event.reason && event.reason.message || event && event.reason);
+        });
+        window.addEventListener('load', function() {
+          try { sessionStorage.removeItem(recoveryKey); } catch (_) {}
+        });
+      })();
+    </script>
+    <script>
       (function() {
         if ('serviceWorker' in navigator) {
           var isProdHosted =
@@ -86,7 +116,9 @@
           } else {
             // Register PWA service worker strictly in official production hosted environment
             window.addEventListener('load', function() {
-              navigator.serviceWorker.register('./sw.js').catch(function(err) {
+              navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(function(registration) {
+                return registration.update();
+              }).catch(function(err) {
                 console.warn('[RestaurantOS PWA] Service worker registration deferred:', err);
               });
             });
