@@ -27,6 +27,7 @@ import { idempotencyService } from './idempotencyService';
 import { auditService } from './auditService';
 import { orderFinalizationService } from './orderFinalizationService';
 import { parseTimestampToMillis } from '../utils/dateUtils';
+import { deriveOrderFinancials } from '../utils/orderFinancials';
 
 export interface RecordPaymentInput {
   restaurantId?: string;
@@ -266,7 +267,8 @@ export class PaymentService implements IPaymentService {
               throw new Error(`Cannot record payment for cancelled order "${cleanOrderId}".`);
             }
 
-            const currentGrandTotal = orderData.grandTotalMinor ?? 0;
+            const derivedFinancials = deriveOrderFinancials(orderData);
+            const currentGrandTotal = derivedFinancials?.grandTotalMinor ?? orderData.grandTotalMinor ?? 0;
             const currentPaid = orderData.paidAmountMinor ?? 0;
 
             if (!isValidMoney(currentGrandTotal)) {
@@ -314,6 +316,11 @@ export class PaymentService implements IPaymentService {
               newDueAmountMinor === 0 ? 'paid' : newPaidAmountMinor > 0 ? 'partially_paid' : 'unpaid';
 
             const orderUpdatePayload: Record<string, any> = {
+              ...(derivedFinancials ? {
+                subtotalMinor: derivedFinancials.subtotalMinor,
+                totalTaxMinor: derivedFinancials.totalTaxMinor,
+                grandTotalMinor: derivedFinancials.grandTotalMinor
+              } : {}),
               paidAmountMinor: newPaidAmountMinor,
               dueAmountMinor: newDueAmountMinor,
               paymentStatus: orderPaymentStatus,
