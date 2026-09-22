@@ -960,17 +960,15 @@ export async function submitServerPosOrder(input: {
   });
 
   const now = new Date();
+  const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
 
-  // Dine-in uses one canonical bill per open table session.
-  // Additional POS submissions for the same session are appended to that bill
-  // and generate a new KOT only for the newly added items.
+  // One canonical dine-in bill per open table session.
   let existingSessionOrder: any = null;
   if (input.orderType === 'dineIn' && input.tableSessionId) {
     const existingSnap = await adminDb
       .collection(`restaurants/${restaurantId}/orders`)
       .where('tableSessionId', '==', input.tableSessionId)
       .get();
-
     for (const d of existingSnap.docs) {
       const data = d.data() as any;
       if (data.status !== 'cancelled' && data.status !== 'completed') {
@@ -986,10 +984,10 @@ export async function submitServerPosOrder(input: {
 
   let effectiveItems = canonicalItems;
   let effectiveCalculations = calculations;
-  let effectivePaidAmountMinor = Number(existingSessionOrder?.paidAmountMinor || 0);
+  const effectivePaidAmountMinor = Number(existingSessionOrder?.paidAmountMinor || 0);
 
   if (existingSessionOrder) {
-    const existingItems: CartItem[] = Array.isArray(existingSessionOrder.items)
+    const mergedItems: CartItem[] = Array.isArray(existingSessionOrder.items)
       ? existingSessionOrder.items.map((item: any, index: number) => ({
           cartItemId: `existing_${index}_${item.itemId}`,
           itemId: item.itemId,
@@ -1006,16 +1004,14 @@ export async function submitServerPosOrder(input: {
         }))
       : [];
 
-    const mergedItems = [...existingItems];
     for (const newItem of canonicalItems) {
       const matchingIndex = mergedItems.findIndex((item) => {
         if (item.itemId !== newItem.itemId) return false;
         const a = Array.isArray(item.modifiers) ? item.modifiers : [];
         const b = Array.isArray(newItem.modifiers) ? newItem.modifiers : [];
-        if (a.length !== b.length) return false;
-        return a.map((m: any) => m.id).sort().join(',') === b.map((m: any) => m.id).sort().join(',');
+        return a.length === b.length &&
+          a.map((m: any) => m.id).sort().join(',') === b.map((m: any) => m.id).sort().join(',');
       });
-
       if (matchingIndex >= 0) {
         mergedItems[matchingIndex].quantity += newItem.quantity;
         if (newItem.notes?.trim()) {
@@ -1027,7 +1023,8 @@ export async function submitServerPosOrder(input: {
       }
     }
 
-    const mergedCalculation = calculateOrderTotals({
+    effectiveItems = mergedItems;
+    effectiveCalculations = calculateOrderTotals({
       items: mergedItems.map(item => ({
         quantity: item.quantity,
         unitPriceMinor: item.unitPriceMinor,
@@ -1038,10 +1035,25 @@ export async function submitServerPosOrder(input: {
       orderDiscount: input.cartState.orderDiscount || existingSessionOrder.orderDiscount,
       taxJurisdiction: input.taxJurisdiction || 'intraState'
     });
-
-    effectiveItems = mergedItems;
-    effectiveCalculations = mergedCalculation;
   }
+
+  const orderItems: OrderItem[] = effectiveCalculations.lineResults.map((line: any, index: number) => ({
+    itemId: effectiveItems[index].itemId,
+    nameSnapshot: effectiveItems[index].nameSnapshot,
+    shortNameSnapshot: effectiveItems[index].shortNameSnapshot,
+    imageUrlSnapshot: effectiveItems[index].imageUrlSnapshot || null,
+    foodTypeSnapshot: effectiveItems[index].foodTypeSnapshot || null,
+    quantity: effectiveItems[index].quantity,
+    unitPriceMinor: effectiveItems[index].unitPriceMinor,
+    taxRate: effectiveItems[index].taxRate,
+    taxInclusive: effectiveItems[index].taxInclusive,
+    discountMinor: line.discountMinor,
+    lineSubtotalMinor: line.subtotalMinor,
+    lineTaxMinor: line.totalTaxMinor,
+    lineTotalMinor: line.lineTotalMinor,
+    notes: effectiveItems[index].notes,
+    modifiers: effectiveItems[index].modifiers ? [...effectiveItems[index].modifiers!] : undefined
+  }));
 
   const orderPayload: any = {
     restaurantId,
@@ -1135,21 +1147,23 @@ export async function submitServerPosOrder(input: {
       : null;
 
     if (existingSessionOrder) {
-      const mergedPayload = {
+      tx.update(orderRef, stripUndefined({
         ...orderPayload,
         id: existingSessionOrder.id,
         updatedAt: now,
         updatedBy: input.createdBy
-      };
-      tx.update(orderRef, stripUndefined(mergedPayload));
-      if (sessionRef) {
-        tx.set(sessionRef, { activeOrderId: existingSessionOrder.id, updatedAt: now }, { merge: true });
-      }
+      }));
     } else {
-      tx.create(orderRef, stripUndefined({ ...orderPayload, id: orderRef.id, createdAt: now, updatedAt: now }));
-      if (sessionRef) {
-        tx.set(sessionRef, { activeOrderId: orderRef.id, updatedAt: now }, { merge: true });
-      }
+      tx.create(orderRef, stripUndefined({
+        ...orderPayload,
+        id: orderRef.id,
+        createdAt: now,
+        updatedAt: now
+      }));
+    }
+
+    if (sessionRef) {
+      tx.set(sessionRef, { activeOrderId: orderRef.id, updatedAt: now }, { merge: true });
     }
 
     if (kotRef && kot) tx.create(kotRef, stripUndefined(kot));
