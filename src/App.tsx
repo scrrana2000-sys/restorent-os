@@ -25,6 +25,7 @@ import { PublicCustomerDiscoveryPage } from './pages/PublicCustomerDiscoveryPage
 import { CustomerRestaurantPage } from './pages/customer/CustomerRestaurantPage';
 import { CustomerRestaurantMenuPage } from './pages/customer/CustomerRestaurantMenuPage';
 import { OwnerCentralPage } from './pages/OwnerCentralPage';
+import { OrdersPage } from './pages/OrdersPage';
 
 // Code-split non-POS views for optimal bundle size and initial app load performance
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -35,7 +36,8 @@ const KitchenPage = lazy(() => import('./pages/KitchenPage').then(m => ({ defaul
 const CaptainPage = lazy(() => import('./pages/CaptainPage').then(m => ({ default: m.CaptainPage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })));
-const OrdersPage = lazy(() => import('./pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
+// OrdersPage is eagerly imported because it is a primary navigation target.
+// This avoids stale GitHub Pages sessions requesting a removed hashed chunk.
 const StaffPage = lazy(() => import('./pages/StaffPage').then(m => ({ default: m.StaffPage })));
 const InventoryPage = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })));
 const PaymentsPage = lazy(() => import('./pages/PaymentsPage').then(m => ({ default: m.PaymentsPage })));
