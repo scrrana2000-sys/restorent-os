@@ -25,7 +25,6 @@ import {
 } from 'lucide-react';
 import { Order, OrderStatus } from '../../types/order';
 import { orderService } from '../../services/orderService';
-import { kotService } from '../../services/kotService';
 import { printerService } from '../../services/printer/PrinterService';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
