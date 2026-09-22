@@ -196,7 +196,7 @@ export class OrderService implements IOrderService {
       if (!snap.exists()) {
         return null;
       }
-      return { id: snap.id, ...snap.data() } as Order;
+      return reconcileOrderFinancials({ id: snap.id, ...snap.data() } as Order);
     } catch (err: unknown) {
       throw handleFirestoreError(err, OperationType.GET, path);
     }
@@ -216,7 +216,7 @@ export class OrderService implements IOrderService {
       const snap = await getDocs(q);
       const orders: Order[] = [];
       snap.forEach((d) => {
-        orders.push({ id: d.id, ...d.data() } as Order);
+        orders.push(reconcileOrderFinancials({ id: d.id, ...d.data() } as Order));
       });
       return orders.sort((a, b) => {
         const timeA = (a.createdAt as any)?.toMillis?.() || (a.createdAt ? new Date(a.createdAt as any).getTime() : 0);
@@ -1999,7 +1999,7 @@ export class OrderService implements IOrderService {
       (snapshot) => {
         const orders: Order[] = [];
         snapshot.forEach((d) => {
-          orders.push({ id: d.id, ...d.data() } as Order);
+          orders.push(reconcileOrderFinancials({ id: d.id, ...d.data() } as Order));
         });
         onUpdate(orders);
       },
@@ -2040,7 +2040,7 @@ export class OrderService implements IOrderService {
       (snapshot) => {
         const activeOrders: Order[] = [];
         snapshot.forEach((d) => {
-          const ord = { id: d.id, ...d.data() } as Order;
+          const ord = reconcileOrderFinancials({ id: d.id, ...d.data() } as Order);
           if (ord.status !== 'completed' && ord.status !== 'cancelled') {
             activeOrders.push(ord);
           }
