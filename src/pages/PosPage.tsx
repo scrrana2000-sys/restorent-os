@@ -543,12 +543,6 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
       return;
     }
 
-    if (customerOverride === null) {
-      setPendingCustomerAction('payment');
-      setIsCustomerModalOpen(true);
-      return;
-    }
-
     let targetSessionId: string | undefined = undefined;
     let targetTableId: string | undefined = undefined;
 
@@ -640,6 +634,12 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   const handleOpenPayment = async (customerOverride: CustomerSnapshot | null = customerSnapshot) => {
     if (cartItems.length === 0) {
       setStatusMessage({ type: 'error', text: 'Cart is empty.' });
+      return;
+    }
+
+    if (customerOverride === null) {
+      setPendingCustomerAction('payment');
+      setIsCustomerModalOpen(true);
       return;
     }
 
