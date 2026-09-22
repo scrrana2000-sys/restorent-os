@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { auth } from './src/config/firebase';
-import { submitServerOnlineOrder, submitServerPosOrder } from './src/server/onlineOrderService';
+import { submitServerOnlineOrder, submitServerPosOrder, acceptServerOnlineOrder } from './src/server/onlineOrderService';
 import { sanitizeCustomerOrder } from './src/services/customerOrderTrackingService';
 import { resolveRestaurantBySlug } from './src/services/customerDiscoveryService';
 import { collection, getDocs, getDoc, query, where } from 'firebase/firestore';
@@ -1261,13 +1261,11 @@ app.post('/api/orders/accept-online', async (req, res) => {
     const staffCheck = await verifyRestaurantStaffRole(authUser.uid, idToken, restaurantId, ['owner', 'manager', 'cashier', 'captain']);
     if (!staffCheck.authorized) return res.status(staffCheck.code || 403).json({ success: false, error: staffCheck.error || 'FORBIDDEN', message: staffCheck.message || 'Caller is not authorized to accept online orders.' });
     if (!(await ensureServerAuthenticated())) return res.status(503).json({ success: false, error: 'SERVER_AUTH_UNAVAILABLE', message: 'Trusted order service is unavailable.' });
-    const { orderService } = await import('./src/services/orderService');
-    const result = await orderService.acceptOnlineOrder(
+    const result = await acceptServerOnlineOrder(
       restaurantId,
       orderId,
       authUser.uid,
-      Math.floor(prepTimeMinutes),
-      true
+      Math.floor(prepTimeMinutes)
     );
     return res.json({ success: true, order: result });
   } catch (err: any) {
