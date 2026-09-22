@@ -864,7 +864,7 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
                     const hasCustomization =
                       (item.variants && item.variants.length > 0) ||
                       (item.addons && item.addons.length > 0);
-                    const isOutOfStock = !item.isAvailable;
+                    const isOutOfStock = item.isOnlineAvailable === false;
 
                     return (
                       <div
