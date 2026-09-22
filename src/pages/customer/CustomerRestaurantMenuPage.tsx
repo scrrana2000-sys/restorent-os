@@ -1041,6 +1041,11 @@ const CustomerRestaurantMenuPageContent: React.FC<CustomerRestaurantMenuPageProp
               }}
               onOrderSubmitted={() => {
                 orderJustSubmittedRef.current = true;
+                // The checkout modal clears the authoritative cart context on
+                // success. Reset local fallback counters too so the header and
+                // floating cart never resurrect the just-submitted order.
+                setLocalCartCount(0);
+                setLocalCartSubtotal(0);
                 refreshActiveOrders();
               }}
               onTrackOrder={(restId, ordId) => {
