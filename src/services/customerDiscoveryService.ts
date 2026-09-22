@@ -9,7 +9,8 @@ import {
   limit as firestoreLimit,
   startAfter,
   orderBy,
-  documentId
+  documentId,
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
@@ -83,6 +84,62 @@ export async function syncPublicRestaurantProfile(restaurant: Restaurant): Promi
 
   await setDoc(publicDocRef, payload, { merge: true });
   return publicProfile;
+}
+
+
+export function subscribeToPublicRestaurantProfile(
+  restaurantId: string,
+  onUpdate: (profile: PublicRestaurantProfile | null) => void,
+  onError?: (err: Error) => void
+): () => void {
+  const cleanId = (restaurantId || '').trim();
+  if (!cleanId) {
+    onUpdate(null);
+    return () => {};
+  }
+
+  const ref = doc(db, 'publicRestaurants', cleanId);
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        onUpdate(null);
+        return;
+      }
+      const data = snap.data();
+      const status = (data.publicStatus as PublicRestaurantStatus) || 'active';
+      const onlineOrderingEnabled = data.onlineOrderingEnabled !== false;
+      onUpdate({
+        restaurantId: data.restaurantId || snap.id,
+        publicSlug: data.publicSlug || '',
+        publicRestaurantCode: data.publicRestaurantCode || '',
+        name: data.name || 'Restaurant',
+        legalName: data.legalName || undefined,
+        logoUrl: data.logoUrl || null,
+        bannerImageUrl: data.bannerImageUrl || data.coverImageUrl || null,
+        coverImageUrl: data.coverImageUrl || data.bannerImageUrl || null,
+        phone: data.phone || '',
+        address: data.address || '',
+        city: data.city || '',
+        state: data.state || '',
+        area: data.area || '',
+        postalCode: data.postalCode || '',
+        country: data.country || 'India',
+        currency: data.currency || 'INR',
+        currencySymbol: data.currencySymbol || '₹',
+        cuisine: Array.isArray(data.cuisine) ? data.cuisine : [],
+        publicStatus: status,
+        onlineOrderingEnabled,
+        takeawayEnabled: data.takeawayEnabled !== false,
+        deliveryEnabled: data.deliveryEnabled !== false,
+        isOpenNow: data.isOpenNow !== false && status === 'active' && onlineOrderingEnabled
+      });
+    },
+    (err) => {
+      console.warn('[RestaurantOS Customer Discovery] Public profile subscription notice:', err);
+      if (onError) onError(err as Error);
+    }
+  );
 }
 
 /**
