@@ -13,6 +13,7 @@ import { Order } from '../../types/order';
 import { subscribeToNewOnlineOrders } from '../../services/onlineOrderNotificationService';
 import { playNewOrderSoundAlert, unlockNewOrderSoundAlert, isSoundAlertEnabled, setSoundAlertEnabled } from '../../utils/soundAlert';
 import { NewOnlineOrderNotification } from '../notifications/NewOnlineOrderNotification';
+import { checkPermission } from '../../utils/permissions';
 
 interface AdminLayoutProps {
   currentView: AdminView;
@@ -31,6 +32,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { restaurant, operatingProfile, error, retry, loading: restaurantLoading, isSwitching } = useRestaurant();
   const resolvedProfile = operatingProfile || getRestaurantOperatingProfile(restaurant);
+
+  // Warm the role/permission cache as soon as the authenticated restaurant
+  // context is available. The first POS/Kitchen action then avoids a cold
+  // Firestore authorization lookup on the critical interaction path.
+  useEffect(() => {
+    const restaurantId = restaurant?.restaurantId;
+    if (!restaurantId) return;
+    void checkPermission(restaurantId, 'access_dashboard').catch(() => {});
+  }, [restaurant?.restaurantId]);
 
   // Milestone 9 — Phase 3: Incoming Online Order Notifications
   const [pendingOnlineOrders, setPendingOnlineOrders] = useState<Order[]>([]);
