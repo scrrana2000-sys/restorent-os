@@ -131,12 +131,24 @@ jobs:
           secrets: '{}'
           env_vars_update_strategy: overwrite
           secrets_update_strategy: overwrite
-          flags: '--allow-unauthenticated --port 3000 --remove-secrets SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET'
+          flags: '--allow-unauthenticated --port 3000 --async --remove-secrets SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET'
 
-      - name: Verify deployed API health endpoint
+      - name: Wait for new Cloud Run revision and verify API
         run: |
-          URL="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')"
-          test -n "$URL"
-          echo "Cloud Run URL: $URL"
-          curl --fail --silent --show-error --retry 10 --retry-delay 5 "$URL/api/health"
-          curl --fail --silent --show-error --retry 10 --retry-delay 5 "$URL/"
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            CREATED="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestCreatedRevisionName)')"
+            READY="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestReadyRevisionName)')"
+            echo "Cloud Run revision status: created=$CREATED ready=$READY (attempt $attempt/60)"
+            if [ -n "$CREATED" ] && [ "$CREATED" = "$READY" ]; then
+              URL="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')"
+              test -n "$URL"
+              echo "Cloud Run URL: $URL"
+              curl --fail --silent --show-error --retry 6 --retry-delay 3 "$URL/api/health"
+              curl --fail --silent --show-error --retry 6 --retry-delay 3 "$URL/"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Cloud Run latest revision did not become ready within 10 minutes."
+          exit 1
