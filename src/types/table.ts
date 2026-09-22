@@ -38,6 +38,8 @@ export interface TableSession {
   openedAt: any;
   closedAt?: any | null;
   activeOrderIds: string[];
+  /** Canonical current bill/order for this open table session. */
+  activeOrderId?: string | null;
   openedBy: string;
   closedBy?: string | null;
   createdAt: any;
