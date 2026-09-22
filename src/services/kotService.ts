@@ -657,16 +657,19 @@ export class KOTService implements IKOTService {
       // Synchronize parent order status based on all sibling KOT statuses.
       await this.syncParentOrderStatus(cleanRestaurantId, kotBefore.orderId, resolvedUserId);
 
-      // Completion is evaluated only after an explicit SERVED transition (plus
-      // payment settlement), never as a side effect of READY/PREPARING.
-      try {
-        await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
-          cleanRestaurantId,
-          kotBefore.orderId,
-          resolvedUserId
-        );
-      } catch (autoErr) {
-        console.warn('[KOTService] Notice: auto-completion/session-closure check after KOT status update encountered:', autoErr);
+      // Never run completion/session auto-finalization while a KOT is merely
+      // waiting, preparing, or ready. Only explicit handover (served) or
+      // cancellation may trigger finalization.
+      if (newStatus === 'served' || newStatus === 'cancelled') {
+        try {
+          await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
+            cleanRestaurantId,
+            kotBefore.orderId,
+            resolvedUserId
+          );
+        } catch (autoErr) {
+          console.warn('[KOTService] Notice: auto-completion/session-closure check after KOT status update encountered:', autoErr);
+        }
       }
 
     } catch (err) {
