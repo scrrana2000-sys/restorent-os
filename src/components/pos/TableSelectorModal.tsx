@@ -37,12 +37,16 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
+  // Keep the table/session streams warm for the lifetime of POS instead of
+  // starting two Firestore listeners every time the modal opens. This makes
+  // table selection effectively instant after the first POS load.
   useEffect(() => {
-    if (!isOpen || !restaurantId) return;
+    if (!restaurantId) return;
 
-    setLoading(true);
+    if (tables.length === 0) {
+      setLoading(true);
+    }
     setError(null);
-    setChosenTable(selectedTable);
 
     const unsubscribeTables = tableService.subscribeToTables(
       restaurantId,
@@ -57,9 +61,6 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
       }
     );
 
-    // Occupancy is derived from OPEN table sessions, not the physical table's
-    // cached status/activeSessionId. This prevents a stale lock from making a
-    // table appear permanently Active after its session was closed.
     const unsubscribeSessions = tableSessionService.subscribeToActiveSessions(
       restaurantId,
       (sessions) => setActiveSessions(sessions),
@@ -70,7 +71,11 @@ export const TableSelectorModal: React.FC<TableSelectorModalProps> = ({
       unsubscribeTables();
       unsubscribeSessions();
     };
-  }, [isOpen, restaurantId, selectedTable]);
+  }, [restaurantId]);
+
+  useEffect(() => {
+    setChosenTable(selectedTable);
+  }, [selectedTable]);
 
   if (!isOpen) return null;
 
