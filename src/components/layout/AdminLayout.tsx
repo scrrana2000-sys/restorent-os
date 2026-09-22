@@ -75,10 +75,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   };
 
   const handleViewOnlineOrder = (order: Order) => {
-    // Dismiss the visual card without mutating the order
+    // Dismiss the visual card without mutating the order.
     handleDismissOnlineOrder(order.id);
 
-    // Navigate to Kitchen or Orders view based on operating capabilities
+    // Keep POS staff on the POS terminal and open its Online Orders center.
+    if (currentView === 'pos') {
+      window.dispatchEvent(new CustomEvent('ros-open-online-orders', {
+        detail: { orderId: order.id }
+      }));
+      return;
+    }
+
+    // Other operational screens keep their existing navigation behavior.
     if (resolvedProfile.capabilities.kitchenEnabled) {
       onNavigate('kitchen');
     } else {
