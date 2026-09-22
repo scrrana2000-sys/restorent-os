@@ -2182,9 +2182,16 @@ export class OrderService implements IOrderService {
     const cleanOrderId = orderId.trim();
     const resolvedUserId = actorUid || auth.currentUser?.uid || 'staff';
 
-    await enforcePermission(cleanRestaurantId, 'modify_orders');
-
     const isTestRuntime = typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+
+    // Browser calls are authorized by the trusted server endpoint below.
+    // Avoid a stale client-side role cache blocking a valid owner/manager/cashier/captain
+    // after staff membership changes. Direct/test execution keeps the service-level
+    // permission guard.
+    if (typeof window === 'undefined' || isTestRuntime) {
+      await enforcePermission(cleanRestaurantId, 'modify_orders');
+    }
+
     if (typeof window !== 'undefined' && !isTestRuntime) {
       const currentUser = auth.currentUser;
       if (!currentUser) throw new Error('Authentication is required to complete an order.');
