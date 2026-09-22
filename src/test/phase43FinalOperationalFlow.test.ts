@@ -17,7 +17,7 @@ vi.mock('firebase/firestore', () => {
     getDocs: vi.fn(),
     setDoc: vi.fn().mockResolvedValue(undefined),
     updateDoc: vi.fn().mockResolvedValue(undefined),
-    query: vi.fn((colRef, ..._clauses) => ({ type: 'query', colRef })),
+    query: vi.fn((colRef, ...clauses) => ({ type: 'query', colRef, clauses })),
     where: vi.fn((field, op, val) => ({ type: 'where', field, op, val })),
     orderBy: vi.fn((field, dir) => ({ type: 'orderBy', field, dir })),
     onSnapshot: vi.fn(() => vi.fn()),
@@ -59,9 +59,11 @@ describe('PHASE 4.3: FINAL OPERATIONAL FLOW — PAYMENT → AUTO COMPLETE → AU
   const tableId = 'TBL_101';
   const sessionId = 'SESS_2026_001';
   const orderId = 'ORD_9001';
+  const paymentAmountsByOrder: Record<string, number> = {};
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.keys(paymentAmountsByOrder).forEach((key) => delete paymentAmountsByOrder[key]);
   });
 
   it('1. Auto-completes order and auto-closes session when Payment settled and KOT already served', async () => {
@@ -103,6 +105,8 @@ describe('PHASE 4.3: FINAL OPERATIONAL FLOW — PAYMENT → AUTO COMPLETE → AU
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    paymentAmountsByOrder[orderId] = 52500;
 
     const mockKot: KOT = {
       id: 'KOT_101',
@@ -146,6 +150,13 @@ describe('PHASE 4.3: FINAL OPERATIONAL FLOW — PAYMENT → AUTO COMPLETE → AU
       }
       if (queryObj.colRef?.path?.includes('orders')) {
         return { docs: [{ id: orderId, data: () => mockOrder }] } as any;
+      }
+      if (queryObj.colRef?.path?.includes('payments')) {
+        const requestedOrderId = queryObj.clauses?.find((clause: any) => clause.field === 'orderId')?.val;
+        const amountMinor = requestedOrderId ? paymentAmountsByOrder[requestedOrderId] : undefined;
+        return amountMinor
+          ? { docs: [{ id: 'PAY-' + requestedOrderId, data: () => ({ id: 'PAY-' + requestedOrderId, orderId: requestedOrderId, amountMinor, status: 'completed' }) }] } as any
+          : { docs: [] } as any;
       }
       return { docs: [] } as any;
     });
@@ -267,6 +278,8 @@ describe('PHASE 4.3: FINAL OPERATIONAL FLOW — PAYMENT → AUTO COMPLETE → AU
       updatedAt: new Date()
     };
 
+    paymentAmountsByOrder[orderId] = 52500;
+
     const mockKotServed: KOT = {
       id: 'KOT_103',
       restaurantId,
@@ -383,6 +396,8 @@ describe('PHASE 4.3: FINAL OPERATIONAL FLOW — PAYMENT → AUTO COMPLETE → AU
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    paymentAmountsByOrder[order1Id] = 31500;
 
     const mockKot1: KOT = {
       id: 'KOT_4_1',
