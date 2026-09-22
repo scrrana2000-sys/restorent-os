@@ -2027,8 +2027,8 @@ async function startServer() {
   }
 
   if (process.env.NODE_ENV === 'production') {
-    // Prepare the trusted server identity in the background. This must never
-    // prevent the HTTP listener from starting; Cloud Run needs the listener
+    // Prepare the trusted server identity in the background. This must never prevent
+    // the HTTP listener from starting; Cloud Run needs the listener
     // available for its startup health check. Privileged endpoints still
     // initialize the trusted server identity at their authorization boundary.
     const prepareServerIdentity = async () => {
