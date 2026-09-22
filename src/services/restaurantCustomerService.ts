@@ -15,6 +15,7 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreError';
  * Strictly adheres to tenant boundaries: only aggregates customer records from
  * orders placed at the specified restaurant.
  */
+export class RestaurantCustomerService {
   /**
    * Finds an existing restaurant customer by mobile number.
    * POS billing stores a normalized 10-digit Indian mobile number in the order snapshot.
@@ -79,11 +80,10 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreError';
     }
   }
 
-export class RestaurantCustomerService {
   /**
    * Retrieves aggregated customer profiles and activities for a given restaurant.
    * Multi-order registered customers are deduplicated by their stable Firebase Auth customerId.
-   * Guest orders are separated without fake account fabrication or automatic fuzzy merging.
+   * Guest orders with a captured mobile are grouped by phone; anonymous guests remain separate.
    */
   async getRestaurantCustomers(
     restaurantId: string,
