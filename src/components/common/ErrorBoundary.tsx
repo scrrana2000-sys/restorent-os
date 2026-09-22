@@ -23,32 +23,10 @@ export class ErrorBoundary extends (React.Component as new (props: Props) => {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[RestaurantOS ErrorBoundary] Uncaught error:', error, errorInfo);
 
-    // A first-load chunk/render race can occasionally happen while the
-    // GitHub Pages deployment is replacing cached assets. Recover once
-    // automatically instead of making the user manually reload. The
-    // session flag prevents an infinite reload loop if the error is real.
-    try {
-      const key = 'restaurantos-runtime-auto-recovery-v1';
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1');
-        window.setTimeout(() => window.location.reload(), 50);
-      }
-    } catch {
-      // Storage may be unavailable; keep the visible error fallback.
-    }
-  }
-
-  public componentDidMount() {
-    // If the app survived the initial render window, clear the recovery
-    // guard so a future, unrelated transient load can recover once again.
-    try {
-      const key = 'restaurantos-runtime-auto-recovery-v1';
-      window.setTimeout(() => {
-        try {
-          sessionStorage.removeItem(key);
-        } catch {}
-      }, 5000);
-    } catch {}
+    // Never reload the entire POS/application automatically after a render
+    // error. Automatic reloads hide the actual runtime fault and can turn a
+    // single component error into a visible "website keeps reloading" loop.
+    // Keep the error visible so the user can recover deliberately.
   }
 
   constructor(props: Props) {
@@ -74,7 +52,7 @@ export class ErrorBoundary extends (React.Component as new (props: Props) => {
             </div>
             <h2 className="text-xl font-bold mb-2">Application Notice</h2>
             <p className="text-sm text-slate-400 mb-4">
-              An unexpected render error occurred. You can reload the preview to recover immediately.
+              An unexpected render error occurred. The application has stopped this screen safely so the underlying error can be fixed without an automatic page reload.
             </p>
             {this.state.error && (
               <div className="bg-slate-950 text-amber-300 font-mono text-xs p-3 rounded-lg text-left overflow-x-auto mb-6 max-h-32 border border-slate-800">
