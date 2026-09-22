@@ -890,7 +890,7 @@ export async function submitServerPosOrder(input: {
   createKot?: boolean;
 }): Promise<{ order: Order; kot: KOT | null }> {
   const restaurantId = cleanId(input.restaurantId, 'restaurantId');
-  const subSnap = await adminDb.doc(\`restaurants/\${restaurantId}/subscription/current\`).get();
+  const subSnap = await adminDb.doc(`restaurants/${restaurantId}/subscription/current`).get();
   if (!subSnap.exists) throw new Error('Restaurant trial or subscription is not active.');
   const sub = subSnap.data() || {};
   const accessUntil = asMillis(sub.operationalAccessUntil);
@@ -900,7 +900,7 @@ export async function submitServerPosOrder(input: {
 
   if (input.orderType === 'dineIn' && !input.skipTableSessionValidation) {
     const sessionId = cleanId(input.tableSessionId, 'tableSessionId');
-    const sessionSnap = await adminDb.doc(\`restaurants/\${restaurantId}/tableSessions/\${sessionId}\`).get();
+    const sessionSnap = await adminDb.doc(`restaurants/${restaurantId}/tableSessions/${sessionId}`).get();
     if (!sessionSnap.exists || sessionSnap.data()?.restaurantId !== restaurantId || sessionSnap.data()?.status !== 'open') {
       throw new Error('Selected table session is not open.');
     }
@@ -911,15 +911,15 @@ export async function submitServerPosOrder(input: {
   // Re-read authoritative menu price/tax/availability; client values are not trusted.
   const canonicalItems: CartItem[] = await Promise.all(input.cartState.items.map(async (item) => {
     const itemId = cleanId(item.itemId, 'itemId');
-    const snap = await adminDb.doc(\`restaurants/\${restaurantId}/items/\${itemId}\`).get();
-    if (!snap.exists) throw new Error(\`Item "\${item.nameSnapshot || itemId}" is no longer available.\`);
+    const snap = await adminDb.doc(`restaurants/${restaurantId}/items/${itemId}`).get();
+    if (!snap.exists) throw new Error(`Item "${item.nameSnapshot || itemId}" is no longer available.`);
     const data = snap.data() as any;
     if (data.restaurantId && data.restaurantId !== restaurantId) throw new Error('Item tenant mismatch.');
-    if (data.isActive === false || data.isAvailable === false) throw new Error(\`"\${data.name || item.nameSnapshot || itemId}" is unavailable.\`);
+    if (data.isActive === false || data.isAvailable === false) throw new Error(`"${data.name || item.nameSnapshot || itemId}" is unavailable.`);
     const price = Number(data.price);
     const taxRate = Number(data.taxRate);
-    if (!Number.isFinite(price) || price < 0) throw new Error(\`Invalid price for "\${data.name || itemId}".\`);
-    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) throw new Error(\`Invalid tax rate for "\${data.name || itemId}".\`);
+    if (!Number.isFinite(price) || price < 0) throw new Error(`Invalid price for "${data.name || itemId}".`);
+    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) throw new Error(`Invalid tax rate for "${data.name || itemId}".`);
     return {
       ...item,
       itemId,
@@ -947,8 +947,8 @@ export async function submitServerPosOrder(input: {
   });
 
   const now = new Date();
-  const orderRef = adminDb.collection(\`restaurants/\${restaurantId}/orders\`).doc();
-  const orderNumber = \`ORD-\${Date.now().toString(36).toUpperCase()}-\${randomBytes(3).toString('hex').toUpperCase()}\`;
+  const orderRef = adminDb.collection(`restaurants/${restaurantId}/orders`).doc();
+  const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
   const orderItems: OrderItem[] = calculations.lineResults.map((line: any, index: number) => ({
     itemId: canonicalItems[index].itemId,
     nameSnapshot: canonicalItems[index].nameSnapshot,
@@ -996,12 +996,12 @@ export async function submitServerPosOrder(input: {
   };
 
   const validation = validateOrder(orderPayload, { skipTableRequirement: input.skipTableSessionValidation || !orderPayload.tableId });
-  if (!validation.isValid) throw new Error(\`Order validation failed: \${validation.error || 'Invalid order data'}\`);
+  if (!validation.isValid) throw new Error(`Order validation failed: ${validation.error || 'Invalid order data'}`);
 
-  const kotRef = input.createKot ? adminDb.collection(\`restaurants/\${restaurantId}/kots\`).doc() : null;
+  const kotRef = input.createKot ? adminDb.collection(`restaurants/${restaurantId}/kots`).doc() : null;
   const kot: KOT | null = kotRef ? ({
     id: kotRef.id,
-    kotNumber: \`KOT-\${Date.now().toString(36).toUpperCase()}-\${randomBytes(2).toString('hex').toUpperCase()}\`,
+    kotNumber: `KOT-${Date.now().toString(36).toUpperCase()}-${randomBytes(2).toString('hex').toUpperCase()}`,
     restaurantId,
     orderId: orderRef.id,
     orderNumber,
@@ -1030,7 +1030,7 @@ export async function submitServerPosOrder(input: {
   const idempotencyKey = input.clientRequestId
     ? input.clientRequestId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120)
     : null;
-  const idemRef = idempotencyKey ? adminDb.doc(\`restaurants/\${restaurantId}/idempotency/\${idempotencyKey}\`) : null;
+  const idemRef = idempotencyKey ? adminDb.doc(`restaurants/${restaurantId}/idempotency/${idempotencyKey}`) : null;
   if (idemRef) {
     const existing = await idemRef.get();
     if (existing.exists && existing.data()?.status === 'completed' && existing.data()?.responseSnapshot) {
