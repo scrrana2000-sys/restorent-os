@@ -174,7 +174,13 @@ export function buildPublicBillUrl(
   const cleanOrderId = (orderId || '').trim();
   const cleanRestId = (restaurantId || '').trim();
   const cleanAccessToken = (accessToken || '').trim();
-  const baseUrl = getPublicAppBaseUrl();
+  // Public invoices must use the canonical static frontend host. AI Studio
+  // preview hosts are not guaranteed to serve the SPA at direct query URLs,
+  // which previously caused "Page not found" when View Invoice opened there.
+  const configuredBillBase = typeof import.meta !== 'undefined' && import.meta.env?.VITE_PUBLIC_APP_URL
+    ? String(import.meta.env.VITE_PUBLIC_APP_URL).trim()
+    : '';
+  const baseUrl = configuredBillBase || PRODUCTION_PUBLIC_URL;
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
   const queryParams = new URLSearchParams();
