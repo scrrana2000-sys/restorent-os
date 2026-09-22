@@ -24,23 +24,7 @@ vi.mock('firebase/firestore', () => {
     getDocs: vi.fn(),
     setDoc: vi.fn(),
     updateDoc: vi.fn(),
-    runTransaction: vi.fn(async (_db, callback: any) => {
-      const transaction = {
-        get: async (_ref: any) => ({
-          exists: () => true,
-          id: 'kot_1',
-          data: () => ({
-            status: 'sentToKitchen',
-            restaurantId: 'REST_KITCHEN_TEST',
-            orderId: 'ord_101'
-          })
-        }),
-        set: vi.fn(),
-        update: vi.fn(),
-        delete: vi.fn()
-      };
-      return callback(transaction);
-    }),
+    runTransaction: vi.fn(),
     query: vi.fn((colRef, ...clauses) => ({ type: 'query', colRef, clauses })),
     where: vi.fn((field, op, val) => ({ type: 'where', field, op, val })),
     orderBy: vi.fn((field, dir) => ({ type: 'orderBy', field, dir })),
@@ -131,6 +115,15 @@ describe('Phase 4C — Kitchen Queue & Operational UX Verification', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(firestore.runTransaction).mockImplementation(async (_db, callback: any) => {
+      const transaction = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(transaction);
+    });
     kotService = new KOTService();
   });
 
@@ -218,6 +211,11 @@ describe('Phase 4C — Kitchen Queue & Operational UX Verification', () => {
   describe('7 & 8. Duplicate Action Prevention & Workflow Guardrails', () => {
     it('enforces status transition validations via KOTService', async () => {
       vi.spyOn(kotService, 'getKOTById').mockResolvedValue(mockKot1);
+      vi.mocked(firestore.getDoc).mockResolvedValue({
+        exists: () => true,
+        id: 'kot_1',
+        data: () => ({ ...mockKot1, status: 'sentToKitchen' })
+      } as any);
 
       // Attempt invalid transition: sentToKitchen -> served (skipping preparing & ready)
       await expect(
