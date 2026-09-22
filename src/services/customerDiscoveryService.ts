@@ -15,6 +15,7 @@ import {
 import { db } from '../config/firebase';
 import {
   PublicRestaurantProfile,
+  PublicRestaurantStatus,
   RestaurantDiscoveryCriteria,
   PaginatedDiscoveryResult
 } from '../types/customer';
