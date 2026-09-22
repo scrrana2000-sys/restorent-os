@@ -695,6 +695,149 @@ function extractInput(input: ServerOnlineOrderInput) {
 }
 
 /**
+ * Server-authoritative online-order acceptance.
+ *
+ * IMPORTANT: this workflow runs on Cloud Run after server-side Firebase Auth +
+ * restaurant-role verification. It must use Admin Firestore for every mutation;
+ * using the browser Firebase client SDK here would re-enter Firestore security
+ * rules and can fail with "Missing or insufficient permissions".
+ */
+export async function acceptServerOnlineOrder(
+  restaurantId: string,
+  orderId: string,
+  actorUid: string,
+  prepTimeMinutes: number
+): Promise<{ order: Order; kot: KOT | null }> {
+  const cleanRestaurantId = cleanId(restaurantId, 'restaurantId');
+  const cleanOrderId = cleanId(orderId, 'orderId');
+  const minutes = Math.floor(Number(prepTimeMinutes));
+
+  if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 1440) {
+    throw new Error('A valid preparation time between 1 and 1440 minutes is required.');
+  }
+
+  const orderRef = adminDb.doc(`restaurants/${cleanRestaurantId}/orders/${cleanOrderId}`);
+  const orderSnap = await orderRef.get();
+
+  if (!orderSnap.exists) {
+    throw new Error(`Cannot accept order: Order "${cleanOrderId}" not found.`);
+  }
+
+  const orderData = { id: orderSnap.id, ...orderSnap.data() } as Order;
+
+  if (orderData.restaurantId && orderData.restaurantId !== cleanRestaurantId) {
+    throw new Error('Order belongs to a different restaurant.');
+  }
+
+  if (orderData.source !== 'online') {
+    throw new Error('Only online orders can be accepted through this workflow.');
+  }
+
+  if (orderData.status !== 'confirmed' && orderData.status !== 'draft') {
+    throw new Error(
+      `Cannot accept online order "${orderData.orderNumber || cleanOrderId}": Order is already in status "${orderData.status}".`
+    );
+  }
+
+  const now = new Date();
+  await orderRef.update({
+    status: 'sentToKitchen',
+    acceptedAt: now,
+    acceptedBy: actorUid,
+    estimatedPrepMinutes: minutes,
+    updatedAt: now,
+    updatedBy: actorUid
+  });
+
+  const kotsQuery = await adminDb
+    .collection(`restaurants/${cleanRestaurantId}/kots`)
+    .where('orderId', '==', cleanOrderId)
+    .get();
+
+  let kot: KOT | null = null;
+  const existingActiveKots = kotsQuery.docs.filter((d) => {
+    const status = String(d.data()?.status || '');
+    return status === 'draft' || status === 'confirmed';
+  });
+
+  if (existingActiveKots.length > 0) {
+    const batch = adminDb.batch();
+    for (const kDoc of existingActiveKots) {
+      batch.update(kDoc.ref, {
+        status: 'sentToKitchen',
+        sentToKitchenAt: now,
+        updatedAt: now,
+        updatedBy: actorUid
+      });
+    }
+    await batch.commit();
+
+    const first = existingActiveKots[0];
+    kot = { id: first.id, ...first.data(), status: 'sentToKitchen' } as KOT;
+  } else if (Array.isArray(orderData.items) && orderData.items.length > 0) {
+    const kotRef = adminDb.collection(`restaurants/${cleanRestaurantId}/kots`).doc();
+    const kotNumber = `KOT-${Date.now().toString().slice(-6)}-${randomUUID().slice(0, 4).toUpperCase()}`;
+
+    const kotItems = orderData.items.map((item: any) => ({
+      itemId: item.itemId,
+      nameSnapshot: item.nameSnapshot,
+      shortNameSnapshot: item.shortNameSnapshot || item.nameSnapshot,
+      quantity: item.quantity,
+      notes: item.notes || '',
+      modifiers: Array.isArray(item.modifiers)
+        ? item.modifiers.map((modifier: any) => ({
+            id: modifier.id,
+            name: modifier.name,
+            priceMinor: modifier.priceMinor
+          }))
+        : undefined
+    }));
+
+    const kotPayload = stripUndefined({
+      id: kotRef.id,
+      restaurantId: cleanRestaurantId,
+      orderId: cleanOrderId,
+      orderNumber: orderData.orderNumber,
+      kotNumber,
+      status: 'sentToKitchen',
+      source: 'online',
+      orderType: orderData.orderType,
+      items: kotItems,
+      notes: `Online Order (${String(orderData.orderType || '').toUpperCase()}) - Est. prep: ${minutes} mins`,
+      customerSnapshot: orderData.customerSnapshot || null,
+      sentToKitchenAt: now,
+      createdAt: now,
+      createdBy: actorUid,
+      updatedAt: now,
+      updatedBy: actorUid
+    });
+
+    await kotRef.create(kotPayload);
+    kot = kotPayload as KOT;
+  }
+
+  const updatedSnap = await orderRef.get();
+  const updatedOrder = { id: updatedSnap.id, ...updatedSnap.data() } as Order;
+
+  await writeAudit(cleanRestaurantId, 'order', cleanOrderId, 'online_order_accepted', actorUid, {
+    orderNumber: updatedOrder.orderNumber,
+    orderType: updatedOrder.orderType,
+    estimatedPrepMinutes: minutes,
+    source: updatedOrder.source
+  });
+
+  if (kot) {
+    await writeAudit(cleanRestaurantId, 'kot', kot.id, 'kot_sent_to_kitchen', actorUid, {
+      kotNumber: kot.kotNumber,
+      orderId: cleanOrderId,
+      status: kot.status
+    });
+  }
+
+  return { order: updatedOrder, kot };
+}
+
+/**
  * Main server-authoritative online checkout.
  */
 export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Promise<ServerOnlineOrderResult> {
