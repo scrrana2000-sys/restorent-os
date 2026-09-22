@@ -23,6 +23,7 @@ import { PaymentModal } from '../components/pos/PaymentModal';
 import { BillReceiptModal } from '../components/pos/BillReceiptModal';
 import { HeldOrdersModal, HeldOrderDraft } from '../components/pos/HeldOrdersModal';
 import { PaymentDueCenterModal } from '../components/pos/PaymentDueCenterModal';
+import { OnlineOrdersQueue } from '../components/orders/OnlineOrdersQueue';
 import { VoiceOrderModal } from '../components/voice/VoiceOrderModal';
 import { AdminView } from '../components/layout/Sidebar';
 import { useModalBackHandler } from '../hooks/useModalBackHandler';
@@ -81,6 +82,10 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   const [paymentDueError, setPaymentDueError] = useState<string | null>(null);
   const [paymentDueReloadToken, setPaymentDueReloadToken] = useState(0);
   const [isPaymentDueModalOpen, setIsPaymentDueModalOpen] = useState<boolean>(false);
+
+  // Live online-order counter and management center for POS.
+  const [onlineOrderCount, setOnlineOrderCount] = useState<number>(0);
+  const [isOnlineOrdersModalOpen, setIsOnlineOrdersModalOpen] = useState<boolean>(false);
 
   // Modals
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
@@ -175,32 +180,48 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
     return () => unsubscribe();
   }, [restaurantId, activeSession?.id]);
 
-  // Payment-due orders are loaded only when the payment-due modal is opened.
+  // Payment-due orders stay live on the POS terminal so outstanding COD/counter balances
+  // are visible without first opening the collection modal.
   useEffect(() => {
-    if (!restaurantId || !isPaymentDueModalOpen) return;
+    if (!restaurantId) return;
 
-    let cancelled = false;
     setPaymentDueLoading(true);
     setPaymentDueError(null);
 
-    orderService.getPaymentDueOrders(restaurantId)
-      .then((orders) => {
-        if (cancelled) return;
+    const unsubscribe = orderService.subscribeToPaymentDueOrders(
+      restaurantId,
+      (orders) => {
         setPaymentDueOrders(orders);
-      })
-      .catch((err: any) => {
-        if (cancelled) return;
-        console.error('[PosPage] Payment due load error:', err);
-        setPaymentDueError(err?.message || 'Failed to load payment due orders.');
-      })
-      .finally(() => {
-        if (!cancelled) setPaymentDueLoading(false);
-      });
+        setPaymentDueLoading(false);
+      },
+      (err) => {
+        console.warn('[PosPage] Payment due subscription notice:', err);
+        setPaymentDueError(err?.message || 'Failed to sync payment due orders.');
+        setPaymentDueLoading(false);
+      }
+    );
 
-    return () => {
-      cancelled = true;
-    };
-  }, [restaurantId, isPaymentDueModalOpen, paymentDueReloadToken]);
+    return () => unsubscribe();
+  }, [restaurantId, paymentDueReloadToken]);
+
+  // Keep a live count of pending online orders on the POS terminal.
+  useEffect(() => {
+    if (!restaurantId) return;
+
+    const unsubscribe = orderService.subscribeToOnlineOrders(
+      restaurantId,
+      (orders) => {
+        const pending = orders.filter((order) => order.status === 'confirmed' || order.status === 'draft');
+        setOnlineOrderCount(pending.length);
+      },
+      (err) => {
+        console.warn('[PosPage] Online order counter subscription notice:', err);
+        setOnlineOrderCount(0);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [restaurantId]);
 
   const totalPaymentDueMinor = useMemo(() => {
     return paymentDueOrders.reduce((sum, ord) => {
@@ -695,6 +716,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         paymentDueCount={paymentDueOrders.length}
         totalPaymentDueMinor={totalPaymentDueMinor}
         onOpenPaymentDue={() => setIsPaymentDueModalOpen(true)}
+        onlineOrderCount={onlineOrderCount}
+        onOpenOnlineOrders={() => setIsOnlineOrdersModalOpen(true)}
         cartItemsCount={cartItemsCount}
         onOpenCart={() => setActiveMobileTab((prev) => (prev === 'cart' ? 'menu' : 'cart'))}
         onOpenMobileMenu={onOpenMobileMenu}
@@ -921,6 +944,37 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         onResumeDraft={handleResumeDraft}
         onDeleteDraft={handleDeleteDraft}
       />
+
+      <div
+        id="pos-online-orders-modal"
+        className={`fixed inset-0 z-50 ${isOnlineOrdersModalOpen ? 'flex' : 'hidden'} items-end sm:items-center justify-center bg-slate-950/70 backdrop-blur-xs p-0 sm:p-4`}
+      >
+        <div className="w-full max-w-6xl h-[94vh] sm:h-[90vh] bg-slate-50 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+          <div className="shrink-0 px-4 sm:px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+            <div>
+              <h2 className="text-base sm:text-lg font-black tracking-tight">Online Orders</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">Accept, send to kitchen, mark ready, and hand over customer orders.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsOnlineOrdersModalOpen(false)}
+              className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white"
+              aria-label="Close online orders"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <OnlineOrdersQueue
+              onViewBillModal={(order) => {
+                setIsOnlineOrdersModalOpen(false);
+                setActiveOrderForBill(order);
+                setIsBillModalOpen(true);
+              }}
+            />
+          </div>
+        </div>
+      </div>
 
       <PaymentDueCenterModal
         isOpen={isPaymentDueModalOpen}
