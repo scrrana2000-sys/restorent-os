@@ -1,63 +1,75 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-/**
- * Global coordinated modal history management for browser / Android Back button integration.
- * 
- * Rules & Invariants:
- * 1. Global stack ensures multi-modal sequences (e.g. ActiveSession -> StaffOrderModal) or
- *    sub-steps (Menu -> Review) do NOT cause popstate crosstalk or unexpected modal dismissals.
- * 2. When a modal opens, it registers in the active stack and pushes a single history state.
- * 3. When the user presses the real hardware/browser Back button (popstate), the top-most modal
- *    is popped and its `onClose` is executed safely.
- * 4. When a modal closes via UI / React state (isOpen becomes false or component unmounts),
- *    the history cleanup uses an atomic programmatic back counter (`programmaticBackCount`)
- *    so the resulting popstate event is silently consumed and never triggers onClose on another modal.
- * 5. Multiple simultaneous modal hooks do not fight or create phantom dismissals.
- */
-
 interface ModalEntry {
   modalId: string;
   onClose: () => void;
-  pushed: boolean;
 }
 
 const modalStack: ModalEntry[] = [];
-let lastProgrammaticBackTimestamp = 0;
 let isListenerAttached = false;
+let historyEntryActive = false;
+let pendingHistoryRemoval = false;
+let suppressNextPop = false;
 
-function removeModalEntry(modalId: string) {
-  const idx = modalStack.findIndex((m) => m.modalId === modalId);
-  if (idx !== -1) {
-    modalStack.splice(idx, 1);
-  }
-}
-
-function restoreModalHistoryEntry(entry: ModalEntry) {
+function pushSharedModalHistoryEntry() {
+  if (typeof window === 'undefined' || historyEntryActive) return;
   try {
-    // A real browser Back already consumed the modal's history entry.
-    // Restore exactly one entry before calling onClose so a modal that
-    // remains open (for example a multi-step modal) can consume Back again.
-    window.history.pushState({ modalId: entry.modalId, timestamp: Date.now() }, '');
-    entry.pushed = true;
+    window.history.pushState(
+      { restaurantOSModal: true, timestamp: Date.now() },
+      '',
+      window.location.href
+    );
+    historyEntryActive = true;
   } catch (e) {
-    console.warn('[useModalBackHandler] failed to restore modal history entry:', e);
-    entry.pushed = false;
+    console.warn('[useModalBackHandler] pushState failed:', e);
   }
 }
 
-function cleanupModalEntry(modalId: string) {
-  const idx = modalStack.findIndex((m) => m.modalId === modalId);
-  if (idx === -1) return;
+function scheduleSharedModalHistoryRemoval() {
+  if (typeof window === 'undefined' || !historyEntryActive || pendingHistoryRemoval) return;
 
-  const removed = modalStack.splice(idx, 1)[0];
-  if (removed && removed.pushed) {
-    removed.pushed = false;
-    lastProgrammaticBackTimestamp = Date.now();
+  pendingHistoryRemoval = true;
+  queueMicrotask(() => {
+    pendingHistoryRemoval = false;
+
+    // A second modal can replace the first one in the same React commit.
+    // In that case the existing shared history entry is reused and must not
+    // be consumed underneath the newly opened modal.
+    if (modalStack.length > 0 || !historyEntryActive) return;
+
+    suppressNextPop = true;
     try {
       window.history.back();
     } catch (e) {
+      suppressNextPop = false;
       console.warn('[useModalBackHandler] history cleanup failed:', e);
     }
+  });
+}
+
+function registerModal(modalId: string, onClose: () => void) {
+  const existing = modalStack.find((entry) => entry.modalId === modalId);
+  if (existing) {
+    existing.onClose = onClose;
+    pendingHistoryRemoval = false;
+    return;
+  }
+
+  modalStack.push({ modalId, onClose });
+  pendingHistoryRemoval = false;
+  pushSharedModalHistoryEntry();
+}
+
+function unregisterModal(modalId: string) {
+  const index = modalStack.findIndex((entry) => entry.modalId === modalId);
+  if (index === -1) return;
+
+  modalStack.splice(index, 1);
+
+  // Keep the one shared browser history entry while another modal is open.
+  // Only remove it after the entire modal stack becomes empty.
+  if (modalStack.length === 0) {
+    scheduleSharedModalHistoryRemoval();
   }
 }
 
@@ -66,29 +78,32 @@ function ensureGlobalListener() {
   isListenerAttached = true;
 
   window.addEventListener('popstate', () => {
-    // If popstate was triggered by our own history.back() within the last 60ms during programmatic/UI close, consume it
-    const now = Date.now();
-    if (now - lastProgrammaticBackTimestamp < 60) {
-      lastProgrammaticBackTimestamp = 0;
+    if (suppressNextPop) {
+      suppressNextPop = false;
+      historyEntryActive = false;
       return;
     }
 
-    // Otherwise, this is a real user browser / Android back button press.
-    // The browser has already consumed the modal history entry, so restore it
-    // immediately before invoking onClose. If onClose closes the modal, its
-    // effect cleanup will remove this restored entry. If onClose only changes
-    // a nested step, the modal remains backed by one history entry.
+    if (modalStack.length === 0) return;
+
+    // The browser/Android Back gesture has already consumed the shared
+    // modal entry. Invoke the top modal's back handler. If the modal stays
+    // open (for example a nested step changed), restore the same single
+    // entry. If it closes, its React effect cleanup removes the registration.
+    historyEntryActive = false;
+
+    const topModal = modalStack[modalStack.length - 1];
+    try {
+      topModal?.onClose();
+    } catch (e) {
+      console.warn('[useModalBackHandler] error in onClose during popstate:', e);
+    }
+
+    // React state cleanup happens after the event. Recreate the shared entry
+    // now when there is still any registered modal. If the top modal closes,
+    // cleanup will later remove it while retaining the entry for lower modals.
     if (modalStack.length > 0) {
-      const topModal = modalStack[modalStack.length - 1];
-      if (topModal) {
-        try {
-          topModal.pushed = false;
-          restoreModalHistoryEntry(topModal);
-          topModal.onClose();
-        } catch (e) {
-          console.warn('[useModalBackHandler] error in onClose during popstate:', e);
-        }
-      }
+      pushSharedModalHistoryEntry();
     }
   });
 }
@@ -99,56 +114,26 @@ export function useModalBackHandler(
   modalId: string
 ) {
   const onCloseRef = useRef(onClose);
-  const effectGenerationRef = useRef(0);
   onCloseRef.current = onClose;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     ensureGlobalListener();
 
-    const generation = ++effectGenerationRef.current;
-
     if (isOpen) {
-      // Find existing entry or push new one
-      let entry = modalStack.find((m) => m.modalId === modalId);
-      if (!entry) {
-        entry = {
-          modalId,
-          onClose: () => onCloseRef.current(),
-          pushed: false
-        };
-        modalStack.push(entry);
-      } else {
-        entry.onClose = () => onCloseRef.current();
-      }
+      registerModal(modalId, () => onCloseRef.current());
 
-      if (!entry.pushed) {
-        try {
-          window.history.pushState({ modalId, timestamp: Date.now() }, '');
-          entry.pushed = true;
-        } catch (e) {
-          console.warn('[useModalBackHandler] pushState failed:', e);
-        }
-      }
-
-      // React StrictMode intentionally mounts, cleans up, and mounts effects
-      // again in development. Delay cleanup by a microtask and ignore it when
-      // a newer effect generation has already replaced this one.
       return () => {
-        queueMicrotask(() => {
-          if (effectGenerationRef.current !== generation) return;
-          cleanupModalEntry(modalId);
-        });
+        unregisterModal(modalId);
       };
     }
 
-    // Closed state: remove any stale registration left by a previous open.
-    cleanupModalEntry(modalId);
+    unregisterModal(modalId);
     return () => {};
   }, [isOpen, modalId]);
 
   const handleManualClose = useCallback(() => {
-    cleanupModalEntry(modalId);
+    unregisterModal(modalId);
     onCloseRef.current();
   }, [modalId]);
 
