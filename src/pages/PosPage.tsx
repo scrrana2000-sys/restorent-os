@@ -765,6 +765,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
             <span>{statusMessage.text}</span>
           </div>
           <button
+            type="button"
             onClick={() => setStatusMessage(null)}
             className="p-1 hover:bg-black/10 rounded-lg"
           >
