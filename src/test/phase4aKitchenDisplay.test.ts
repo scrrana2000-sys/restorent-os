@@ -15,8 +15,16 @@ vi.mock('firebase/firestore', () => {
     setDoc: vi.fn(),
     updateDoc: vi.fn(),
     runTransaction: vi.fn(async (_db, callback: any) => {
+      const transactionCall = (firestore.runTransaction as any).mock?.calls?.length || 1;
+      const statuses = ['sentToKitchen', 'preparing', 'ready'];
       const transaction = {
-        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        get: async (_ref: any) => ({
+          exists: () => true,
+          id: 'kot_202',
+          data: () => ({
+            status: statuses[Math.min(Math.max(transactionCall - 1, 0), statuses.length - 1)]
+          })
+        }),
         set: vi.fn(),
         update: vi.fn(),
         delete: vi.fn()
