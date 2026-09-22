@@ -963,18 +963,59 @@ export async function submitServerPosOrder(input: {
   const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
 
   // One canonical dine-in bill per open table session.
+  // The session's activeOrderId is authoritative. This is important when an
+  // older duplicate order exists: after a bill is cancelled/completed, we must
+  // never resurrect another legacy order and pull its items into the new bill.
   let existingSessionOrder: any = null;
+  let sessionHasTerminalCanonicalOrder = false;
+
   if (input.orderType === 'dineIn' && input.tableSessionId) {
-    const existingSnap = await adminDb
-      .collection(`restaurants/${restaurantId}/orders`)
-      .where('tableSessionId', '==', input.tableSessionId)
-      .get();
-    for (const d of existingSnap.docs) {
-      const data = d.data() as any;
-      if (data.status !== 'cancelled' && data.status !== 'completed') {
-        existingSessionOrder = { id: d.id, ...data };
-        break;
+    const sessionRef = adminDb.doc(
+      `restaurants/${restaurantId}/tableSessions/${input.tableSessionId}`
+    );
+    const sessionForOrder = await sessionRef.get();
+    const activeOrderId = String(sessionForOrder.data()?.activeOrderId || '').trim();
+
+    if (activeOrderId) {
+      const activeOrderSnap = await adminDb
+        .doc(`restaurants/${restaurantId}/orders/${activeOrderId}`)
+        .get();
+
+      if (activeOrderSnap.exists) {
+        const data = activeOrderSnap.data() as any;
+        if (data.status !== 'cancelled' && data.status !== 'completed') {
+          existingSessionOrder = { id: activeOrderSnap.id, ...data };
+        } else {
+          sessionHasTerminalCanonicalOrder = true;
+        }
+      } else {
+        sessionHasTerminalCanonicalOrder = true;
       }
+    }
+
+    // Legacy sessions may not have activeOrderId yet. Recover the most recent
+    // still-open order only when there is no canonical terminal pointer.
+    if (!existingSessionOrder && !sessionHasTerminalCanonicalOrder && !activeOrderId) {
+      const existingSnap = await adminDb
+        .collection(`restaurants/${restaurantId}/orders`)
+        .where('tableSessionId', '==', input.tableSessionId)
+        .get();
+
+      const activeOrders = existingSnap.docs
+        .map((d: any) => ({ id: d.id, ...d.data() }))
+        .filter((data: any) => data.status !== 'cancelled' && data.status !== 'completed');
+
+      activeOrders.sort((a: any, b: any) => {
+        const toMillis = (value: any) => {
+          if (!value) return 0;
+          if (typeof value?.toMillis === 'function') return value.toMillis();
+          const parsed = new Date(value).getTime();
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
+        return toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt);
+      });
+
+      existingSessionOrder = activeOrders[0] || null;
     }
   }
 
