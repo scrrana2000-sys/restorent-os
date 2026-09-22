@@ -41,6 +41,8 @@ interface PosHeaderProps {
   onOpenPaymentDue?: () => void;
   onlineOrderCount?: number;
   onOpenOnlineOrders?: () => void;
+  onlineOrderingLive?: boolean;
+  onOpenLiveOperations?: () => void;
   cartItemsCount?: number;
   onOpenCart?: () => void;
   onOpenMobileMenu?: () => void;
@@ -65,6 +67,8 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   onOpenPaymentDue,
   onlineOrderCount = 0,
   onOpenOnlineOrders,
+  onlineOrderingLive = false,
+  onOpenLiveOperations,
   cartItemsCount = 0,
   onOpenCart,
   onOpenMobileMenu,
@@ -140,6 +144,23 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
         {/* Right: Connectivity status & User controls */}
         <div className="flex items-center gap-1.5 shrink-0">
           <OfflineSyncIndicator />
+
+          {onOpenLiveOperations && (
+            <button
+              id="live-operations-header-btn"
+              type="button"
+              onClick={onOpenLiveOperations}
+              className={`flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-black active:scale-95 transition-all ${
+                onlineOrderingLive
+                  ? 'bg-emerald-50 border border-emerald-300 text-emerald-900 hover:bg-emerald-100'
+                  : 'bg-rose-50 border border-rose-200 text-rose-800 hover:bg-rose-100'
+              }`}
+              title="Live Restaurant Operations"
+            >
+              <span className={`w-2 h-2 rounded-full ${onlineOrderingLive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+              <span className="hidden sm:inline">Live Ops</span>
+            </button>
+          )}
 
           {/* Incoming Online Orders Quick Center */}
           {onOpenOnlineOrders && (
