@@ -847,8 +847,11 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
     throw new Error('Invalid customer identity.');
   }
 
-  const restaurant = await assertRestaurantAndEntitlement(restaurantId, orderType);
-  const catalog = await loadCatalogItems(restaurantId, input.cart);
+  // These reads are independent. Run them concurrently so checkout latency is bounded by the slower operation instead of their sum.
+  const [restaurant, catalog] = await Promise.all([
+    assertRestaurantAndEntitlement(restaurantId, orderType),
+    loadCatalogItems(restaurantId, input.cart)
+  ]);
   const prepared = buildSnapshotAndCart(
     restaurantId,
     input.cart,
@@ -961,57 +964,55 @@ export async function submitServerOnlineOrder(input: ServerOnlineOrderInput): Pr
       });
     });
 
-    await writeAudit(restaurantId, 'order', order.id, 'order_created', order.createdBy, {
+    // User-visible order creation is complete above. Audit and inventory
+    // reconciliation are post-commit work and must not hold checkout open.
+    void writeAudit(restaurantId, 'order', order.id, 'order_created', order.createdBy, {
       orderNumber: order.orderNumber,
       grandTotalMinor: order.grandTotalMinor,
       orderType: order.orderType,
       kotId: kot?.id || null,
       kotNumber: kot?.kotNumber || null
-    });
+    }).catch((auditError) => console.warn('[RestaurantOS Server] Online order audit notice:', auditError));
 
     if (kot) {
-      await writeAudit(restaurantId, 'kot', kot.id, 'kot_created', kot.createdBy, {
+      void writeAudit(restaurantId, 'kot', kot.id, 'kot_created', kot.createdBy, {
         kotNumber: kot.kotNumber,
         orderId: order.id,
         status: kot.status,
         itemCount: kot.items.length
-      });
+      }).catch((auditError) => console.warn('[RestaurantOS Server] Online KOT audit notice:', auditError));
     }
 
-    // Inventory deduction is best-effort exactly like the canonical OrderService:
-    // order creation itself remains successful when stock is unavailable or unmapped.
-    try {
-      const stockResult = await consumeStockForOrder(restaurantId, order, order.createdBy || SYSTEM_SERVER_UID, key);
-      const orderRef = adminDb.doc(`restaurants/${restaurantId}/orders/${order.id}`);
-      await orderRef.update(stripUndefined({
-        stockConsumptionStatus: stockResult.consumptions.length ? 'consumed' : 'not_applicable',
-        stockConsumptionError: null,
-        updatedAt: new Date()
-      }));
-      order.stockConsumptionStatus = stockResult.consumptions.length ? 'consumed' : 'not_applicable';
-      order.stockConsumptionError = null;
-      if (stockResult.consumptions.length) {
-        await writeAudit(restaurantId, 'inventory', order.id, 'stock_consumption_recorded', order.createdBy || SYSTEM_SERVER_UID, {
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          consumptionsCount: stockResult.consumptions.length,
-          movementsCount: stockResult.movements.length
-        });
-      }
-    } catch (stockError: any) {
-      const message = String(stockError?.message || 'Stock consumption failed.');
-      order.stockConsumptionStatus = 'failed';
-      order.stockConsumptionError = message;
+    void (async () => {
       try {
-        await adminDb.doc(`restaurants/${restaurantId}/orders/${order.id}`).update(stripUndefined({
-          stockConsumptionStatus: 'failed',
-          stockConsumptionError: message,
+        const stockResult = await consumeStockForOrder(restaurantId, order, order.createdBy || SYSTEM_SERVER_UID, key);
+        const orderRef = adminDb.doc(`restaurants/${restaurantId}/orders/${order.id}`);
+        await orderRef.update(stripUndefined({
+          stockConsumptionStatus: stockResult.consumptions.length ? 'consumed' : 'not_applicable',
+          stockConsumptionError: null,
           updatedAt: new Date()
         }));
-      } catch (statusError) {
-        console.warn('[RestaurantOS Server] Could not persist online order stock failure state:', statusError);
+        if (stockResult.consumptions.length) {
+          await writeAudit(restaurantId, 'inventory', order.id, 'stock_consumption_recorded', order.createdBy || SYSTEM_SERVER_UID, {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            consumptionsCount: stockResult.consumptions.length,
+            movementsCount: stockResult.movements.length
+          });
+        }
+      } catch (stockError: any) {
+        const message = String(stockError?.message || 'Stock consumption failed.');
+        try {
+          await adminDb.doc(`restaurants/${restaurantId}/orders/${order.id}`).update(stripUndefined({
+            stockConsumptionStatus: 'failed',
+            stockConsumptionError: message,
+            updatedAt: new Date()
+          }));
+        } catch (statusError) {
+          console.warn('[RestaurantOS Server] Could not persist online order stock failure state:', statusError);
+        }
       }
-    }
+    })();
 
     return { success: true, order, kot };
   } catch (error) {
