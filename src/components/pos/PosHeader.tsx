@@ -29,6 +29,7 @@ interface PosHeaderProps {
   onOpenOnlineOrders?: () => void;
   onlineOrderingLive?: boolean;
   onOpenLiveOperations?: () => void;
+  onOpenPosItemAvailability?: () => void;
   cartItemsCount?: number;
   onOpenCart?: () => void;
   onOpenMobileMenu?: () => void;
@@ -41,7 +42,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   onClearTable, showTableSelector = true, allowedOrderTypes = ['dineIn', 'takeaway', 'delivery'],
   heldOrdersCount, onOpenHeldOrders, onOpenRecentOrders, paymentDueCount = 0,
   totalPaymentDueMinor = 0, onOpenPaymentDue, onlineOrderCount = 0, onOpenOnlineOrders,
-  onlineOrderingLive = false, onOpenLiveOperations, cartItemsCount = 0, onOpenCart,
+  onlineOrderingLive = false, onOpenLiveOperations, onOpenPosItemAvailability, cartItemsCount = 0, onOpenCart,
   onOpenMobileMenu, onOpenVoiceModal, isVoiceListening = false
 }) => {
   const { restaurant } = useRestaurant();
@@ -91,6 +92,15 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
               title="Live Restaurant Operations">
               <span className={`w-2 h-2 rounded-full ${onlineOrderingLive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
               <span className="hidden sm:inline">Live Ops</span>
+            </button>
+          )}
+          {onOpenPosItemAvailability && (
+            <button id="pos-item-availability-header-btn" type="button"
+              onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenPosItemAvailability(); }}
+              className="flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-black bg-indigo-50 border border-indigo-200 text-indigo-800 hover:bg-indigo-100 active:scale-95 transition-all"
+              title="POS Item Availability — turn menu items ON/OFF">
+              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+              <span className="hidden sm:inline">Items</span>
             </button>
           )}
           {onOpenOnlineOrders && (
