@@ -145,9 +145,6 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
 
   const idempotencyKeyRef = useRef<string>('');
 
-  const createFreshIdempotencyKey = () =>
-    `chk_${cart?.restaurantId || 'guest'}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
   // A checkout modal instance may be reused after an order is completed.
   // Each newly opened checkout must represent a new order attempt, with a fresh
   // idempotency key and a clean success/error state. Otherwise the previous order
@@ -155,7 +152,7 @@ export const CustomerCheckoutModal: React.FC<CustomerCheckoutModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    idempotencyKeyRef.current = createFreshIdempotencyKey();
+    idempotencyKeyRef.current = `chk_${cart?.restaurantId || 'guest'}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     setCurrentStep('form');
     setValidationResult(null);
     setCreatedIntent(null);
