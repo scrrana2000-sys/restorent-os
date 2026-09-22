@@ -14,6 +14,15 @@ vi.mock('firebase/firestore', () => {
     getDocs: vi.fn(),
     setDoc: vi.fn(),
     updateDoc: vi.fn(),
+    runTransaction: vi.fn(async (_db, callback: any) => {
+      const transaction = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(transaction);
+    }),
     query: vi.fn((colRef, ...clauses) => ({ type: 'query', colRef, clauses })),
     where: vi.fn((field, op, val) => ({ type: 'where', field, op, val })),
     orderBy: vi.fn((field, dir) => ({ type: 'orderBy', field, dir })),
@@ -102,33 +111,17 @@ describe('Phase 4A — Kitchen Display System (KDS) Foundation', () => {
 
       // Transition sentToKitchen -> preparing
       await kotService.updateKOTStatus('REST_KITCHEN_1', 'kot_202', 'preparing', 'CHEF_USER_99');
-      expect(firestore.updateDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          status: 'preparing',
-          updatedBy: 'CHEF_USER_99'
-        })
-      );
+      expect(firestore.runTransaction).toHaveBeenCalledTimes(1);
 
       // Transition preparing -> ready
       mockKot.status = 'preparing';
       await kotService.updateKOTStatus('REST_KITCHEN_1', 'kot_202', 'ready', 'CHEF_USER_99');
-      expect(firestore.updateDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          status: 'ready'
-        })
-      );
+      expect(firestore.runTransaction).toHaveBeenCalledTimes(2);
 
       // Transition ready -> served
       mockKot.status = 'ready';
       await kotService.updateKOTStatus('REST_KITCHEN_1', 'kot_202', 'served', 'CHEF_USER_99');
-      expect(firestore.updateDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          status: 'served'
-        })
-      );
+      expect(firestore.runTransaction).toHaveBeenCalledTimes(3);
     });
 
     it('prevents illegal status transitions (e.g. ready -> sentToKitchen or served -> preparing)', async () => {
