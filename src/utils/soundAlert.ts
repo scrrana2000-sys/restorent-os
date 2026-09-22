@@ -54,6 +54,26 @@ export function setSoundAlertEnabled(enabled: boolean): void {
 }
 
 /**
+ * Unlock the shared Web Audio context from a real user gesture.
+ * Mobile browsers may block autoplay until the page has interacted with the user.
+ */
+export async function unlockNewOrderSoundAlert(): Promise<boolean> {
+  if (typeof window === 'undefined' || !soundEnabled) return false;
+
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return false;
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+    return ctx.state === 'running';
+  } catch (err) {
+    console.debug('[RestaurantOS Audio] Could not unlock sound alerts:', err);
+    return false;
+  }
+}
+
+/**
  * Attempts to play a two-tone chime alert.
  * 
  * Gracefully resolves even if the browser blocks audio autoplay.
