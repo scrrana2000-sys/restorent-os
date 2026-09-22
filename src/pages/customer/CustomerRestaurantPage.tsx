@@ -23,7 +23,8 @@ import { PublicRestaurantProfile } from '../../types/customer';
 import {
   resolveRestaurantBySlug,
   resolveRestaurantByPublicCode,
-  resolveRestaurantById
+  resolveRestaurantById,
+  subscribeToPublicRestaurantProfile
 } from '../../services/customerDiscoveryService';
 import {
   extractRestaurantIdentifierFromUrl,
@@ -126,6 +127,21 @@ const CustomerRestaurantPageContent: React.FC<CustomerRestaurantPageProps> = ({
       loadRestaurantProfile();
     }
   }, [initialProfile, loadRestaurantProfile]);
+
+  useEffect(() => {
+    const restaurantId = restaurant?.restaurantId;
+    if (!restaurantId) return;
+
+    const unsubscribe = subscribeToPublicRestaurantProfile(
+      restaurantId,
+      (profile) => {
+        if (profile) setRestaurant(profile);
+      },
+      (err) => console.warn('[RestaurantOS Customer] Restaurant status live-sync notice:', err)
+    );
+
+    return () => unsubscribe();
+  }, [restaurant?.restaurantId]);
 
   const handleBack = () => {
     if (onBackToDiscovery) {
