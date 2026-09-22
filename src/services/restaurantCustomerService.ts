@@ -187,8 +187,53 @@ export class RestaurantCustomerService {
         });
       }
 
-      // 3. Build entries for guest activity (one entry per guest order, strictly non-merged)
+      // 3. Build guest activity. If a POS bill captured a mobile number, that phone
+      // becomes the stable restaurant-scoped guest identity so future visits share history.
+      // Orders without a phone remain individual guest records.
+      const guestByPhone = new Map<string, Order[]>();
+      const anonymousGuests: Order[] = [];
+
       for (const gOrder of guestOrders) {
+        const phoneDigits = String(gOrder.customerSnapshot?.phone || '').replace(/\\D/g, '').slice(-10);
+        if (phoneDigits.length === 10) {
+          const existing = guestByPhone.get(phoneDigits) || [];
+          existing.push(gOrder);
+          guestByPhone.set(phoneDigits, existing);
+        } else {
+          anonymousGuests.push(gOrder);
+        }
+      }
+
+      for (const [phoneDigits, orders] of guestByPhone.entries()) {
+        orders.sort((a, b) => parseTimestampToMillis(b.createdAt) - parseTimestampToMillis(a.createdAt));
+        const latest = orders[0];
+        const spend = orders
+          .filter((o) => o.status !== 'cancelled')
+          .reduce((sum, o) => sum + (o.grandTotalMinor || 0), 0);
+
+        customerList.push({
+          id: `phone_${phoneDigits}`,
+          customerId: null,
+          isRegistered: false,
+          name: latest.customerSnapshot?.name || 'Customer',
+          email: latest.customerSnapshot?.email || null,
+          phone: phoneDigits,
+          address: latest.customerSnapshot?.address || null,
+          orderCount: orders.length,
+          completedOrderCount: orders.filter((o) => o.status === 'completed' || o.status === 'served').length,
+          cancelledOrderCount: orders.filter((o) => o.status === 'cancelled').length,
+          totalSpendMinor: spend,
+          averageOrderValueMinor: orders.length ? Math.round(spend / orders.length) : 0,
+          firstOrderDate: this.formatDate(orders[orders.length - 1].createdAt),
+          lastOrderDate: this.formatDate(latest.createdAt),
+          lastOrderType: latest.orderType,
+          lastOrderStatus: latest.status,
+          lastOrderNumber: latest.orderNumber,
+          recentOrders: orders
+        });
+      }
+
+      for (const gOrder of anonymousGuests) {
         const isCancelled = gOrder.status === 'cancelled';
         const isCompleted = gOrder.status === 'completed' || gOrder.status === 'served';
         const spend = isCancelled ? 0 : gOrder.grandTotalMinor || 0;
@@ -199,7 +244,7 @@ export class RestaurantCustomerService {
           isRegistered: false,
           name: gOrder.customerSnapshot?.name || 'Guest Diner',
           email: gOrder.customerSnapshot?.email || null,
-          phone: gOrder.customerSnapshot?.phone || null,
+          phone: null,
           address: gOrder.customerSnapshot?.address || null,
           orderCount: 1,
           completedOrderCount: isCompleted ? 1 : 0,
