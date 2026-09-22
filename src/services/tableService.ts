@@ -133,7 +133,7 @@ export class TableService implements ITableService {
 
       await setDoc(newDocRef, tableData);
 
-      await auditService.logEvent(cleanId, {
+      void auditService.logEvent(cleanId, {
         restaurantId: cleanId,
         entityType: 'table',
         entityId: newDocRef.id,
@@ -144,7 +144,7 @@ export class TableService implements ITableService {
           tableNumber: data.tableNumber.trim(),
           capacity: data.capacity
         }
-      });
+      }).catch((auditError) => console.warn('[TableService] Table creation audit notice:', auditError));
 
       return {
         id: newDocRef.id,
@@ -195,7 +195,7 @@ export class TableService implements ITableService {
 
       await updateDoc(docRef, updatePayload);
 
-      await auditService.logEvent(restaurantId.trim(), {
+      void auditService.logEvent(restaurantId.trim(), {
         restaurantId: restaurantId.trim(),
         entityType: 'table',
         entityId: tableId.trim(),
@@ -204,7 +204,7 @@ export class TableService implements ITableService {
         metadata: {
           updatedFields: Object.keys(data)
         }
-      });
+      }).catch((auditError) => console.warn('[TableService] Table update audit notice:', auditError));
     } catch (err: unknown) {
       throw handleFirestoreError(err, OperationType.UPDATE, path);
     }
