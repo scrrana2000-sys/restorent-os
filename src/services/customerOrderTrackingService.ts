@@ -3,6 +3,7 @@ import { getApiUrl } from '../utils/apiConfig';
 import { auth } from '../config/firebase';
 import { db } from '../config/firebase';
 import { Order, OrderItem, OrderStatus, OrderType } from '../types/order';
+import { reconcileOrderFinancials } from '../utils/orderFinancials';
 
 /**
  * Customer-facing order progress step details
@@ -186,19 +187,19 @@ export function getCustomerStatusDetails(
  */
 export function validateCustomerOrderAccess(order: Order, customerUid?: string | null): void {
   // If order belongs to an authenticated customer
-  if (order.customerId) {
+  if (financialOrder.customerId) {
     if (!customerUid) {
-      throw new Error('Authentication Required: Please sign in to view this customer order.');
+      throw new Error('Authentication Required: Please sign in to view this customer financialOrder.');
     }
-    if (order.customerId !== customerUid) {
-      throw new Error('Unauthorized: You do not have permission to view this order.');
+    if (financialOrder.customerId !== customerUid) {
+      throw new Error('Unauthorized: You do not have permission to view this financialOrder.');
     }
     return;
   }
 
   // For guest orders (customerId === null or undefined)
   // Only public online orders can be tracked by guests
-  if (order.source !== 'online') {
+  if (financialOrder.source !== 'online') {
     throw new Error('Order not found or inaccessible.');
   }
 }
@@ -208,16 +209,17 @@ export function validateCustomerOrderAccess(order: Order, customerUid?: string |
  * Ensures internal staff metadata (e.g. internal server notes, staff IDs, inventory status) is never leaked
  */
 export function sanitizeCustomerOrder(order: Order): Order {
+  const financialOrder = reconcileOrderFinancials(order);
   return {
-    id: order.id,
-    restaurantId: order.restaurantId,
-    orderNumber: order.orderNumber,
-    customerId: order.customerId || null,
-    orderType: order.orderType,
-    source: order.source,
-    status: order.status,
-    itemCount: order.itemCount || order.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
-    items: (order.items || []).map((item) => ({
+    id: financialOrder.id,
+    restaurantId: financialOrder.restaurantId,
+    orderNumber: financialOrder.orderNumber,
+    customerId: financialOrder.customerId || null,
+    orderType: financialOrder.orderType,
+    source: financialOrder.source,
+    status: financialOrder.status,
+    itemCount: financialOrder.itemCount || financialOrder.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
+    items: (financialOrder.items || []).map((item) => ({
       itemId: item.itemId,
       nameSnapshot: item.nameSnapshot,
       shortNameSnapshot: item.shortNameSnapshot || item.nameSnapshot,
@@ -238,34 +240,34 @@ export function sanitizeCustomerOrder(order: Order): Order {
         priceMinor: m.priceMinor
       }))
     })),
-    subtotalMinor: order.subtotalMinor,
-    discountMinor: order.discountMinor,
-    taxableAmountMinor: order.taxableAmountMinor,
-    taxableSubtotalMinor: order.taxableSubtotalMinor,
-    cgstMinor: order.cgstMinor,
-    sgstMinor: order.sgstMinor,
-    igstMinor: order.igstMinor,
-    totalTaxMinor: order.totalTaxMinor,
-    taxMinor: order.taxMinor,
-    grandTotalMinor: order.grandTotalMinor,
-    paidAmountMinor: order.paidAmountMinor,
-    dueAmountMinor: order.dueAmountMinor,
-    paymentStatus: order.paymentStatus || 'unpaid',
-    notes: order.notes,
-    customerSnapshot: order.customerSnapshot ? {
-      name: order.customerSnapshot.name,
-      phone: order.customerSnapshot.phone,
-      email: order.customerSnapshot.email,
-      address: order.customerSnapshot.address
+    subtotalMinor: financialOrder.subtotalMinor,
+    discountMinor: financialOrder.discountMinor,
+    taxableAmountMinor: financialOrder.taxableAmountMinor,
+    taxableSubtotalMinor: financialOrder.taxableSubtotalMinor,
+    cgstMinor: financialOrder.cgstMinor,
+    sgstMinor: financialOrder.sgstMinor,
+    igstMinor: financialOrder.igstMinor,
+    totalTaxMinor: financialOrder.totalTaxMinor,
+    taxMinor: financialOrder.taxMinor,
+    grandTotalMinor: financialOrder.grandTotalMinor,
+    paidAmountMinor: financialOrder.paidAmountMinor,
+    dueAmountMinor: financialOrder.dueAmountMinor,
+    paymentStatus: financialOrder.paymentStatus || 'unpaid',
+    notes: financialOrder.notes,
+    customerSnapshot: financialOrder.customerSnapshot ? {
+      name: financialOrder.customerSnapshot.name,
+      phone: financialOrder.customerSnapshot.phone,
+      email: financialOrder.customerSnapshot.email,
+      address: financialOrder.customerSnapshot.address
     } : null,
-    cancellationReason: order.cancellationReason || null,
-    cancelledAt: order.cancelledAt || null,
-    completedAt: order.completedAt || null,
-    acceptedAt: order.acceptedAt || null,
-    estimatedPrepMinutes: order.estimatedPrepMinutes || null,
-    readyAt: order.readyAt || null,
-    createdAt: order.createdAt,
-    updatedAt: order.updatedAt,
+    cancellationReason: financialOrder.cancellationReason || null,
+    cancelledAt: financialOrder.cancelledAt || null,
+    completedAt: financialOrder.completedAt || null,
+    acceptedAt: financialOrder.acceptedAt || null,
+    estimatedPrepMinutes: financialOrder.estimatedPrepMinutes || null,
+    readyAt: financialOrder.readyAt || null,
+    createdAt: financialOrder.createdAt,
+    updatedAt: financialOrder.updatedAt,
     // Provide safe non-leaking placeholder for required interface field
     createdBy: 'system'
   };
@@ -385,22 +387,22 @@ export function subscribeToOrderTracking(
         const order = await fetchGuestTrackedOrder(cleanRestaurantId, cleanOrderId, token);
         if (!stopped) {
           saveTrackedOrder({
-            orderId: order.id,
-            restaurantId: order.restaurantId,
-            orderNumber: order.orderNumber || order.id,
-            orderType: order.orderType,
-            status: order.status,
-            grandTotalMinor: order.grandTotalMinor,
-            itemCount: order.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
-            placedAt: typeof order.createdAt === 'string' ? order.createdAt : new Date().toISOString(),
-            customerId: order.customerId,
+            orderId: financialOrder.id,
+            restaurantId: financialOrder.restaurantId,
+            orderNumber: financialOrder.orderNumber || financialOrder.id,
+            orderType: financialOrder.orderType,
+            status: financialOrder.status,
+            grandTotalMinor: financialOrder.grandTotalMinor,
+            itemCount: financialOrder.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
+            placedAt: typeof financialOrder.createdAt === 'string' ? financialOrder.createdAt : new Date().toISOString(),
+            customerId: financialOrder.customerId,
             trackingToken: token
           });
           onUpdate(order);
 
           // Stop polling after a terminal order state. Guest tracking keeps the
           // protected Cloud Run path, but avoids a request every few seconds.
-          if (['completed', 'served', 'cancelled'].includes(order.status)) {
+          if (['completed', 'served', 'cancelled'].includes(financialOrder.status)) {
             stopped = true;
             if (timer) clearInterval(timer);
             timer = null;
