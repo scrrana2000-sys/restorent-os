@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Order, OrderStatus } from '../../types/order';
 import { orderService } from '../../services/orderService';
+import { kotService } from '../../services/kotService';
 import { printerService } from '../../services/printer/PrinterService';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
@@ -235,16 +236,49 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
     if (!restaurantId) return;
     setIsActionSubmitting(true);
     setError(null);
+
     try {
+      const dueAmount = order.dueAmountMinor ?? Math.max(
+        0,
+        (order.grandTotalMinor || 0) - (order.paidAmountMinor || 0)
+      );
+
+      // Handover/delivery must never bypass financial settlement.
+      if (dueAmount > 0) {
+        setError(
+          `Outstanding due of ₹${(dueAmount / 100).toFixed(2)} must be collected before ${order.orderType === 'delivery' ? 'delivery' : 'pickup'}.`
+        );
+        return;
+      }
+
+      // Completing an online order is a handover action. First move every active
+      // KOT for this order from READY -> SERVED, then let the canonical order
+      // completion pipeline enforce the final completed transition.
+      const kots = await kotService.getKOTsForOrder(restaurantId, order.id);
+      for (const kot of kots) {
+        if (kot.status === 'ready') {
+          await kotService.updateKOTStatus(
+            restaurantId,
+            kot.id,
+            'served',
+            user?.uid || 'staff',
+            `handover_${order.id}_${kot.id}`
+          );
+        }
+      }
+
       await orderService.completeOnlineOrder(
         restaurantId,
         order.id,
         user?.uid || 'staff'
       );
-      setActionSuccess(`Order #${order.orderNumber} completed & handed over!`);
+
+      setActionSuccess(
+        `Order #${order.orderNumber} ${order.orderType === 'delivery' ? 'marked Delivered' : 'marked Picked Up'} successfully.`
+      );
       setTimeout(() => setActionSuccess(null), 4000);
     } catch (err: any) {
-      setError(err?.message || 'Failed to complete order.');
+      setError(err?.message || 'Failed to complete order handover.');
     } finally {
       setIsActionSubmitting(false);
     }
@@ -700,7 +734,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                         className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        <span>Handover & Complete</span>
+                        <span>{isDelivery ? 'Mark Delivered' : 'Mark Picked Up'}</span>
                       </button>
                     )}
 
