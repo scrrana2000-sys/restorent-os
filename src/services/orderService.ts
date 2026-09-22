@@ -32,6 +32,7 @@ import { sanitizeFirestoreData } from '../utils/sanitize';
 import { stockConsumptionService } from './stockConsumptionService';
 import { orderFinalizationService } from './orderFinalizationService';
 import { parseTimestampToMillis } from '../utils/dateUtils';
+import { reconcileOrderFinancials } from '../utils/orderFinancials';
 import { getApiUrl } from '../utils/apiConfig';
 import { Restaurant } from '../types/restaurant';
 import {
@@ -2084,9 +2085,12 @@ export class OrderService implements IOrderService {
       (snapshot) => {
         const dueOrders: Order[] = [];
         snapshot.forEach((d) => {
-          const ord = { id: d.id, ...d.data() } as Order;
-          if (ord.status === 'cancelled') return;
+          const rawOrder = { id: d.id, ...d.data() } as Order;
+          if (rawOrder.status === 'cancelled') return;
 
+          // Keep payment collection consistent with the customer/order view even
+          // if a previous merge left stale order-header totals.
+          const ord = reconcileOrderFinancials(rawOrder);
           const dueAmount =
             ord.dueAmountMinor ??
             Math.max(0, (ord.grandTotalMinor || 0) - (ord.paidAmountMinor || 0));
