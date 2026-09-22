@@ -310,7 +310,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{actionSuccess}</span>
           </div>
-          <button onClick={() => setActionSuccess(null)} className="text-emerald-700 hover:text-emerald-900">
+          <button type="button" onClick={() => setActionSuccess(null)} className="text-emerald-700 hover:text-emerald-900">
             <Check className="w-4 h-4" />
           </button>
         </div>
@@ -325,7 +325,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
-          <button onClick={() => setError(null)} className="text-rose-700 hover:text-rose-900">
+          <button type="button" onClick={() => setError(null)} className="text-rose-700 hover:text-rose-900">
             &times;
           </button>
         </div>
