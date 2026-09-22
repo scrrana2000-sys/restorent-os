@@ -1500,6 +1500,37 @@ export class OrderService implements IOrderService {
 
       await updateDoc(docRef, updatePayload);
 
+      // A cancelled dine-in bill is no longer the canonical bill for the
+      // open table session. Clear the session pointer so a later order starts
+      // a fresh bill instead of inheriting cancelled items.
+      if (newStatus === 'cancelled' && currentOrder.tableSessionId) {
+        try {
+          const sessionRef = doc(
+            db,
+            'restaurants',
+            cleanRestaurantId,
+            'tableSessions',
+            String(currentOrder.tableSessionId)
+          );
+          const sessionSnap = await getDoc(sessionRef);
+          if (sessionSnap.exists()) {
+            const sessionData = sessionSnap.data() as any;
+            if (sessionData.activeOrderId === cleanOrderId) {
+              const remainingActiveOrderIds = Array.isArray(sessionData.activeOrderIds)
+                ? sessionData.activeOrderIds.filter((id: string) => id !== cleanOrderId)
+                : [];
+              await updateDoc(sessionRef, {
+                activeOrderId: null,
+                activeOrderIds: remainingActiveOrderIds,
+                updatedAt: serverTimestamp()
+              });
+            }
+          }
+        } catch (sessionErr) {
+          console.warn('[RestaurantOS] Could not clear cancelled order from active table session:', sessionErr);
+        }
+      }
+
       // Reverse stock consumption for cancelled order
       if (newStatus === 'cancelled') {
         try {
