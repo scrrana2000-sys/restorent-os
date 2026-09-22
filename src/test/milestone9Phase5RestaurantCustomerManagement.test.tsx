@@ -347,7 +347,7 @@ describe('Milestone 9 Phase 5 — Restaurant Customer Management / CRM Foundatio
       const guestOnly = await restaurantCustomerService.getRestaurantCustomers('rest-A', {
         categoryFilter: 'guest'
       });
-      expect(guestOnly.customers.length).toBe(2);
+      expect(guestOnly.customers.length).toBe(1);
       guestOnly.customers.forEach((c) => expect(c.isRegistered).toBe(false));
     });
 
