@@ -531,6 +531,12 @@ describe('PHASE 4.5: POS PAYMENT DUE / COLLECTION CENTER HARDENING', () => {
       orderId: 'ord-free-1',
       status: 'served'
     };
+    mockDocs[`restaurants/${restaurantId}/payments/pay-free-1`] = {
+      id: 'pay-free-1',
+      orderId: 'ord-free-1',
+      amountMinor: 50000,
+      status: 'completed'
+    };
 
     const res = await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
       restaurantId,
@@ -539,5 +545,47 @@ describe('PHASE 4.5: POS PAYMENT DUE / COLLECTION CENTER HARDENING', () => {
     );
 
     expect(res.orderCompleted).toBe(true);
+  });
+});
+
+
+describe('PAYMENT VERIFICATION REGRESSION', () => {
+  beforeEach(() => {
+    Object.keys(mockDocs).forEach((key) => delete mockDocs[key]);
+  });
+
+  it('does not mark a stale fully-paid order complete when no completed payment record exists', async () => {
+    mockDocs['restaurants/rest-123/tableSessions/session-stale-paid'] = {
+      id: 'session-stale-paid',
+      restaurantId: 'rest-123',
+      tableId: 'Table 9',
+      status: 'open',
+      activeOrderIds: ['ord-stale-paid']
+    };
+    mockDocs['restaurants/rest-123/orders/ord-stale-paid'] = {
+      id: 'ord-stale-paid',
+      restaurantId: 'rest-123',
+      tableSessionId: 'session-stale-paid',
+      status: 'served',
+      paymentStatus: 'paid',
+      grandTotalMinor: 50000,
+      paidAmountMinor: 50000,
+      dueAmountMinor: 0
+    };
+    mockDocs['restaurants/rest-123/kots/kot-stale-paid'] = {
+      id: 'kot-stale-paid',
+      orderId: 'ord-stale-paid',
+      status: 'served'
+    };
+
+    const res = await orderFinalizationService.evaluateAndFinalizeOrderAndSession(
+      'rest-123',
+      'ord-stale-paid',
+      'user-1'
+    );
+
+    expect(res.orderCompleted).toBe(false);
+    expect(res.sessionClosed).toBe(false);
+    expect(mockDocs['restaurants/rest-123/orders/ord-stale-paid'].status).toBe('served');
   });
 });
