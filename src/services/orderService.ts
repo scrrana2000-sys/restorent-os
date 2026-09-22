@@ -1496,9 +1496,15 @@ export class OrderService implements IOrderService {
       };
 
       if (newStatus === 'cancelled') {
+        // A cancelled order must never remain collectible. Preserve the
+        // historical grand total/paid amount for audit, but close the
+        // outstanding balance so Payment Due Center and table settlement
+        // cannot present a cancelled order as money still owed.
         updatePayload.cancellationReason = cancellationReason || 'Cancelled by staff';
         updatePayload.cancelledAt = serverTimestamp() || now;
         updatePayload.cancelledBy = resolvedUserId;
+        updatePayload.dueAmountMinor = 0;
+        updatePayload.paymentStatus = 'cancelled';
       }
 
       await updateDoc(docRef, updatePayload);
