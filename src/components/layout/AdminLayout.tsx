@@ -40,7 +40,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     const restaurantId = restaurant?.restaurantId;
     // Online-order notifications are page-scoped. Do not keep an orders
     // listener alive while the user is on POS, dashboard, inventory, etc.
-    if (!restaurantId || !['orders', 'kitchen'].includes(currentView)) {
+    if (!restaurantId || !['pos', 'orders', 'kitchen'].includes(currentView)) {
       setPendingOnlineOrders([]);
       return;
     }
