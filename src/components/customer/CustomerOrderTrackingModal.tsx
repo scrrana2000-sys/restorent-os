@@ -23,7 +23,7 @@ import {
 } from '../../services/customerOrderTrackingService';
 import { formatMoney } from '../../utils/money';
 import { useModalBackHandler } from '../../hooks/useModalBackHandler';
-import { buildPublicUrl } from '../../utils/urlUtils';
+import { buildPublicBillUrl } from '../../utils/urlUtils';
 
 export interface CustomerOrderTrackingModalProps {
   isOpen: boolean;
@@ -123,7 +123,7 @@ export const CustomerOrderTrackingModal: React.FC<CustomerOrderTrackingModalProp
   const handleOpenInvoice = () => {
     if (!order) return;
     const accessToken = trackingToken || order.customerTrackingToken || null;
-    const url = buildPublicUrl(`?bill=${encodeURIComponent(order.id)}&rest=${encodeURIComponent(order.restaurantId)}${accessToken ? `&accessToken=${encodeURIComponent(accessToken)}` : ''}`);
+    const url = buildPublicBillUrl(order.id, order.restaurantId, accessToken);
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
