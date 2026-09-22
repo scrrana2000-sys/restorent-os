@@ -248,17 +248,18 @@ function buildSnapshotAndCart(
 
 async function loadCatalogItems(restaurantId: string, cart: CustomerCart): Promise<Map<string, any>> {
   const ids = Array.from(new Set(cart.items.map((item) => cleanId(item.itemId, 'itemId'))));
-  const entries = await Promise.all(ids.map(async (itemId) => {
-    const snap = await adminDb.doc(`restaurants/${restaurantId}/items/${itemId}`).get();
-    return [itemId, snap] as const;
-  }));
+  const refs = ids.map((itemId) => adminDb.doc(`restaurants/${restaurantId}/items/${itemId}`));
+  // Admin Firestore getAll batches the catalog reads into a single RPC instead
+  // of issuing one network request per cart line.
+  const snapshots = await adminDb.getAll(...refs);
 
   const result = new Map<string, any>();
-  for (const [itemId, snap] of entries) {
+  snapshots.forEach((snap, index) => {
+    const itemId = ids[index];
     if (!snap.exists) {
       throw new Error(`Menu item "${itemId}" is no longer available in this restaurant.`);
     }
-    const data = snap.data();
+    const data = snap.data() || {};
     if (data.restaurantId && data.restaurantId !== restaurantId) {
       throw new Error(`Menu item "${itemId}" belongs to a different restaurant.`);
     }
@@ -266,7 +267,7 @@ async function loadCatalogItems(restaurantId: string, cart: CustomerCart): Promi
       throw new Error(`"${data.name || itemId}" is currently unavailable. Please remove it from your cart and try again.`);
     }
     result.set(itemId, data);
-  }
+  });
   return result;
 }
 
@@ -1070,30 +1071,34 @@ export async function submitServerPosOrder(input: {
     : Promise.resolve(null);
 
   // Re-read authoritative menu price/tax/availability; client values are not trusted.
-  const canonicalItemsPromise: Promise<CartItem[]> = Promise.all(input.cartState.items.map(async (item) => {
-    const itemId = cleanId(item.itemId, 'itemId');
-    const snap = await adminDb.doc(`restaurants/${restaurantId}/items/${itemId}`).get();
-    if (!snap.exists) throw new Error(`Item "${item.nameSnapshot || itemId}" is no longer available.`);
-    const data = snap.data() as any;
-    if (data.restaurantId && data.restaurantId !== restaurantId) throw new Error('Item tenant mismatch.');
-    if (data.isActive === false || data.isAvailable === false) throw new Error(`"${data.name || item.nameSnapshot || itemId}" is unavailable.`);
-    const price = Number(data.price);
-    const taxRate = Number(data.taxRate);
-    if (!Number.isFinite(price) || price < 0) throw new Error(`Invalid price for "${data.name || itemId}".`);
-    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) throw new Error(`Invalid tax rate for "${data.name || itemId}".`);
-    return {
-      ...item,
-      itemId,
-      nameSnapshot: String(data.name || item.nameSnapshot || itemId),
-      shortNameSnapshot: String(data.shortName || data.name || item.shortNameSnapshot || itemId),
-      imageUrlSnapshot: data.imageUrl || item.imageUrlSnapshot || null,
-      foodTypeSnapshot: data.foodType || item.foodTypeSnapshot || null,
-      unitPriceMinor: Math.round(price * 100),
-      taxRate,
-      taxInclusive: Boolean(data.taxInclusive),
-      quantity: Math.max(1, Math.min(100, Math.floor(Number(item.quantity) || 1)))
-    };
-  }));
+  const posItemIds = input.cartState.items.map((item) => cleanId(item.itemId, 'itemId'));
+  const posItemRefs = posItemIds.map((itemId) => adminDb.doc(`restaurants/${restaurantId}/items/${itemId}`));
+  const canonicalItemsPromise: Promise<CartItem[]> = adminDb.getAll(...posItemRefs).then((snapshots) =>
+    input.cartState.items.map((item, index) => {
+      const itemId = posItemIds[index];
+      const snap = snapshots[index];
+      if (!snap.exists) throw new Error(`Item "${item.nameSnapshot || itemId}" is no longer available.`);
+      const data = snap.data() as any;
+      if (data.restaurantId && data.restaurantId !== restaurantId) throw new Error('Item tenant mismatch.');
+      if (data.isActive === false || data.isAvailable === false) throw new Error(`"${data.name || item.nameSnapshot || itemId}" is unavailable.`);
+      const price = Number(data.price);
+      const taxRate = Number(data.taxRate);
+      if (!Number.isFinite(price) || price < 0) throw new Error(`Invalid price for "${data.name || itemId}".`);
+      if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) throw new Error(`Invalid tax rate for "${data.name || itemId}".`);
+      return {
+        ...item,
+        itemId,
+        nameSnapshot: String(data.name || item.nameSnapshot || itemId),
+        shortNameSnapshot: String(data.shortName || data.name || item.shortNameSnapshot || itemId),
+        imageUrlSnapshot: data.imageUrl || item.imageUrlSnapshot || null,
+        foodTypeSnapshot: data.foodType || item.foodTypeSnapshot || null,
+        unitPriceMinor: Math.round(price * 100),
+        taxRate,
+        taxInclusive: Boolean(data.taxInclusive),
+        quantity: Math.max(1, Math.min(100, Math.floor(Number(item.quantity) || 1)))
+      };
+    })
+  );
   const [subSnap, sessionSnap] = await Promise.all([subscriptionPromise, sessionPromise]);
 
   if (!subSnap.exists) throw new Error('Restaurant trial or subscription is not active.');
