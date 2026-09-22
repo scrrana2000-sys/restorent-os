@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useModalBackHandler } from '../hooks/useModalBackHandler';
 
-// Dummy multi-step modal component for testing back button transitions
 const MultiStepModalTestComponent: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -20,7 +19,14 @@ const MultiStepModalTestComponent: React.FC = () => {
 
   return (
     <div>
-      <button data-testid="open-modal" onClick={() => { setIsOpen(true); setStep(1); }}>
+      <button
+        type="button"
+        data-testid="open-modal"
+        onClick={() => {
+          setIsOpen(true);
+          setStep(1);
+        }}
+      >
         Open Order Modal
       </button>
 
@@ -28,20 +34,49 @@ const MultiStepModalTestComponent: React.FC = () => {
         <div data-testid="modal-content">
           <span>Current Step: {step}</span>
           {step === 1 && (
-            <button data-testid="go-to-step-2" onClick={() => setStep(2)}>
+            <button type="button" data-testid="go-to-step-2" onClick={() => setStep(2)}>
               Next → Review Order
             </button>
           )}
           {step === 2 && (
-            <button data-testid="go-to-step-1" onClick={() => setStep(1)}>
+            <button type="button" data-testid="go-to-step-1" onClick={() => setStep(1)}>
               Back to Menu
             </button>
           )}
-          <button data-testid="close-modal" onClick={() => setIsOpen(false)}>
+          <button type="button" data-testid="close-modal" onClick={() => setIsOpen(false)}>
             Close
           </button>
         </div>
       )}
+    </div>
+  );
+};
+
+const SwitchingModalTestComponent: React.FC = () => {
+  const [firstOpen, setFirstOpen] = useState(false);
+  const [secondOpen, setSecondOpen] = useState(false);
+
+  useModalBackHandler(firstOpen, () => setFirstOpen(false), 'switch-first');
+  useModalBackHandler(secondOpen, () => setSecondOpen(false), 'switch-second');
+
+  return (
+    <div>
+      <button type="button" data-testid="open-first" onClick={() => setFirstOpen(true)}>
+        Open First
+      </button>
+      <button
+        type="button"
+        data-testid="switch-second"
+        onClick={() => {
+          setFirstOpen(false);
+          setSecondOpen(true);
+        }}
+      >
+        Switch Second
+      </button>
+
+      {firstOpen && <span>First</span>}
+      {secondOpen && <span>Second</span>}
     </div>
   );
 };
@@ -58,29 +93,62 @@ describe('useModalBackHandler Global Coordinated Stack', () => {
   it('handles modal opening, step navigation, and back navigation deterministically', () => {
     render(<MultiStepModalTestComponent />);
 
-    // Open Modal
     fireEvent.click(screen.getByTestId('open-modal'));
     expect(screen.getByTestId('modal-content')).toBeDefined();
     expect(screen.getByText('Current Step: 1')).toBeDefined();
 
-    // Advance to Step 2
     fireEvent.click(screen.getByTestId('go-to-step-2'));
     expect(screen.getByText('Current Step: 2')).toBeDefined();
 
-    // Simulate browser/Android back button event (popstate)
     act(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
 
-    // Should transition back to Step 1, NOT close the modal
     expect(screen.getByTestId('modal-content')).toBeDefined();
     expect(screen.getByText('Current Step: 1')).toBeDefined();
 
-    // Second back button press closes the modal
     act(() => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
 
+    expect(screen.queryByTestId('modal-content')).toBeNull();
+  });
+
+  it('does not navigate when switching directly between modal states', () => {
+    const historyBack = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const historyPush = vi.spyOn(window.history, 'pushState');
+    const historyReplace = vi.spyOn(window.history, 'replaceState');
+
+    render(<SwitchingModalTestComponent />);
+
+    fireEvent.click(screen.getByTestId('open-first'));
+    fireEvent.click(screen.getByTestId('switch-second'));
+
+    expect(screen.queryByText('First')).toBeNull();
+    expect(screen.getByText('Second')).toBeDefined();
+    expect(historyBack).not.toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    expect(screen.queryByText('Second')).toBeNull();
+    expect(historyBack).not.toHaveBeenCalled();
+    expect(historyPush).toHaveBeenCalled();
+    expect(historyReplace).not.toHaveBeenCalled();
+  });
+
+  it('closes a modal without traversing browser history', () => {
+    const historyBack = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const historyReplace = vi.spyOn(window.history, 'replaceState');
+
+    render(<MultiStepModalTestComponent />);
+
+    fireEvent.click(screen.getByTestId('open-modal'));
+    fireEvent.click(screen.getByTestId('close-modal'));
+
+    expect(historyBack).not.toHaveBeenCalled();
+    expect(historyReplace).toHaveBeenCalled();
     expect(screen.queryByTestId('modal-content')).toBeNull();
   });
 });
