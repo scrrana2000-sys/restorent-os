@@ -45,7 +45,11 @@ export const LiveOperationsControlPanel: React.FC<LiveOperationsControlPanelProp
   };
 
   const toggleOnline = async () => {
-    await update('online', { onlineOrderingEnabled: !onlineOrderingEnabled });
+    const nextOnline = !websiteOnline;
+    await update('online', {
+      onlineOrderingEnabled: nextOnline,
+      publicStatus: nextOnline ? 'active' : 'paused'
+    });
   };
 
   const toggleCapability = async (key: 'deliveryEnabled' | 'takeawayEnabled') => {
