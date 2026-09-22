@@ -14,23 +14,7 @@ vi.mock('firebase/firestore', () => {
     getDocs: vi.fn(),
     setDoc: vi.fn(),
     updateDoc: vi.fn(),
-    runTransaction: vi.fn(async (_db, callback: any) => {
-      const transactionCall = (firestore.runTransaction as any).mock?.calls?.length || 1;
-      const statuses = ['sentToKitchen', 'preparing', 'ready'];
-      const transaction = {
-        get: async (_ref: any) => ({
-          exists: () => true,
-          id: 'kot_202',
-          data: () => ({
-            status: statuses[Math.min(Math.max(transactionCall - 1, 0), statuses.length - 1)]
-          })
-        }),
-        set: vi.fn(),
-        update: vi.fn(),
-        delete: vi.fn()
-      };
-      return callback(transaction);
-    }),
+    runTransaction: vi.fn(),
     query: vi.fn((colRef, ...clauses) => ({ type: 'query', colRef, clauses })),
     where: vi.fn((field, op, val) => ({ type: 'where', field, op, val })),
     orderBy: vi.fn((field, dir) => ({ type: 'orderBy', field, dir })),
@@ -69,6 +53,15 @@ describe('Phase 4A — Kitchen Display System (KDS) Foundation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(firestore.runTransaction).mockImplementation(async (_db, callback: any) => {
+      const transaction = {
+        get: async (ref: any) => vi.mocked(firestore.getDoc)(ref),
+        set: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn()
+      };
+      return callback(transaction);
+    });
     kotService = new KOTService();
   });
 
@@ -114,7 +107,12 @@ describe('Phase 4A — Kitchen Display System (KDS) Foundation', () => {
         updatedAt: new Date()
       };
 
-      vi.spyOn(kotService, 'getKOTById').mockResolvedValue(mockKot);
+      let currentStatus: KOTStatus = 'sentToKitchen';
+      vi.mocked(firestore.getDoc).mockImplementation(async (_ref: any) => ({
+        exists: () => true,
+        id: 'kot_202',
+        data: () => ({ ...mockKot, status: currentStatus })
+      }) as any);
       (firestore.updateDoc as any).mockResolvedValue(undefined);
 
       // Transition sentToKitchen -> preparing
@@ -122,11 +120,13 @@ describe('Phase 4A — Kitchen Display System (KDS) Foundation', () => {
       expect(firestore.runTransaction).toHaveBeenCalledTimes(1);
 
       // Transition preparing -> ready
+      currentStatus = 'preparing';
       mockKot.status = 'preparing';
       await kotService.updateKOTStatus('REST_KITCHEN_1', 'kot_202', 'ready', 'CHEF_USER_99');
       expect(firestore.runTransaction).toHaveBeenCalledTimes(2);
 
       // Transition ready -> served
+      currentStatus = 'ready';
       mockKot.status = 'ready';
       await kotService.updateKOTStatus('REST_KITCHEN_1', 'kot_202', 'served', 'CHEF_USER_99');
       expect(firestore.runTransaction).toHaveBeenCalledTimes(3);
@@ -146,6 +146,11 @@ describe('Phase 4A — Kitchen Display System (KDS) Foundation', () => {
       };
 
       vi.spyOn(kotService, 'getKOTById').mockResolvedValue(mockKot);
+      vi.mocked(firestore.getDoc).mockResolvedValue({
+        exists: () => true,
+        id: 'kot_303',
+        data: () => ({ ...mockKot, status: 'served' })
+      } as any);
 
       // Served is terminal state
       await expect(
