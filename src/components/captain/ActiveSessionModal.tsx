@@ -65,6 +65,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
   const [showCancelPrompt, setShowCancelPrompt] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   if (!isOpen || !table || !session) return null;
 
@@ -84,7 +85,30 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
   }
 
   // Active order metrics
+  useEffect(() => {
+    if (!isOpen || !order) return;
+    setNowMs(Date.now());
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [isOpen, order?.id]);
+
   const displayOrder = order ? reconcileOrderFinancials(order) : null;
+  const createdAtValue: any = displayOrder?.createdAt;
+  const createdAt = createdAtValue?.toDate
+    ? createdAtValue.toDate()
+    : createdAtValue instanceof Date
+      ? createdAtValue
+      : createdAtValue
+        ? new Date(createdAtValue)
+        : null;
+  const createdAtMs = createdAt?.getTime?.() ?? NaN;
+  const orderCancelWindowOpen =
+    Number.isFinite(createdAtMs) &&
+    nowMs >= createdAtMs &&
+    nowMs <= createdAtMs + 2 * 60 * 1000;
+  const remainingCancelSeconds = Number.isFinite(createdAtMs)
+    ? Math.max(0, Math.ceil((createdAtMs + 2 * 60 * 1000 - nowMs) / 1000))
+    : 0;
   const isOrderActive = !!displayOrder && displayOrder.status !== 'completed' && displayOrder.status !== 'cancelled';
   const dueAmountMinor = displayOrder && displayOrder.status !== 'cancelled'
     ? (displayOrder.dueAmountMinor ?? Math.max(0, (displayOrder.grandTotalMinor || 0) - (displayOrder.paidAmountMinor || 0)))
@@ -326,7 +350,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
         )}
 
         {/* Cancel Order Prompt */}
-        {showCancelPrompt && order && (
+        {showCancelPrompt && order && orderCancelWindowOpen && (
           <div className="mt-3 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs space-y-3 shrink-0">
             <div className="flex items-start gap-2.5">
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
@@ -481,7 +505,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                       )}
 
                       {/* Cancel Order Trigger */}
-                      {onCancelOrder && (
+                      {onCancelOrder && orderCancelWindowOpen && (
                         <button
                           type="button"
                           data-testid="btn-trigger-cancel-order"
