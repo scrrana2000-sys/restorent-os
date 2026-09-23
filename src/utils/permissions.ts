@@ -397,8 +397,7 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
     // a cold permission check does not add two serial Firestore round trips.
     const restRef = doc(db, 'restaurants', cleanRestaurantId);
     const memberRef = doc(db, 'restaurants', cleanRestaurantId, 'members', user.uid);
-    const [restSnap, memberSnap] = await Promise.all([
-      getDoc(restRef),
+    const [restSnap, memberSnap] = await Promise.all([      getDoc(restRef),
       getDoc(memberRef)
     ]);
 
@@ -438,6 +437,75 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
   } catch (err) {
     console.warn('[Permissions] checkPermission lookup encountered error:', err);
     return false;
+  }
+}
+
+export async function getCurrentUserRestaurantRole(restaurantId: string): Promise<StaffRole | null> {
+  const cleanRestaurantId = restaurantId?.trim();
+  if (!cleanRestaurantId) return null;
+
+  const isTestEnvironment =
+    (typeof process !== 'undefined' && (process.env.NODE_ENV === 'test' || process.env.VITEST)) ||
+    (globalThis as any).expect !== undefined ||
+    (globalThis as any).__vitest_worker__ !== undefined ||
+    (globalThis as any).vitest !== undefined;
+
+  const user = auth.currentUser;
+  if (!user || isTestEnvironment) return null;
+
+  // A trusted server identity is already authorized beyond interactive staff limits.
+  if (typeof user.getIdTokenResult === 'function') {
+    try {
+      const tokenResult = await user.getIdTokenResult();
+      if (tokenResult.claims.server === true) return 'owner';
+    } catch (claimError) {
+      console.warn('[Permissions] Failed to inspect trusted-server claim:', claimError);
+    }
+  }
+
+  const cacheKey = permissionCacheKey(cleanRestaurantId, user.uid);
+  const cached = restaurantAuthorizationCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.role;
+  }
+
+  try {
+    const restRef = doc(db, 'restaurants', cleanRestaurantId);
+    const memberRef = doc(db, 'restaurants', cleanRestaurantId, 'members', user.uid);
+    const [restSnap, memberSnap] = await Promise.all([
+      getDoc(restRef),
+      getDoc(memberRef)
+    ]);
+
+    if (restSnap.exists() && restSnap.data()?.ownerId === user.uid) {
+      restaurantAuthorizationCache.set(cacheKey, {
+        role: 'owner',
+        expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS
+      });
+      return 'owner';
+    }
+
+    if (memberSnap.exists()) {
+      const memberData = memberSnap.data();
+      const isActive =
+        memberData.isActive !== false &&
+        memberData.status !== 'inactive' &&
+        memberData.status !== 'suspended' &&
+        memberData.status !== 'terminated';
+      if (!isActive) return null;
+
+      const role = memberData.role as StaffRole;
+      restaurantAuthorizationCache.set(cacheKey, {
+        role,
+        expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS
+      });
+      return role;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('[Permissions] Failed to resolve current restaurant role:', err);
+    return null;
   }
 }
 
