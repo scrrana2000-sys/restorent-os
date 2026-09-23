@@ -91,7 +91,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --port 3000 \
-            --update-env-vars "NODE_ENV=production,PUBLIC_APP_URL=https://restaurantos01.ai.studio,ALLOWED_ORIGINS=https://restaurantos01.ai.studio\,https://antos01.ai.studio\,https://restaurantos-xqi52dpwga-el.a.run.app\,https://scrrana2000-sys.github.io,SYSTEM_SERVER_UID=restaurantos-system-server,FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96,FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57" \
+            --update-env-vars "^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57" \
             --remove-secrets "SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET" \
             --quiet
 
