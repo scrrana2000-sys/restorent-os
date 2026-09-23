@@ -66,6 +66,13 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
   const [cancelReason, setCancelReason] = useState('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isOpen || !order) return;
+    setNowMs(Date.now());
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [isOpen, order?.id]);
+
 
   if (!isOpen || !table || !session) return null;
 
@@ -85,13 +92,6 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
   }
 
   // Active order metrics
-  useEffect(() => {
-    if (!isOpen || !order) return;
-    setNowMs(Date.now());
-    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(intervalId);
-  }, [isOpen, order?.id]);
-
   const displayOrder = order ? reconcileOrderFinancials(order) : null;
   const createdAtValue: any = displayOrder?.createdAt;
   const createdAt = createdAtValue?.toDate
