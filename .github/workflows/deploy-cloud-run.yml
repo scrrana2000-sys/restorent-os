@@ -2,7 +2,7 @@ name: Deploy RestaurantOS API to Cloud Run
 
 # Keep the API deployment synchronized with main so the frontend can never point
 # at a stale Cloud Run revision after server-side changes.
-# Build the production container on GitHub Actions and publish it as a public GitHub Container Registry image.
+# Build the production container on GitHub Actions, publish it to GHCR, and deploy through an Artifact Registry GHCR remote repository.
 on:
   push:
     branches: [main]
@@ -90,17 +90,46 @@ jobs:
       - name: Build and publish API image to GitHub Container Registry
         run: |
           set -euo pipefail
-          IMAGE_TAG="${GHCR_IMAGE}:${GITHUB_SHA}"
-          echo "Building and publishing $IMAGE_TAG"
-          DOCKER_BUILDKIT=1 docker build --progress=plain --pull --platform linux/amd64 -t "$IMAGE_TAG" .
-          docker push "$IMAGE_TAG"
-
-          # Verify the pushed image is publicly readable before Cloud Run uses it.
+          GHCR_TAG="${GHCR_IMAGE}:${GITHUB_SHA}"
+          echo "Building and publishing $GHCR_TAG"
+          DOCKER_BUILDKIT=1 docker build --progress=plain --pull --platform linux/amd64 -t "$GHCR_TAG" .
+          docker push "$GHCR_TAG"
           docker logout ghcr.io >/dev/null 2>&1 || true
-          docker pull "$IMAGE_TAG"
+          docker pull "$GHCR_TAG"
+          echo "GHCR_TAG=$GHCR_TAG" >> "$GITHUB_ENV"
+          echo "GHCR image published and anonymously readable: $GHCR_TAG"
 
+      - name: Prepare Artifact Registry GHCR remote repository
+        run: |
+          set -euo pipefail
+          REMOTE_REPOSITORY="restaurantos-ghcr"
+          if ! gcloud artifacts repositories describe "$REMOTE_REPOSITORY" \
+            --location "$GCP_REGION" \
+            --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+            gcloud artifacts repositories create "$REMOTE_REPOSITORY" \
+              --project "$GCP_PROJECT_ID" \
+              --repository-format=docker \
+              --location="$GCP_REGION" \
+              --description="RestaurantOS GHCR remote repository for Cloud Run" \
+              --mode=remote-repository \
+              --remote-repo-config-desc="GitHub Container Registry public upstream" \
+              --disable-vulnerability-scanning \
+              --remote-docker-repo=https://ghcr.io \
+              --quiet
+          fi
+
+      - name: Resolve GHCR image through Artifact Registry remote repository
+        run: |
+          set -euo pipefail
+          REMOTE_REPOSITORY="restaurantos-ghcr"
+          IMAGE_PATH="scrrana2000-sys/restaurantos-api-cloudrun:${GITHUB_SHA}"
+          IMAGE_TAG="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REMOTE_REPOSITORY}/${IMAGE_PATH}"
+          echo "Resolving remote image $IMAGE_TAG"
+          gcloud artifacts docker images describe "$IMAGE_TAG" \
+            --project "$GCP_PROJECT_ID" \
+            --format='value(image_summary.digest)'
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
-          echo "Published and anonymously readable: $IMAGE_TAG"
+          echo "REMOTE_IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
       - name: Deploy production image to Cloud Run
         run: |
           set -euo pipefail
