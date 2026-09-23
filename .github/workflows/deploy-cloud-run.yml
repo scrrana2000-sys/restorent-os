@@ -79,49 +79,26 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Build production image with Cloud Build
+      - name: Build and push production image to Artifact Registry
         run: |
           set -euo pipefail
           AR_HOST="${GCP_REGION}-docker.pkg.dev"
           AR_REPOSITORY="restaurantos-api"
           AR_IMAGE="${AR_HOST}/${GCP_PROJECT_ID}/${AR_REPOSITORY}/restaurantos-api:${GITHUB_SHA}"
 
-          echo "Submitting Cloud Build: $AR_IMAGE"
-          BUILD_ID="$(gcloud builds submit . \
-            --project "$GCP_PROJECT_ID" \
-            --tag "$AR_IMAGE" \
-            --timeout=20m \
-            --async \
-            --format='value(id)')"
+          echo "Configuring Docker authentication for $AR_HOST"
+          gcloud auth configure-docker "$AR_HOST" --quiet
 
-          test -n "$BUILD_ID"
-          echo "Cloud Build ID: $BUILD_ID"
+          echo "Building production image: $AR_IMAGE"
+          docker build --pull -t "$AR_IMAGE" .
 
-          for attempt in $(seq 1 120); do
-            STATUS="$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='value(status)' 2>/dev/null || true)"
-            echo "Cloud Build status: $STATUS (attempt $attempt/120)"
-            case "$STATUS" in
-              SUCCESS)
-                break
-                ;;
-              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
-                echo "::error::Cloud Build $BUILD_ID ended with status $STATUS."
-                gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='yaml(status,statusDetail,failureInfo,steps,results)' || true
-                exit 1
-                ;;
-            esac
-            sleep 10
-          done
+          echo "Pushing production image: $AR_IMAGE"
+          docker push "$AR_IMAGE"
 
-          FINAL_STATUS="$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='value(status)')"
-          if [ "$FINAL_STATUS" != "SUCCESS" ]; then
-            echo "::error::Cloud Build did not finish successfully within 20 minutes."
-            gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='yaml(status,statusDetail,results)' || true
-            exit 1
-          fi
-
+          echo "Verifying Artifact Registry image"
           gcloud artifacts docker images describe "$AR_IMAGE" \
             --project "$GCP_PROJECT_ID" >/dev/null
+
           echo "AR_IMAGE=$AR_IMAGE" >> "$GITHUB_ENV"
 
       - name: Deploy production image to Cloud Run
