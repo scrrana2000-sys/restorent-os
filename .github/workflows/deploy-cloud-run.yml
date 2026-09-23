@@ -110,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --image "$REMOTE_IMAGE" \
+            --image "$IMAGE_TAG" \
             --region "$GCP_REGION" \
             --project "$GCP_PROJECT_ID" \
             --platform managed \
