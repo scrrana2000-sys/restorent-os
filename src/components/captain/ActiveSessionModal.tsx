@@ -34,6 +34,10 @@ interface ActiveSessionModalProps {
   onSettlePayment?: (order: Order) => void;
   onUpdateGuestCount?: (sessionId: string, newGuestCount: number) => Promise<void>;
   onUpdateKotStatus?: (kotId: string, newStatus: any) => Promise<void>;
+  onPartiallyCancelKotItems?: (
+    kotId: string,
+    cancellations: { itemId: string; cancelledQuantity: number; reason: string }[]
+  ) => Promise<void>;
   onTakeOrder?: (table: Table) => void;
   onGoToPosOrder: (tableId: string) => void;
   onGoToPosSettlement: (tableId: string) => void;
@@ -55,6 +59,7 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
   onSettlePayment,
   onUpdateGuestCount,
   onUpdateKotStatus,
+  onPartiallyCancelKotItems,
   onTakeOrder,
   onGoToPosOrder,
   onGoToPosSettlement,
@@ -65,6 +70,10 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
   const [showCancelPrompt, setShowCancelPrompt] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [selectedKotForItemCancel, setSelectedKotForItemCancel] = useState<KOT | null>(null);
+  const [itemCancelSelections, setItemCancelSelections] = useState<Record<string, number>>({});
+  const [itemCancelReason, setItemCancelReason] = useState('');
+  const [itemCancelError, setItemCancelError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     if (!isOpen || !order) return;
@@ -75,9 +84,6 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
 
 
   if (!isOpen || !table || !session) return null;
-
-  // Filter KOTs for this table
-  const tableKots = kots.filter((k) => k.tableId === table.id);
 
   // Calculate elapsed session time
   let elapsedMinutes = 0;
@@ -114,6 +120,16 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
     ? (displayOrder.dueAmountMinor ?? Math.max(0, (displayOrder.grandTotalMinor || 0) - (displayOrder.paidAmountMinor || 0)))
     : 0;
   const isOrderFullyPaid = isOrderActive && dueAmountMinor === 0;
+
+  // Only show KOT history that belongs to this CURRENT session.
+  // Legacy KOTs without tableSessionId are included only when tied to the
+  // canonical active order of this session, preventing older table history
+  // from appearing here.
+  const currentOrderId = displayOrder?.id || session.activeOrderId || null;
+  const tableKots = kots.filter((kot) => {
+    if (kot.tableSessionId) return kot.tableSessionId === session.id;
+    return !!currentOrderId && kot.orderId === currentOrderId;
+  });
 
   const activeCookingKots = tableKots.filter(
     (k) => k.status !== 'served' && k.status !== 'cancelled'
@@ -214,6 +230,53 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
     } catch (err: any) {
       setShowCloseConfirm(false);
       setActionError(err?.message || 'Failed to complete order and close session.');
+    }
+  };
+
+  const handleOpenItemCancellation = (kot: KOT) => {
+    setSelectedKotForItemCancel(kot);
+    setItemCancelSelections({});
+    setItemCancelReason('');
+    setItemCancelError(null);
+  };
+
+  const handleItemCancelQtyChange = (itemId: string, maxQty: number, delta: number) => {
+    setItemCancelSelections((prev) => {
+      const next = Math.max(0, Math.min(maxQty, (prev[itemId] || 0) + delta));
+      return { ...prev, [itemId]: next };
+    });
+    setItemCancelError(null);
+  };
+
+  const handleConfirmItemCancellation = async () => {
+    if (!selectedKotForItemCancel || !onPartiallyCancelKotItems) return;
+    const reason = itemCancelReason.trim();
+    if (!reason) {
+      setItemCancelError('Cancellation reason is required.');
+      return;
+    }
+
+    const cancellations = selectedKotForItemCancel.items
+      .filter((item) => item.quantity > 0 && (itemCancelSelections[item.itemId] || 0) > 0)
+      .map((item) => ({
+        itemId: item.itemId,
+        cancelledQuantity: itemCancelSelections[item.itemId],
+        reason
+      }));
+
+    if (cancellations.length === 0) {
+      setItemCancelError('Select at least one item quantity to cancel.');
+      return;
+    }
+
+    setItemCancelError(null);
+    try {
+      await onPartiallyCancelKotItems(selectedKotForItemCancel.id, cancellations);
+      setSelectedKotForItemCancel(null);
+      setItemCancelSelections({});
+      setItemCancelReason('');
+    } catch (err: any) {
+      setItemCancelError(err?.message || 'Failed to cancel selected KOT items.');
     }
   };
 
@@ -597,6 +660,18 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
                       >
                         {kot.status}
                       </span>
+                      {kot.status !== 'served' && kot.status !== 'cancelled' && onPartiallyCancelKotItems && (
+                        <button
+                          type="button"
+                          data-testid="session-btn-cancel-kot-item"
+                          disabled={isSubmitting}
+                          onClick={() => handleOpenItemCancellation(kot)}
+                          className="h-6 px-2 rounded-md bg-slate-800 hover:bg-rose-500/20 text-rose-300 font-bold text-[10px] border border-slate-700 hover:border-rose-500/30 transition-colors whitespace-nowrap"
+                          title="Cancel individual item or quantity"
+                        >
+                          Cancel Item
+                        </button>
+                      )}
                       {kot.status === 'ready' && onUpdateKotStatus && (
                         <button
                           type="button"
@@ -621,6 +696,104 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
             )}
           </div>
         </div>
+
+
+        {/* Single-item / quantity KOT cancellation dialog */}
+        {selectedKotForItemCancel && (
+          <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl p-4 sm:p-5 text-white shadow-2xl max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">Cancel Individual Item</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {selectedKotForItemCancel.kotNumber} • Select quantity to cancel
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setSelectedKotForItemCancel(null)}
+                  className="w-9 h-9 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {itemCancelError && (
+                <div className="mt-3 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+                  {itemCancelError}
+                </div>
+              )}
+
+              <div className="mt-3 space-y-2 overflow-y-auto">
+                {selectedKotForItemCancel.items.filter((item) => item.quantity > 0).map((item) => {
+                  const selectedQty = itemCancelSelections[item.itemId] || 0;
+                  return (
+                    <div key={item.itemId} className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-white truncate">{item.shortNameSnapshot || item.nameSnapshot}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Available: {item.quantity}x</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={selectedQty <= 0 || isSubmitting}
+                          onClick={() => handleItemCancelQtyChange(item.itemId, item.quantity, -1)}
+                          className="w-8 h-8 rounded-lg bg-slate-800 text-slate-200 font-bold disabled:opacity-30"
+                        >
+                          −
+                        </button>
+                        <span className="w-8 text-center text-sm font-black text-amber-300">{selectedQty}</span>
+                        <button
+                          type="button"
+                          disabled={selectedQty >= item.quantity || isSubmitting}
+                          onClick={() => handleItemCancelQtyChange(item.itemId, item.quantity, 1)}
+                          className="w-8 h-8 rounded-lg bg-slate-800 text-slate-200 font-bold disabled:opacity-30"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3">
+                <label className="block text-[11px] font-bold text-slate-300 mb-1.5">Cancellation Reason *</label>
+                <input
+                  type="text"
+                  value={itemCancelReason}
+                  onChange={(e) => {
+                    setItemCancelReason(e.target.value);
+                    setItemCancelError(null);
+                  }}
+                  placeholder="Customer cancelled item / Out of stock / Wrong item..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:ring-1 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setSelectedKotForItemCancel(null)}
+                  className="h-9 px-3 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs"
+                >
+                  Keep Items
+                </button>
+                <button
+                  type="button"
+                  data-testid="btn-confirm-single-item-cancel"
+                  disabled={isSubmitting}
+                  onClick={handleConfirmItemCancellation}
+                  className="h-9 px-3.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
+                >
+                  Confirm Cancellation
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer Operational Controls */}
         <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
@@ -693,4 +866,3 @@ export const ActiveSessionModal: React.FC<ActiveSessionModalProps> = ({
     </div>
   );
 };
-
