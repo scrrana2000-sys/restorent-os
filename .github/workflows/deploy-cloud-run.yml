@@ -118,16 +118,21 @@ jobs:
               --quiet
           fi
 
-      - name: Resolve GHCR image through Artifact Registry remote repository
+      - name: Resolve and cache GHCR image through Artifact Registry remote repository
         run: |
           set -euo pipefail
           REMOTE_REPOSITORY="restaurantos-ghcr"
           IMAGE_PATH="scrrana2000-sys/restaurantos-api-cloudrun:${GITHUB_SHA}"
           IMAGE_TAG="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REMOTE_REPOSITORY}/${IMAGE_PATH}"
-          echo "Resolving remote image $IMAGE_TAG"
+          REGISTRY_HOST="${GCP_REGION}-docker.pkg.dev"
+          echo "Authenticating Docker to $REGISTRY_HOST"
+          gcloud auth configure-docker "$REGISTRY_HOST" --quiet
+          echo "Pulling remote image to force Artifact Registry to cache the public GHCR image: $IMAGE_TAG"
+          docker pull "$IMAGE_TAG"
+          echo "Cached image details:"
           gcloud artifacts docker images describe "$IMAGE_TAG" \
             --project "$GCP_PROJECT_ID" \
-            --format='value(image_summary.digest)'
+            --format='yaml(image_summary.digest,image_summary.name,image_summary.tags)'
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
           echo "REMOTE_IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
       - name: Deploy production image to Cloud Run
