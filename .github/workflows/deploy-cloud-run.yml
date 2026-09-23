@@ -80,6 +80,23 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
+      - name: Prepare Artifact Registry remote cache for GHCR
+        run: |
+          set -euo pipefail
+          REMOTE_REPOSITORY="restaurantos-ghcr"
+          if ! gcloud artifacts repositories describe "$REMOTE_REPOSITORY" \
+            --location "$GCP_REGION" \
+            --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+            gcloud artifacts repositories create "$REMOTE_REPOSITORY" \
+              --project "$GCP_PROJECT_ID" \
+              --repository-format=docker \
+              --location="$GCP_REGION" \
+              --mode=remote-repository \
+              --remote-docker-repo="https://ghcr.io" \
+              --description="RestaurantOS GHCR remote cache" \
+              --quiet
+          fi
+
       - name: Build and publish API image to GitHub Container Registry
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,16 +109,14 @@ jobs:
           docker push "$IMAGE_TAG"
           docker logout ghcr.io
 
-          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          REMOTE_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/restaurantos-ghcr/scrrana2000-sys/restaurantos-api:${GITHUB_SHA}"
+          echo "REMOTE_IMAGE=$REMOTE_IMAGE" >> "$GITHUB_ENV"
 
       - name: Deploy production image to Cloud Run
         run: |
           set -euo pipefail
-          BEFORE_REVISION="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
-          echo "Previous ready revision: $BEFORE_REVISION"
-
           gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --image "$IMAGE_TAG" \
+            --image "$REMOTE_IMAGE" \
             --region "$GCP_REGION" \
             --project "$GCP_PROJECT_ID" \
             --platform managed \
@@ -109,34 +124,7 @@ jobs:
             --port 3000 \
             --update-env-vars "^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57" \
             --remove-secrets "SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET" \
-            --async --quiet
-
-          echo "Waiting for Cloud Run to make the new revision ready..."
-          for attempt in $(seq 1 60); do
-            READY_REVISION="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
-            CREATED_REVISION="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestCreatedRevisionName)' 2>/dev/null || true)"
-            CONDITION="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.conditions[0].type,status.conditions[0].state,status.conditions[0].message)' 2>/dev/null || true)"
-            echo "Attempt $attempt/60: created=$CREATED_REVISION ready=$READY_REVISION condition=$CONDITION"
-
-            if [ -n "$READY_REVISION" ] && [ "$READY_REVISION" != "$BEFORE_REVISION" ]; then
-              echo "New Cloud Run revision is ready: $READY_REVISION"
-              break
-            fi
-
-            if echo "$CONDITION" | grep -q "False"; then
-              echo "::error::Cloud Run reported a failed deployment condition."
-              gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(status.conditions,status.latestCreatedRevisionName,status.latestReadyRevisionName,status.url)' || true
-              exit 1
-            fi
-            sleep 10
-          done
-
-          FINAL_READY_REVISION="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
-          if [ -z "$FINAL_READY_REVISION" ] || { [ -n "$BEFORE_REVISION" ] && [ "$FINAL_READY_REVISION" = "$BEFORE_REVISION" ]; }; then
-            echo "::error::Cloud Run did not make a new revision ready within 10 minutes."
-            gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(status.conditions,status.latestCreatedRevisionName,status.latestReadyRevisionName,status.url)' || true
-            exit 1
-          fi
+            --quiet
 
       - name: Wait for new Cloud Run revision and verify API
         run: |
