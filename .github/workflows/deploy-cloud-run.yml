@@ -2,7 +2,7 @@ name: Deploy RestaurantOS API to Cloud Run
 
 # Keep the API deployment synchronized with main so the frontend can never point
 # at a stale Cloud Run revision after server-side changes.
-# Build the production container on GitHub Actions and publish it directly to Artifact Registry.
+# Build the production container on GitHub Actions and publish it as a public GitHub Container Registry image.
 on:
   push:
     branches: [main]
@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  packages: write
 
 concurrency:
   group: cloud-run-production
@@ -46,6 +47,7 @@ jobs:
       CLOUD_RUN_SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GHCR_IMAGE: ghcr.io/scrrana2000-sys/restaurantos-api-cloudrun
 
     steps:
       - uses: actions/checkout@v4
@@ -78,36 +80,27 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Prepare Artifact Registry repository for Cloud Run image
-        run: |
-          set -euo pipefail
-          REPOSITORY="restaurantos-api"
-          if ! gcloud artifacts repositories describe "$REPOSITORY" \
-            --location "$GCP_REGION" \
-            --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
-            gcloud artifacts repositories create "$REPOSITORY" \
-              --project "$GCP_PROJECT_ID" \
-              --repository-format=docker \
-              --location="$GCP_REGION" \
-              --description="RestaurantOS production API images" \
-              --quiet
-          fi
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Authenticate Docker to Artifact Registry
+      - name: Build and publish API image to GitHub Container Registry
         run: |
           set -euo pipefail
-          REGISTRY_HOST="${GCP_REGION}-docker.pkg.dev"
-          gcloud auth configure-docker "$REGISTRY_HOST" --quiet
-
-      - name: Build and publish API image to Artifact Registry
-        run: |
-          set -euo pipefail
-          IMAGE_TAG="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/restaurantos-api/restaurantos-api:${GITHUB_SHA}"
+          IMAGE_TAG="${GHCR_IMAGE}:${GITHUB_SHA}"
           echo "Building and publishing $IMAGE_TAG"
           DOCKER_BUILDKIT=1 docker build --progress=plain --pull --platform linux/amd64 -t "$IMAGE_TAG" .
           docker push "$IMAGE_TAG"
+
+          # Verify the pushed image is publicly readable before Cloud Run uses it.
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          docker pull "$IMAGE_TAG"
+
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
-          echo "Published image: $IMAGE_TAG"
+          echo "Published and anonymously readable: $IMAGE_TAG"
       - name: Deploy production image to Cloud Run
         run: |
           set -euo pipefail
