@@ -79,33 +79,12 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Build and push production image to Artifact Registry
+      - name: Deploy API from source to Cloud Run
         run: |
           set -euo pipefail
-          AR_HOST="${GCP_REGION}-docker.pkg.dev"
-          AR_REPOSITORY="restaurantos-api"
-          AR_IMAGE="${AR_HOST}/${GCP_PROJECT_ID}/${AR_REPOSITORY}/restaurantos-api:${GITHUB_SHA}"
-
-          echo "Configuring Docker authentication for $AR_HOST"
-          gcloud auth configure-docker "$AR_HOST" --quiet
-
-          echo "Building production image: $AR_IMAGE"
-          docker build --pull -t "$AR_IMAGE" .
-
-          echo "Pushing production image: $AR_IMAGE"
-          docker push "$AR_IMAGE"
-
-          echo "Verifying Artifact Registry image"
-          gcloud artifacts docker images describe "$AR_IMAGE" \
-            --project "$GCP_PROJECT_ID" >/dev/null
-
-          echo "AR_IMAGE=$AR_IMAGE" >> "$GITHUB_ENV"
-
-      - name: Deploy production image to Cloud Run
-        run: |
-          set -euo pipefail
+          echo "Deploying RestaurantOS API from source using Cloud Run source deployment."
           gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --image "$AR_IMAGE" \
+            --source . \
             --region "$GCP_REGION" \
             --project "$GCP_PROJECT_ID" \
             --platform managed \
@@ -114,6 +93,7 @@ jobs:
             --update-env-vars "NODE_ENV=production,PUBLIC_APP_URL=https://restaurantos01.ai.studio,ALLOWED_ORIGINS=https://restaurantos01.ai.studio\,https://antos01.ai.studio\,https://restaurantos-xqi52dpwga-el.a.run.app\,https://scrrana2000-sys.github.io,SYSTEM_SERVER_UID=restaurantos-system-server,FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96,FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57" \
             --remove-secrets "SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET" \
             --quiet
+
       - name: Wait for new Cloud Run revision and verify API
         run: |
           set -euo pipefail
