@@ -1423,29 +1423,32 @@ export class OrderService implements IOrderService {
       }
     }
 
-    // 2c. If transitioning to 'cancelled', check 2-minute waiting period and auto-cancel KOTs in waiting
+    // 2c. Waiter/captain cancellation is allowed only within 2 minutes of ORDER CREATION.
+    // After that window, the kitchen/KOT workflow is authoritative.
     if (newStatus === 'cancelled') {
+      const createdAtValue: any = (currentOrder as any).createdAt;
+      const createdAt = createdAtValue?.toDate
+        ? createdAtValue.toDate()
+        : createdAtValue instanceof Date
+          ? createdAtValue
+          : new Date(createdAtValue);
+      const createdAtMs = createdAt.getTime();
+
+      if (!Number.isFinite(createdAtMs)) {
+        throw new Error('Cannot cancel order: order creation time is missing or invalid.');
+      }
+
+      const elapsedMs = Date.now() - createdAtMs;
+      if (elapsedMs < 0 || elapsedMs > 2 * 60 * 1000) {
+        throw new Error(
+          'Cannot cancel order from waiter/POS: the 2-minute order cancellation window has expired. Cancel the active KOT from the kitchen flow.'
+        );
+      }
+
       try {
         const kotsCol = collection(db, 'restaurants', cleanRestaurantId, 'kots');
         const kotQuery = query(kotsCol, where('orderId', '==', cleanOrderId));
         const kotSnap = await getDocs(kotQuery);
-
-        // 1. Enforce 2-minute grace period check for each associated KOT
-        for (const d of kotSnap.docs) {
-          const kotData = d.data() as KOT;
-          const sentAt = kotData.sentToKitchenAt || kotData.createdAt;
-          if (sentAt && kotData.status !== 'cancelled') {
-            const sentTime = (sentAt as any).toDate ? (sentAt as any).toDate() : new Date(sentAt as any);
-            const diffMinutes = (Date.now() - sentTime.getTime()) / (1000 * 60);
-            if (diffMinutes > 2) {
-              throw new Error(
-                `Cannot cancel order from POS: The 2-minute waiting period has passed. Active KOT "${kotData.kotNumber || d.id}" was sent to the kitchen ${Math.floor(diffMinutes)} minutes ago. This order can now only be cancelled from the kitchen display screen (KOT).`
-              );
-            }
-          }
-        }
-
-        // 2. Auto-cancel associated KOTs that are in 'waiting' ('sentToKitchen' or 'confirmed') status
         const resolvedUserId = updatedBy || auth.currentUser?.uid || 'system';
         const now = new Date();
 
@@ -1455,14 +1458,12 @@ export class OrderService implements IOrderService {
             const kotRef = doc(db, 'restaurants', cleanRestaurantId, 'kots', d.id);
             await updateDoc(kotRef, {
               status: 'cancelled',
-              cancellationReason: cancellationReason || 'Cancelled automatically due to POS order cancellation within 2 minutes grace period',
+              cancellationReason: cancellationReason || 'Parent order cancelled within 2-minute waiter window',
               cancelledAt: serverTimestamp() || now,
               cancelledBy: resolvedUserId,
               updatedAt: serverTimestamp() || now,
               updatedBy: resolvedUserId
             });
-
-            // Log audit event for auto-cancelled KOT
             await auditService.logEvent(cleanRestaurantId, {
               restaurantId: cleanRestaurantId,
               entityType: 'kot',
@@ -1472,14 +1473,13 @@ export class OrderService implements IOrderService {
               metadata: {
                 kotNumber: kotData.kotNumber,
                 orderId: cleanOrderId,
-                reason: 'Auto-cancelled because parent order was cancelled within 2 minutes'
+                reason: 'Auto-cancelled because parent order was cancelled within 2-minute order window'
               }
             });
           }
         }
       } catch (err: any) {
-        if (err.message && err.message.includes('Cannot cancel order from POS')) throw err;
-        console.warn('[RestaurantOS] KOT cancel lookup or update warning:', err);
+        console.warn('[RestaurantOS] KOT auto-cancel during order cancellation warning:', err);
       }
     }
 
