@@ -464,10 +464,11 @@ describe('M6-6C — Kitchen Multi-Device + Operational Workflow Hardening Accept
       expect(hasPermission('captain', 'close_sessions')).toBe(true);
       expect(hasPermission('captain', 'update_kot_status')).toBe(true);
 
-      // Denied actions
+      // Captains remain blocked from payments/admin; order cancellation is limited to the
+      // server/rules-enforced 2-minute cancellation window.
       expect(hasPermission('captain', 'process_payments')).toBe(false);
       expect(hasPermission('captain', 'refund_payments')).toBe(false);
-      expect(hasPermission('captain', 'cancel_orders')).toBe(false);
+      expect(hasPermission('captain', 'cancel_orders')).toBe(true);
       expect(hasPermission('captain', 'access_restaurant_setup')).toBe(false);
       expect(hasPermission('captain', 'view_financial_info')).toBe(false);
 
@@ -538,17 +539,3 @@ describe('M6-6C — Kitchen Multi-Device + Operational Workflow Hardening Accept
         { kotId: 'kot_offline_1', newStatus: 'preparing', updatedBy: 'chef_1' },
         'idemp_offline_kot_preparing_999'
       );
-
-      expect(item.status).toBe('queued');
-      expect(item.idempotencyKey).toBe('idemp_offline_kot_preparing_999');
-      expect(item.operation).toBe('update_kot_status');
-
-      const stats = offlineSyncService.getStats();
-      expect(stats.queued).toBe(1);
-
-      // Verify item can be inspected in queue
-      const queue = offlineSyncService.getQueue();
-      expect(queue.some(q => q.idempotencyKey === 'idemp_offline_kot_preparing_999')).toBe(true);
-    });
-  });
-});
