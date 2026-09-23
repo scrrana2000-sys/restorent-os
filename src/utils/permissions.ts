@@ -397,7 +397,8 @@ export async function checkPermission(restaurantId: string, action: PermissionAc
     // a cold permission check does not add two serial Firestore round trips.
     const restRef = doc(db, 'restaurants', cleanRestaurantId);
     const memberRef = doc(db, 'restaurants', cleanRestaurantId, 'members', user.uid);
-    const [restSnap, memberSnap] = await Promise.all([      getDoc(restRef),
+    const [restSnap, memberSnap] = await Promise.all([
+      getDoc(restRef),
       getDoc(memberRef)
     ]);
 
@@ -453,7 +454,6 @@ export async function getCurrentUserRestaurantRole(restaurantId: string): Promis
   const user = auth.currentUser;
   if (!user || isTestEnvironment) return null;
 
-  // A trusted server identity is already authorized beyond interactive staff limits.
   if (typeof user.getIdTokenResult === 'function') {
     try {
       const tokenResult = await user.getIdTokenResult();
