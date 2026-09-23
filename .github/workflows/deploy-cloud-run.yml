@@ -86,16 +86,42 @@ jobs:
           AR_REPOSITORY="restaurantos-api"
           AR_IMAGE="${AR_HOST}/${GCP_PROJECT_ID}/${AR_REPOSITORY}/restaurantos-api:${GITHUB_SHA}"
 
-          echo "Building and publishing: $AR_IMAGE"
-          gcloud builds submit . \
+          echo "Submitting Cloud Build: $AR_IMAGE"
+          BUILD_ID="$(gcloud builds submit . \
             --project "$GCP_PROJECT_ID" \
             --tag "$AR_IMAGE" \
             --timeout=20m \
-            --quiet
+            --async \
+            --format='value(id)')"
+
+          test -n "$BUILD_ID"
+          echo "Cloud Build ID: $BUILD_ID"
+
+          for attempt in $(seq 1 120); do
+            STATUS="$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='value(status)' 2>/dev/null || true)"
+            echo "Cloud Build status: $STATUS (attempt $attempt/120)"
+            case "$STATUS" in
+              SUCCESS)
+                break
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                echo "::error::Cloud Build $BUILD_ID ended with status $STATUS."
+                gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='yaml(status,statusDetail,results)' || true
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+
+          FINAL_STATUS="$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='value(status)')"
+          if [ "$FINAL_STATUS" != "SUCCESS" ]; then
+            echo "::error::Cloud Build did not finish successfully within 20 minutes."
+            gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --format='yaml(status,statusDetail,results)' || true
+            exit 1
+          fi
 
           gcloud artifacts docker images describe "$AR_IMAGE" \
             --project "$GCP_PROJECT_ID" >/dev/null
-
           echo "AR_IMAGE=$AR_IMAGE" >> "$GITHUB_ENV"
 
       - name: Deploy production image to Cloud Run
