@@ -1100,7 +1100,7 @@ export class KOTService implements IKOTService {
         }
       }
     );
-  
+  }
 
   /**
    * Subscribes to real-time KOT updates for a restaurant (all statuses, ordered by createdAt desc).
@@ -1146,3 +1146,5 @@ export class KOTService implements IKOTService {
     );
   }
 }
+
+export const kotService = new KOTService();
