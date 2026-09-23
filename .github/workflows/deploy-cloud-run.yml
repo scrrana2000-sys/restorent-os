@@ -2,6 +2,7 @@ name: Deploy RestaurantOS API to Cloud Run
 
 # Keep the API deployment synchronized with main so the frontend can never point
 # at a stale Cloud Run revision after server-side changes.
+# Source deployment uses the repository Dockerfile and Cloud Run managed build pipeline.
 on:
   push:
     branches: [main]
