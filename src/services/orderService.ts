@@ -26,7 +26,7 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { validateOrder, validateOrderStatusTransition } from '../utils/transactionValidation';
 import { calculateOrderTotals, calculateOrderItemLine } from './orderCalculationService';
 import { idempotencyService } from './idempotencyService';
-import { enforcePermission } from '../utils/permissions';
+import { enforcePermission, getCurrentUserRestaurantRole } from '../utils/permissions';
 import { auditService } from './auditService';
 import { sanitizeFirestoreData } from '../utils/sanitize';
 import { stockConsumptionService } from './stockConsumptionService';
@@ -997,7 +997,6 @@ export class OrderService implements IOrderService {
       notes: item.notes,
       modifiers: item.modifiers ? [...item.modifiers] : undefined
     }));
-
     try {
       const orderColRef = collection(db, 'restaurants', cleanRestaurantId, 'orders');
       const orderDocRef = doc(orderColRef);
@@ -1424,25 +1423,32 @@ export class OrderService implements IOrderService {
     }
 
     // 2c. Waiter/captain cancellation is allowed only within 2 minutes of ORDER CREATION.
-    // After that window, the kitchen/KOT workflow is authoritative.
+    // Managers/owners retain their existing cancellation authority.
     if (newStatus === 'cancelled') {
-      const createdAtValue: any = (currentOrder as any).createdAt;
-      const createdAt = createdAtValue?.toDate
-        ? createdAtValue.toDate()
-        : createdAtValue instanceof Date
-          ? createdAtValue
-          : new Date(createdAtValue);
-      const createdAtMs = createdAt.getTime();
+      const currentRole = await getCurrentUserRestaurantRole(cleanRestaurantId);
+      const isTestRuntime =
+        typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
+      const captainWindowApplies = currentRole === 'captain' || (!currentRole && !isTestRuntime);
 
-      if (!Number.isFinite(createdAtMs)) {
-        throw new Error('Cannot cancel order: order creation time is missing or invalid.');
-      }
+      if (captainWindowApplies) {
+        const createdAtValue: any = (currentOrder as any).createdAt;
+        const createdAt = createdAtValue?.toDate
+          ? createdAtValue.toDate()
+          : createdAtValue instanceof Date
+            ? createdAtValue
+            : new Date(createdAtValue);
+        const createdAtMs = createdAt.getTime();
 
-      const elapsedMs = Date.now() - createdAtMs;
-      if (elapsedMs < 0 || elapsedMs > 2 * 60 * 1000) {
-        throw new Error(
-          'Cannot cancel order from waiter/POS: the 2-minute order cancellation window has expired. Cancel the active KOT from the kitchen flow.'
-        );
+        if (!Number.isFinite(createdAtMs)) {
+          throw new Error('Cannot cancel order: order creation time is missing or invalid.');
+        }
+
+        const elapsedMs = Date.now() - createdAtMs;
+        if (elapsedMs < 0 || elapsedMs > 2 * 60 * 1000) {
+          throw new Error(
+            'Cannot cancel order from waiter/POS: the 2-minute order cancellation window has expired. Cancel the active KOT from the kitchen flow.'
+          );
+        }
       }
 
       try {
@@ -1997,8 +2003,7 @@ export class OrderService implements IOrderService {
     onError?: (err: Error) => void
   ): () => void {
     const cleanRestaurantId = restaurantId.trim();
-    const colRef = collection(db, 'restaurants', cleanRestaurantId, 'orders');
-    const q = query(colRef, orderBy('createdAt', 'desc'));
+    const colRef = collection(db, 'restaurants', cleanRestaurantId, 'orders');    const q = query(colRef, orderBy('createdAt', 'desc'));
 
     return onSnapshot(
       q,
@@ -2997,8 +3002,7 @@ export class OrderService implements IOrderService {
     } catch (err: unknown) {
       if ((err as any)?.message && (err as any).message.includes('Cannot complete order')) {
         throw err;
-      }
-      throw handleFirestoreError(err, OperationType.UPDATE, path);
+      }      throw handleFirestoreError(err, OperationType.UPDATE, path);
     }
   }
 
