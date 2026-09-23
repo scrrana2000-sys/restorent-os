@@ -620,6 +620,45 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
     }
   };
 
+
+  const handlePartiallyCancelKotItemsSubmit = async (
+    kotId: string,
+    cancellations: { itemId: string; cancelledQuantity: number; reason: string }[]
+  ) => {
+    setIsSubmitting(true);
+    setStatusMessage(null);
+    const actorUid = user?.uid || 'captain_staff';
+    const idempotencyKey = `idemp_partial_cancel_kot_${kotId}_${Date.now()}`;
+
+    try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new Error('Internet connection is required to cancel individual KOT items.');
+      }
+
+      await kotService.partiallyCancelKOTItems(
+        restaurantId,
+        kotId,
+        cancellations,
+        actorUid,
+        idempotencyKey
+      );
+
+      setStatusMessage({
+        type: 'success',
+        text: 'Selected KOT item quantity cancelled successfully.'
+      });
+    } catch (err: any) {
+      console.error('Partial KOT item cancellation error:', err);
+      setStatusMessage({
+        type: 'error',
+        text: err?.message || 'Failed to cancel KOT item.'
+      });
+      throw err;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCancelOrderSubmit = async (orderId: string, reason: string) => {
     setIsSubmitting(true);
     setStatusMessage(null);
@@ -997,6 +1036,7 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
         onSettlePayment={(ord) => setPaymentModalOrder(ord)}
         onUpdateGuestCount={handleUpdateGuestCountSubmit}
         onUpdateKotStatus={handleUpdateKotStatusSubmit}
+        onPartiallyCancelKotItems={handlePartiallyCancelKotItemsSubmit}
         onTakeOrder={(tbl) => setStaffOrderModalTable(tbl)}
         onGoToPosOrder={handleGoToPosOrder}
         onGoToPosSettlement={handleGoToPosSettlement}
