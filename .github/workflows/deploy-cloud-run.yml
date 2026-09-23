@@ -119,7 +119,7 @@ jobs:
                 ;;
               FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
                 echo "::error::Cloud Build failed with status $STATUS"
-                gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='yaml(status,results,images,failureInfo)' || true
+                gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='yaml(status,statusDetail,steps,results,images,failureInfo)' || true
                 exit 1
                 ;;
             esac
