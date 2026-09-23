@@ -1101,3 +1101,4 @@ export class KOTService implements IKOTService {
       }
     );
   }
+}
