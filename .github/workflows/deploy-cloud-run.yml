@@ -95,6 +95,23 @@ jobs:
               --quiet
           fi
 
+      - name: Ensure Cloud Build can write the API repository
+        run: |
+          set -euo pipefail
+          PROJECT_NUMBER="$(gcloud projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')"
+          REPOSITORY="restaurantos-api"
+          for SA in \
+            "${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
+            "${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"; do
+            echo "Ensuring Artifact Registry Writer for $SA"
+            gcloud artifacts repositories add-iam-policy-binding "$REPOSITORY" \
+              --location "$GCP_REGION" \
+              --project "$GCP_PROJECT_ID" \
+              --member "serviceAccount:$SA" \
+              --role "roles/artifactregistry.writer" \
+              --quiet || echo "::warning::Could not grant repository writer to $SA; continuing."
+          done
+
       - name: Build and publish API image with Cloud Build
         run: |
           set -euo pipefail
