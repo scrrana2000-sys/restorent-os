@@ -117,7 +117,7 @@ describe('Phase 2 Hardening — Staff Order → KOT → Kitchen Flow', () => {
       expect(hasPermission('captain', 'manage_inventory')).toBe(false);
       expect(hasPermission('captain', 'refund_payments')).toBe(false);
       expect(hasPermission('captain', 'process_payments')).toBe(false);
-      expect(hasPermission('captain', 'cancel_orders')).toBe(false);
+      expect(hasPermission('captain', 'cancel_orders')).toBe(true); // 2-minute server/rules-enforced waiter cancellation only
       expect(hasPermission('captain', 'manage_printers')).toBe(false);
     });
   });
