@@ -2,7 +2,7 @@ name: Deploy RestaurantOS API to Cloud Run
 
 # Keep the API deployment synchronized with main so the frontend can never point
 # at a stale Cloud Run revision after server-side changes.
-# Source deployment uses the repository Dockerfile and Cloud Run managed build pipeline.
+# Build the production container on GitHub Actions and publish it directly to Artifact Registry.
 on:
   push:
     branches: [main]
@@ -11,7 +11,6 @@ on:
 permissions:
   contents: read
   id-token: write
-  packages: write
 
 concurrency:
   group: cloud-run-production
@@ -47,7 +46,6 @@ jobs:
       CLOUD_RUN_SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      IMAGE_NAME: ghcr.io/scrrana2000-sys/restaurantos-api
 
     steps:
       - uses: actions/checkout@v4
@@ -95,57 +93,21 @@ jobs:
               --quiet
           fi
 
-      - name: Ensure Cloud Build can write the API repository
+      - name: Authenticate Docker to Artifact Registry
         run: |
           set -euo pipefail
-          PROJECT_NUMBER="$(gcloud projects describe "$GCP_PROJECT_ID" --format='value(projectNumber)')"
-          REPOSITORY="restaurantos-api"
-          for SA in \
-            "${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
-            "${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"; do
-            echo "Ensuring Artifact Registry Writer for $SA"
-            gcloud artifacts repositories add-iam-policy-binding "$REPOSITORY" \
-              --location "$GCP_REGION" \
-              --project "$GCP_PROJECT_ID" \
-              --member "serviceAccount:$SA" \
-              --role "roles/artifactregistry.writer" \
-              --quiet || echo "::warning::Could not grant repository writer to $SA; continuing."
-          done
+          REGISTRY_HOST="${GCP_REGION}-docker.pkg.dev"
+          gcloud auth configure-docker "$REGISTRY_HOST" --quiet
 
-      - name: Build and publish API image with Cloud Build
+      - name: Build and publish API image to Artifact Registry
         run: |
           set -euo pipefail
           IMAGE_TAG="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/restaurantos-api/restaurantos-api:${GITHUB_SHA}"
-          BUILD_OUTPUT="$(gcloud builds submit . \
-            --project "$GCP_PROJECT_ID" \
-            --region "$GCP_REGION" \
-            --tag "$IMAGE_TAG" \
-            --async \
-            --format='value(id)')"
-          BUILD_ID="$(echo "$BUILD_OUTPUT" | tail -n 1 | tr -d '[:space:]')"
-          test -n "$BUILD_ID"
-          echo "Cloud Build started: $BUILD_ID"
-          for attempt in $(seq 1 30); do
-            STATUS="$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='value(status)')"
-            echo "Cloud Build status: $STATUS (attempt $attempt/30)"
-            case "$STATUS" in
-              SUCCESS)
-                echo "Cloud Build completed successfully."
-                echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
-                exit 0
-                ;;
-              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
-                echo "::error::Cloud Build failed with status $STATUS"
-                gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='yaml(status,statusDetail,steps,results,images,failureInfo)' || true
-                exit 1
-                ;;
-            esac
-            sleep 10
-          done
-          echo "::error::Cloud Build did not finish within 5 minutes."
-          gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='yaml(status,results,images,failureInfo)' || true
-          exit 1
-
+          echo "Building and publishing $IMAGE_TAG"
+          DOCKER_BUILDKIT=1 docker build --progress=plain --pull --platform linux/amd64 -t "$IMAGE_TAG" .
+          docker push "$IMAGE_TAG"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "Published image: $IMAGE_TAG"
       - name: Deploy production image to Cloud Run
         run: |
           set -euo pipefail
