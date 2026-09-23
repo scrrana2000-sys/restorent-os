@@ -90,7 +90,8 @@ jobs:
           gcloud builds submit . \
             --project "$GCP_PROJECT_ID" \
             --tag "$AR_IMAGE" \
-            --timeout=20m
+            --timeout=20m \
+            --quiet
 
           gcloud artifacts docker images describe "$AR_IMAGE" \
             --project "$GCP_PROJECT_ID" >/dev/null
