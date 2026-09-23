@@ -997,6 +997,7 @@ export class OrderService implements IOrderService {
       notes: item.notes,
       modifiers: item.modifiers ? [...item.modifiers] : undefined
     }));
+
     try {
       const orderColRef = collection(db, 'restaurants', cleanRestaurantId, 'orders');
       const orderDocRef = doc(orderColRef);
@@ -2003,7 +2004,8 @@ export class OrderService implements IOrderService {
     onError?: (err: Error) => void
   ): () => void {
     const cleanRestaurantId = restaurantId.trim();
-    const colRef = collection(db, 'restaurants', cleanRestaurantId, 'orders');    const q = query(colRef, orderBy('createdAt', 'desc'));
+    const colRef = collection(db, 'restaurants', cleanRestaurantId, 'orders');
+    const q = query(colRef, orderBy('createdAt', 'desc'));
 
     return onSnapshot(
       q,
@@ -3002,7 +3004,8 @@ export class OrderService implements IOrderService {
     } catch (err: unknown) {
       if ((err as any)?.message && (err as any).message.includes('Cannot complete order')) {
         throw err;
-      }      throw handleFirestoreError(err, OperationType.UPDATE, path);
+      }
+      throw handleFirestoreError(err, OperationType.UPDATE, path);
     }
   }
 
