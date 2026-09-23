@@ -589,6 +589,21 @@ service cloud.firestore {
           && request.resource.data.restaurantId == resource.data.restaurantId
           && request.resource.data.id == resource.data.id
           && (isServer() || request.resource.data.updatedBy == request.auth.uid)
+          && resource.data.status != 'completed'
+          && resource.data.status != 'cancelled'
+          && resource.data.createdAt is timestamp
+          && request.time <= resource.data.createdAt + duration.value(2, 'm')
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'cancellationReason', 'cancelledAt', 'cancelledBy', 'updatedAt', 'updatedBy'
+          ])
+          && request.resource.data.cancelledBy == request.auth.uid
+        )
+        || (
+          isMemberWithRole(restaurantId, 'captain')
+          && request.resource.data.restaurantId == resource.data.restaurantId
+          && request.resource.data.id == resource.data.id
+          && (isServer() || request.resource.data.updatedBy == request.auth.uid)
           && request.resource.data.status != 'cancelled'
           && request.resource.data.status != 'completed'
           && isAllowedOrderStatusTransition(resource.data.status, request.resource.data.status)
