@@ -539,3 +539,17 @@ describe('M6-6C — Kitchen Multi-Device + Operational Workflow Hardening Accept
         { kotId: 'kot_offline_1', newStatus: 'preparing', updatedBy: 'chef_1' },
         'idemp_offline_kot_preparing_999'
       );
+
+      expect(item.status).toBe('queued');
+      expect(item.idempotencyKey).toBe('idemp_offline_kot_preparing_999');
+      expect(item.operation).toBe('update_kot_status');
+
+      const stats = offlineSyncService.getStats();
+      expect(stats.queued).toBe(1);
+
+      // Verify item can be inspected in queue
+      const queue = offlineSyncService.getQueue();
+      expect(queue.some(q => q.idempotencyKey === 'idemp_offline_kot_preparing_999')).toBe(true);
+    });
+  });
+});
