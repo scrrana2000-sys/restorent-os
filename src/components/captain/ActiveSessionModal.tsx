@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Table, TableSession } from '../../types/table';
 import { Order } from '../../types/order';
 import { KOT } from '../../types/kot';
