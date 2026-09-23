@@ -533,14 +533,15 @@ app.post('/api/kots/partial-cancel', async (req, res) => {
       });
     }
 
-    const clientRequestId = String(req.body?.clientRequestId || '').trim();
-    const { kotService } = await import('./src/services/kotService');
-    const result = await kotService.partiallyCancelKOTItems(
+    // Server route has already verified the caller's restaurant role.
+    // Use the Admin SDK for the authoritative write so this path never depends
+    // on a browser Firebase client session/custom-token sign-in.
+    const { partiallyCancelKOTItemsWithAdmin } = await import('./src/server/partialCancellationService');
+    const result = await partiallyCancelKOTItemsWithAdmin(
       restaurantId,
       kotId,
       safeCancellations,
-      authUser.uid,
-      clientRequestId ? `${authUser.uid}_${clientRequestId}` : undefined
+      authUser.uid
     );
 
     return res.json({ success: true, kot: result });
