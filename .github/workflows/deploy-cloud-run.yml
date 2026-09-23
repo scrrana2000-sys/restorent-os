@@ -99,12 +99,35 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE_TAG="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/restaurantos-api/restaurantos-api:${GITHUB_SHA}"
-          gcloud builds submit . \
+          BUILD_OUTPUT="$(gcloud builds submit . \
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --tag "$IMAGE_TAG" \
-            --quiet
-          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+            --async \
+            --format='value(id)')"
+          BUILD_ID="$(echo "$BUILD_OUTPUT" | tail -n 1 | tr -d '[:space:]')"
+          test -n "$BUILD_ID"
+          echo "Cloud Build started: $BUILD_ID"
+          for attempt in $(seq 1 30); do
+            STATUS="$(gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='value(status)')"
+            echo "Cloud Build status: $STATUS (attempt $attempt/30)"
+            case "$STATUS" in
+              SUCCESS)
+                echo "Cloud Build completed successfully."
+                echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+                exit 0
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                echo "::error::Cloud Build failed with status $STATUS"
+                gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='yaml(status,results,images,failureInfo)' || true
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Cloud Build did not finish within 5 minutes."
+          gcloud builds describe "$BUILD_ID" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format='yaml(status,results,images,failureInfo)' || true
+          exit 1
 
       - name: Deploy production image to Cloud Run
         run: |
