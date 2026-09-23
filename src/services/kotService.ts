@@ -1100,5 +1100,49 @@ export class KOTService implements IKOTService {
         }
       }
     );
+  
+
+  /**
+   * Subscribes to real-time KOT updates for a restaurant (all statuses, ordered by createdAt desc).
+   */
+  subscribeToKOTs(
+    restaurantId: string,
+    onUpdate: (kots: KOT[]) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const cleanRestaurantId = restaurantId?.trim();
+    if (!cleanRestaurantId) {
+      throw new Error('restaurantId is required to subscribe to KOTs.');
+    }
+
+    const kotsCol = collection(db, kotsPath(cleanRestaurantId));
+    const q = query(
+      kotsCol,
+      orderBy('createdAt', 'desc')
+    );
+
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const kots = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        } as KOT));
+        onUpdate(kots);
+      },
+      (error) => {
+        const errCode = (error as any)?.code;
+        if (errCode === 'permission-denied' || errCode === 'unavailable') {
+          console.warn('[RestaurantOS] KOTs subscription notice (permission/offline):', (error as any)?.message);
+          onUpdate([]);
+        }
+        const handledError = handleFirestoreError(error, OperationType.LIST, kotsPath(cleanRestaurantId));
+        if (onError) {
+          onError(handledError);
+        } else {
+          console.warn('KOTs subscription warning:', handledError.message);
+        }
+      }
+    );
   }
 }
