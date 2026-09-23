@@ -80,37 +80,31 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Prepare Artifact Registry remote cache for GHCR
+      - name: Prepare Artifact Registry repository for Cloud Run image
         run: |
           set -euo pipefail
-          REMOTE_REPOSITORY="restaurantos-ghcr"
-          if ! gcloud artifacts repositories describe "$REMOTE_REPOSITORY" \
+          REPOSITORY="restaurantos-api"
+          if ! gcloud artifacts repositories describe "$REPOSITORY" \
             --location "$GCP_REGION" \
             --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
-            gcloud artifacts repositories create "$REMOTE_REPOSITORY" \
+            gcloud artifacts repositories create "$REPOSITORY" \
               --project "$GCP_PROJECT_ID" \
               --repository-format=docker \
               --location="$GCP_REGION" \
-              --mode=remote-repository \
-              --remote-docker-repo="https://ghcr.io" \
-              --description="RestaurantOS GHCR remote cache" \
+              --description="RestaurantOS production API images" \
               --quiet
           fi
 
-      - name: Build and publish API image to GitHub Container Registry
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish API image with Cloud Build
         run: |
           set -euo pipefail
-          IMAGE_TAG="${IMAGE_NAME}:${GITHUB_SHA}"
-
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          docker build --platform linux/amd64 --pull -t "$IMAGE_TAG" .
-          docker push "$IMAGE_TAG"
-          docker logout ghcr.io
-
-          REMOTE_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/restaurantos-ghcr/scrrana2000-sys/restaurantos-api:${GITHUB_SHA}"
-          echo "REMOTE_IMAGE=$REMOTE_IMAGE" >> "$GITHUB_ENV"
+          IMAGE_TAG="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/restaurantos-api/restaurantos-api:${GITHUB_SHA}"
+          gcloud builds submit . \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --tag "$IMAGE_TAG" \
+            --quiet
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Deploy production image to Cloud Run
         run: |
