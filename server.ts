@@ -469,6 +469,83 @@ app.post('/api/kots/create', async (req, res) => {
 });
 
 /**
+ * Server-authoritative online menu item availability toggle.
+ * Browser writes use this trusted API after verifying the caller's restaurant role.
+ */
+app.post('/api/menu-items/toggle-online-availability', async (req, res) => {
+  try {
+    const idToken = extractBearerToken(req);
+    if (!idToken) return res.status(401).json({ success: false, error: 'UNAUTHENTICATED', message: 'Authentication token is required.' });
+
+    const authUser = await verifyFirebaseToken(idToken);
+    if (!authUser?.uid) return res.status(401).json({ success: false, error: 'INVALID_TOKEN', message: 'Authentication token is invalid or expired.' });
+
+    const restaurantId = String(req.body?.restaurantId || '').trim();
+    const itemId = String(req.body?.itemId || '').trim();
+    const isOnlineAvailable = req.body?.isOnlineAvailable;
+
+    if (!restaurantId || !itemId || typeof isOnlineAvailable !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_PARAMETERS',
+        message: 'restaurantId, itemId and isOnlineAvailable are required.'
+      });
+    }
+
+    const staffCheck = await verifyRestaurantStaffRole(
+      authUser.uid,
+      idToken,
+      restaurantId,
+      ['owner', 'manager']
+    );
+
+    if (!staffCheck.authorized) {
+      return res.status(staffCheck.code || 403).json({
+        success: false,
+        error: staffCheck.error || 'FORBIDDEN',
+        message: staffCheck.message || 'Caller is not authorized to change online item availability.'
+      });
+    }
+
+    const restaurantRef = adminDb.doc(`restaurants/${restaurantId}`);
+    const restaurantSnap = await restaurantRef.get();
+    if (!restaurantSnap.exists) {
+      return res.status(404).json({ success: false, error: 'RESTAURANT_NOT_FOUND', message: 'Restaurant not found.' });
+    }
+
+    const restaurantData = restaurantSnap.data() || {};
+    if (restaurantData.ownerId !== authUser.uid && staffCheck.role !== 'manager') {
+      return res.status(403).json({ success: false, error: 'FORBIDDEN', message: 'Caller is not authorized for this restaurant.' });
+    }
+
+    const itemRef = adminDb.doc(`restaurants/${restaurantId}/items/${itemId}`);
+    const itemSnap = await itemRef.get();
+    if (!itemSnap.exists) {
+      return res.status(404).json({ success: false, error: 'ITEM_NOT_FOUND', message: 'Menu item not found.' });
+    }
+
+    const itemData = itemSnap.data() || {};
+    if (itemData.restaurantId !== restaurantId || itemData.itemId !== itemId) {
+      return res.status(409).json({ success: false, error: 'ITEM_TENANT_MISMATCH', message: 'Menu item belongs to a different restaurant.' });
+    }
+
+    await itemRef.update({
+      isOnlineAvailable,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+
+    return res.json({ success: true, itemId, restaurantId, isOnlineAvailable });
+  } catch (err: any) {
+    console.error('[RestaurantOS Server] Online menu item availability toggle failed:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'ONLINE_AVAILABILITY_UPDATE_FAILED',
+      message: err?.message || 'Failed to update online item availability.'
+    });
+  }
+});
+
+/**
  * Server-authoritative partial KOT item cancellation.
  * Caller roles are checked before the trusted server identity performs the write.
  */
