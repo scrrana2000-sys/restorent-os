@@ -24,7 +24,7 @@ export const Button: React.FC<ButtonProps> = ({
     'inline-flex items-center justify-center font-bold rounded-xl transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98] whitespace-normal sm:whitespace-nowrap leading-tight min-w-0 max-w-full';
 
   const sizeClasses = {
-    sm: 'h-9 min-h-[36px] px-3 text-xs gap-1.5',
+    sm: 'h-11 min-h-[44px] sm:h-9 sm:min-h-[36px] px-3 text-xs gap-1.5',
     md: 'h-11 min-h-[44px] px-4 text-xs sm:text-sm gap-2',
     lg: 'h-12 min-h-[48px] px-5 text-sm sm:text-base gap-2.5'
   }[size];
