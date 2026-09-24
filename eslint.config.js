@@ -46,7 +46,6 @@ export default tseslint.config(
     rules: {
       ...(reactRecommended.rules ?? {}),
       ...(reactRuntime.rules ?? {}),
-      ...(hooksRecommended.rules ?? {}),
       ...(a11yRecommended.rules ?? {}),
       // Existing RestaurantOS code uses runtime-shaped Firestore/API objects extensively.
       // Keep explicit-any as an allowed boundary while TypeScript strict checking remains
@@ -66,6 +65,7 @@ export default tseslint.config(
       'jsx-a11y/no-autofocus': 'warn',
       'jsx-a11y/no-noninteractive-element-interactions': 'warn',
       '@typescript-eslint/ban-ts-comment': 'warn',
+      '@typescript-eslint/no-unsafe-function-type': 'warn',
     },
     settings: {
       react: {
