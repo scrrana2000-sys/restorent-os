@@ -21,7 +21,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = React.memo(({
   totalItemsCount
 }) => {
   return (
-    <div className="bg-white border-b border-slate-200 px-4 py-2.5 space-y-2.5 shrink-0 select-none shadow-2xs">
+    <div className="w-full min-w-0 bg-white border-b border-slate-200 px-3 sm:px-4 py-2.5 space-y-2.5 shrink-0 select-none shadow-2xs">
       {/* 1. Category Scroll Row (Directly matching Reference Image) */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 -mx-4 px-4">
         {/* All Items Pill */}
@@ -61,8 +61,8 @@ export const CategoryBar: React.FC<CategoryBarProps> = React.memo(({
       </div>
 
       {/* 2. Compact Search Row (Matching Reference Image) */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="flex items-center gap-2 min-w-0 w-full">
+        <div className="relative flex-1 min-w-0">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
