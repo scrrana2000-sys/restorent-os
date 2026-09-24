@@ -204,7 +204,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Offline / Sync Queue Status Indicator */}
         <div className="hidden sm:block">
-          <OfflineSyncIndicator />
+          <div className="hidden sm:block"><OfflineSyncIndicator /></div>
         </div>
 
         {/* Voice Assistant Header Status / Toggle Button */}
