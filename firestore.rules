@@ -365,6 +365,7 @@ service cloud.firestore {
       // Production deployment trigger: OIDC authentication enabled for Firebase rules.
       // Final rules deployment trigger after OIDC workflow correction.
       // Rules deployment trigger: corrected Firebase project resolution.
+      // Firestore-only deployment trigger: Storage IAM is independent.
 
       match /items/{itemId} {
         allow read: if isServer()
