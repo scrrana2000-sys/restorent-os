@@ -729,7 +729,7 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
+    <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-950 text-white flex flex-col font-sans">
       {/* Header */}
       <CaptainHeader
         totalTables={summaryMetrics.totalTables}
@@ -775,7 +775,7 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
       )}
 
       {/* Main Operational View */}
-      <main className="flex-1 p-4 overflow-y-auto">
+      <main className="flex-1 w-full max-w-full min-w-0 p-2 sm:p-4 overflow-y-auto overflow-x-hidden">
         {error ? (
           /* Error Banner */
           <div className="p-6 max-w-xl mx-auto bg-rose-500/10 border border-rose-500/20 rounded-2xl text-center text-white my-8">
@@ -874,9 +874,9 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
           /* Phase 4F: Orders & KOTs Feed View */
           <div className="space-y-4 max-w-7xl mx-auto">
             {/* Search & Operational Controls Toolbar */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-md">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-md min-w-0">
               {/* Search Bar */}
-              <div className="relative flex-1 min-w-[240px]">
+              <div className="relative w-full sm:flex-1 min-w-0">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
@@ -897,7 +897,7 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
               </div>
 
               {/* Order Type Filter Pills */}
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <div className="w-full sm:w-auto min-w-0 flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto no-scrollbar">
                 <button
                   type="button"
                   data-testid="filter-type-all"
