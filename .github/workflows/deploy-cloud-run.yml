@@ -47,7 +47,8 @@ jobs:
       CLOUD_RUN_SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GHCR_IMAGE: ghcr.io/scrrana2000-sys/restaurantos-api-cloudrun
+      GAR_REPOSITORY: restaurantos
+      GAR_IMAGE: restaurantos-api-cloudrun
 
     steps:
       - uses: actions/checkout@v4
@@ -80,22 +81,33 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure Docker for Artifact Registry
+        run: |
+          set -euo pipefail
+          GAR_HOST="${GCP_REGION}-docker.pkg.dev"
+          gcloud auth configure-docker "$GAR_HOST" --quiet
 
-      - name: Build and publish API image to GitHub Container Registry
+      - name: Ensure Artifact Registry repository exists
+        run: |
+          set -euo pipefail
+          if ! gcloud artifacts repositories describe "$GAR_REPOSITORY" \
+            --location "$GCP_REGION" \
+            --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+            gcloud artifacts repositories create "$GAR_REPOSITORY" \
+              --repository-format=docker \
+              --location="$GCP_REGION" \
+              --project="$GCP_PROJECT_ID" \
+              --description="RestaurantOS production container images" \
+              --quiet
+          fi
+
+      - name: Build and publish API image to Artifact Registry
         run: |
           set -euo pipefail
           export BUILDX_NO_DEFAULT_ATTESTATIONS=1
-          GHCR_TAG="${GHCR_IMAGE}:${GITHUB_SHA}"
-          echo "Building and publishing a plain linux/amd64 image: $GHCR_TAG"
-          # Cloud Run can reject container imports when BuildKit publishes
-          # provenance/SBOM attestation manifests alongside the image. Publish
-          # a single, plain image manifest for maximum Cloud Run compatibility.
+          GAR_HOST="${GCP_REGION}-docker.pkg.dev"
+          IMAGE_TAG="${GAR_HOST}/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${GAR_IMAGE}:${GITHUB_SHA}"
+          echo "Building and publishing a plain linux/amd64 image: $IMAGE_TAG"
           docker buildx build \
             --progress=plain \
             --pull \
@@ -103,20 +115,16 @@ jobs:
             --provenance=false \
             --sbom=false \
             --output "type=registry,push=true,oci-mediatypes=false" \
-            --tag "$GHCR_TAG" \
+            --tag "$IMAGE_TAG" \
             .
-          docker logout ghcr.io >/dev/null 2>&1 || true
-          docker pull "$GHCR_TAG"
-          echo "GHCR_TAG=$GHCR_TAG" >> "$GITHUB_ENV"
-          echo "Plain GHCR image published and anonymously readable: $GHCR_TAG"
-          echo "Published image manifest:"
-          docker buildx imagetools inspect "$GHCR_TAG"
-
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "Published Artifact Registry image:"
+          docker buildx imagetools inspect "$IMAGE_TAG"
       - name: Deploy production image to Cloud Run
         run: |
           set -euo pipefail
           if ! gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --image "$GHCR_TAG" \
+            --image "$IMAGE_TAG" \
             --region "$GCP_REGION" \
             --project "$GCP_PROJECT_ID" \
             --platform managed \
