@@ -285,7 +285,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
   };
 
   return (
-    <div id="online-orders-queue-container" className="space-y-5">
+    <div id="online-orders-queue-container" className="w-full min-w-0 space-y-5 overflow-x-hidden">
       {/* Alert Notices */}
       {actionSuccess && (
         <div
@@ -318,14 +318,14 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
       )}
 
       {/* Header & Tabs Toolbar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 min-w-0">
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600 overflow-x-auto max-w-full">
+        <div className="w-full sm:w-auto min-w-0 flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600 overflow-x-auto no-scrollbar max-w-full">
           <button
             type="button"
             data-testid="tab-online-pending"
             onClick={() => setActiveTab('pending')}
-            className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
               activeTab === 'pending'
                 ? 'bg-white text-indigo-600 shadow-xs'
                 : 'hover:text-slate-900'
@@ -391,8 +391,8 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
         </div>
 
         {/* Controls: Sound Toggle & Search */}
-        <div className="flex items-center gap-3 flex-1 sm:flex-initial justify-end">
-          <div className="relative w-full sm:w-64">
+        <div className="w-full sm:w-auto flex items-center gap-3 justify-end min-w-0">
+          <div className="relative w-full sm:w-64 min-w-0">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
