@@ -79,7 +79,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           : 'bg-white/95 border-slate-200 text-slate-600'
       }`}
     >
-      <div className="flex items-center justify-around h-13 sm:h-14 px-1 max-w-lg mx-auto">
+      <div className="flex items-center justify-around w-full max-w-none min-w-0 h-13 sm:h-14 px-1 mx-0">
         {allowedNav.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
