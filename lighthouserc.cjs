@@ -5,7 +5,15 @@ module.exports = {
       url: ['/'],
       numberOfRuns: 2,
       settings: {
-        preset: 'desktop',
+        formFactor: 'mobile',
+        screenEmulation: {
+          mobile: true,
+          width: 390,
+          height: 844,
+          deviceScaleFactor: 2,
+          disabled: false,
+        },
+        throttlingMethod: 'simulate',
         chromeFlags: '--no-sandbox --disable-dev-shm-usage',
       },
     },
