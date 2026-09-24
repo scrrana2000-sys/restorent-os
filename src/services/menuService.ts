@@ -15,6 +15,7 @@ import { db, auth } from '../config/firebase';
 import { Category, CategoryFormData, MenuItem, MenuItemFormData } from '../types/menu';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { enforcePermission } from '../utils/permissions';
+import { getApiUrl } from '../utils/apiConfig';
 
 function isTestRuntime(): boolean {
   return typeof import.meta !== 'undefined'
@@ -379,7 +380,7 @@ export async function toggleItemOnlineAvailability(
     if (!currentUser) throw new Error('Authentication is required to update online item availability.');
 
     const idToken = await currentUser.getIdToken();
-    const response = await fetch('/api/menu-items/toggle-online-availability', {
+    const response = await fetch(getApiUrl('/api/menu-items/toggle-online-availability'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
