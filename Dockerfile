@@ -11,6 +11,7 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+ENV PORT=8080
 ENV ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io
 ENV PUBLIC_APP_URL=https://restaurantos01.ai.studio
 
@@ -22,5 +23,5 @@ COPY --from=build /app/dist-server ./dist-server
 COPY --from=build /app/public ./public
 
 USER node
-EXPOSE 3000
+EXPOSE 8080
 CMD ["node", "dist-server/server.cjs"]
