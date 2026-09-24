@@ -97,7 +97,7 @@ export const KitchenHeader: React.FC<KitchenHeaderProps> = ({
             type="button"
             data-testid="filter-preparing"
             onClick={() => onFilterChange('preparing')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all shrink-0 ${
               selectedFilter === 'preparing'
                 ? 'bg-amber-500 text-slate-950 shadow-xs'
                 : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
@@ -111,7 +111,7 @@ export const KitchenHeader: React.FC<KitchenHeaderProps> = ({
             type="button"
             data-testid="filter-ready"
             onClick={() => onFilterChange('ready')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all shrink-0 ${
               selectedFilter === 'ready'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
