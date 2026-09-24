@@ -101,26 +101,25 @@ export const SubscriptionStatusBanner: React.FC<SubscriptionStatusBannerProps> =
     return (
       <div
         id="subscription-banner-expiring-soon"
-        className="w-full bg-indigo-950/90 border border-indigo-800/80 rounded-2xl text-white px-4 py-3 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl mb-6"
+        className="w-full bg-indigo-950/95 border border-indigo-800/80 rounded-xl text-white px-3 py-2 sm:px-4 sm:py-2.5 flex items-center gap-2.5 sm:gap-3 shadow-lg mb-3"
       >
-        <div className="flex items-center gap-3">
-          <Clock className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
-          <p className="text-xs sm:text-sm text-indigo-100">
-            <strong className="text-white font-bold">
-              {isTrial ? 'Free Trial' : 'Subscription'} Ending Soon:
-            </strong>{' '}
-            {entitlements.daysRemaining > 0
-              ? `${entitlements.daysRemaining} day${entitlements.daysRemaining === 1 ? '' : 's'}`
-              : `${entitlements.hoursRemaining} hours`} remaining{' '}
-            (ends <span className="font-semibold text-white">{formatSubscriptionDate(isTrial ? subscription.trialEndsAt : subscription.currentPeriodEnd)}</span>).
-          </p>
-        </div>
+        <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
+        <p className="min-w-0 flex-1 text-[11px] sm:text-xs text-indigo-100 leading-snug">
+          <strong className="text-white font-bold">
+            {isTrial ? 'Free Trial' : 'Subscription'} Ending Soon:
+          </strong>{' '}
+          {entitlements.daysRemaining > 0
+            ? `${entitlements.daysRemaining} day${entitlements.daysRemaining === 1 ? '' : 's'}`
+            : `${entitlements.hoursRemaining} hours`} remaining{' '}
+          <span className="whitespace-nowrap">(ends <span className="font-semibold text-white">{formatSubscriptionDate(isTrial ? subscription.trialEndsAt : subscription.currentPeriodEnd)}</span>)</span>.
+        </p>
         <button
+          type="button"
           onClick={handleAction}
-          className="w-full sm:w-auto text-xs font-bold px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer shrink-0 min-h-[40px]"
+          className="shrink-0 inline-flex items-center justify-center gap-1 h-8 px-2.5 sm:px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] sm:text-[11px] font-extrabold leading-none transition-all shadow-sm active:scale-95 cursor-pointer"
         >
           <span>{isTrial ? 'Upgrade to Pro' : 'Renew Plan'}</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+          <ArrowRight className="w-3 h-3" />
         </button>
       </div>
     );
