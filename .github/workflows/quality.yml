@@ -103,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           source "$HOME/.browser-driver-manager/.env"
-          axe http://127.0.0.1:4173/ --exit --save axe-results.json --dir .a11y-results --load-delay=1500 --chromedriver-path="$CHROMEDRIVER_TEST_PATH"
+          npx --no-install axe http://127.0.0.1:4173/ --exit --save axe-results.json --dir .a11y-results --load-delay=1500 --chromedriver-path="$CHROMEDRIVER_TEST_PATH"
 
       - name: Upload Lighthouse reports
         if: always()
