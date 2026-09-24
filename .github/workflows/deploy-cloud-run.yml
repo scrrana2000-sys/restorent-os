@@ -29,7 +29,7 @@ jobs:
         run: DOCKER_BUILDKIT=1 docker build --progress=plain --pull -t restaurantos-cloud-run-debug .
 
   deploy:
-    name: Build in Cloud Build and deploy native Artifact Registry image
+    name: Build on GitHub runner and deploy native Artifact Registry image
     runs-on: ubuntu-latest
     needs: verify
     timeout-minutes: 25
@@ -82,58 +82,31 @@ jobs:
           fi
           gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
 
-      - name: Start production image build in Google Cloud Build
-        id: cloud-build
+      - name: Ensure deployer can publish the production image
+        run: |
+          set -euo pipefail
+          DEPLOYER="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | head -n 1)"
+          test -n "$DEPLOYER"
+          case "$DEPLOYER" in
+            *@*.iam.gserviceaccount.com)
+              ;;
+            *)
+              echo "::error::Active Google Cloud identity is not a service account."
+              exit 1
+              ;;
+          esac
+
+          gcloud artifacts repositories add-iam-policy-binding "$GAR_REPOSITORY"             --location="$GCP_REGION"             --project="$GCP_PROJECT_ID"             --member="serviceAccount:$DEPLOYER"             --role="roles/artifactregistry.writer"             --quiet
+
+      - name: Build and publish production API image
         run: |
           set -euo pipefail
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${GAR_IMAGE_NAME}:${GITHUB_SHA}"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-          set +e
-          BUILD_OUTPUT="$(gcloud builds submit .             --project="$GCP_PROJECT_ID"             --tag="$IMAGE"             --machine-type=e2-highcpu-8             --async 2>&1)"
-          BUILD_EXIT=$?
-          set -e
+          DOCKER_BUILDKIT=1 docker build             --progress=plain             --pull             --provenance=false             --sbom=false             --platform=linux/amd64             -t "$IMAGE"             .
 
-          printf '%s\n' "$BUILD_OUTPUT"
-
-          if [ "$BUILD_EXIT" -ne 0 ]; then
-            echo "::error::Cloud Build submission failed."
-            exit "$BUILD_EXIT"
-          fi
-
-          BUILD_ID="$(printf '%s\n' "$BUILD_OUTPUT" | grep -oE '/builds/[a-zA-Z0-9-]+' | tail -1 | cut -d/ -f3)"
-          test -n "$BUILD_ID" || {
-            echo "::error::Could not determine Cloud Build ID."
-            exit 1
-          }
-
-          echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
-          echo "Cloud Build started: $BUILD_ID"
-
-      - name: Wait for Cloud Build completion
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 60); do
-            STATUS="$(gcloud builds describe "$BUILD_ID" --project="$GCP_PROJECT_ID" --format='value(status)' 2>/dev/null || true)"
-            echo "Cloud Build status: ${STATUS:-UNKNOWN} (attempt $attempt/60)"
-
-            case "$STATUS" in
-              SUCCESS)
-                exit 0
-                ;;
-              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
-                echo "::error::Cloud Build did not complete successfully."
-                gcloud builds describe "$BUILD_ID" --project="$GCP_PROJECT_ID"                   --format='yaml(id,status,createTime,startTime,finishTime,results,failureInfo,steps)' || true
-                exit 1
-                ;;
-            esac
-
-            sleep 10
-          done
-
-          echo "::error::Cloud Build did not finish within 10 minutes."
-          gcloud builds describe "$BUILD_ID" --project="$GCP_PROJECT_ID"             --format='yaml(id,status,createTime,startTime,finishTime,results,failureInfo,steps)' || true
-          exit 1
+          docker push "$IMAGE"
 
       - name: Verify Artifact Registry image exists
         run: |
