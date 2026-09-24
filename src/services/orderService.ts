@@ -1462,7 +1462,10 @@ export class OrderService implements IOrderService {
 
         for (const d of kotSnap.docs) {
           const kotData = d.data() as KOT;
-          if (kotData.status === 'sentToKitchen' || kotData.status === 'confirmed') {
+          // Any non-terminal KOT belongs to the cancelled parent order and must
+          // be cancelled with it. The previous implementation only handled
+          // confirmed/sentToKitchen, leaving preparing/ready KOTs active.
+          if (kotData.status !== 'served' && kotData.status !== 'cancelled') {
             const kotRef = doc(db, 'restaurants', cleanRestaurantId, 'kots', d.id);
             await updateDoc(kotRef, {
               status: 'cancelled',
@@ -1481,7 +1484,7 @@ export class OrderService implements IOrderService {
               metadata: {
                 kotNumber: kotData.kotNumber,
                 orderId: cleanOrderId,
-                reason: 'Auto-cancelled because parent order was cancelled within 2-minute order window'
+                reason: 'Auto-cancelled because parent order was cancelled'
               }
             });
           }
