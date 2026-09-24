@@ -75,7 +75,18 @@ jobs:
       - name: Deploy production image to Cloud Run
         run: |
           set -euo pipefail
-          gcloud run deploy "$CLOUD_RUN_SERVICE"             --image=us-docker.pkg.dev/cloudrun/container/hello             --region="$GCP_REGION"             --project="$GCP_PROJECT_ID"             --platform=managed             --allow-unauthenticated             --port=8080             --quiet
+          IMAGE="us-docker.pkg.dev/cloudrun/container/hello"
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --image="$IMAGE" \
+            --region="$GCP_REGION" \
+            --project="$GCP_PROJECT_ID" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8080 \
+            --startup-probe="tcpSocket.port=8080,initialDelaySeconds=0,timeoutSeconds=10,failureThreshold=18,periodSeconds=10" \
+            --timeout=300s \
+            --cpu-boost \
+            --quiet
 
       - name: Verify Cloud Run revision and health
 
