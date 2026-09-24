@@ -1,9 +1,5 @@
 name: Deploy RestaurantOS API to Cloud Run
 
-# Keep the API deployment synchronized with main so the frontend can never point
-# at a stale Cloud Run revision after server-side changes.
-# Use Cloud Run source deployment so Google Cloud performs the production build
-# and image publication with its managed Cloud Build/Artifact Registry path.
 on:
   push:
     branches: [main]
@@ -23,21 +19,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22.22.2
           cache: npm
-
       - run: npm install --no-audit --no-fund --package-lock=false
-
       - run: npm run verify
-
       - name: Reproduce production Docker build
         run: DOCKER_BUILDKIT=1 docker build --progress=plain --pull -t restaurantos-cloud-run-debug .
 
   deploy:
-    name: Deploy API from source to Cloud Run
+    name: Build in Cloud Build and deploy native Artifact Registry image
     runs-on: ubuntu-latest
     needs: verify
     env:
@@ -47,12 +39,15 @@ jobs:
       CLOUD_RUN_SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GAR_REPOSITORY: restaurantos
+      GAR_IMAGE_NAME: restaurantos-api
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Validate deployment configuration
         run: |
+          set -euo pipefail
           if [ -n "$WIF_PROVIDER" ] && [ -n "$WIF_SERVICE_ACCOUNT" ]; then
             echo "Google Cloud auth: Workload Identity Federation configured."
           elif [ -n "$GCP_CREDENTIALS_JSON" ]; then
@@ -61,10 +56,9 @@ jobs:
             echo "::error::Google Cloud deployment credentials are missing."
             exit 1
           fi
-
-          test -n "$CLOUD_RUN_SERVICE" || { echo "::error::CLOUD_RUN_SERVICE is missing."; exit 1; }
-          test -n "$GCP_REGION" || { echo "::error::GCP_REGION is missing."; exit 1; }
-          test -n "$GCP_PROJECT_ID" || { echo "::error::GCP_PROJECT_ID is missing."; exit 1; }
+          test -n "$CLOUD_RUN_SERVICE"
+          test -n "$GCP_REGION"
+          test -n "$GCP_PROJECT_ID"
 
       - name: Authenticate to Google Cloud with Workload Identity Federation
         if: ${{ env.WIF_PROVIDER != '' && env.WIF_SERVICE_ACCOUNT != '' }}
@@ -79,44 +73,48 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Deploy production source to Cloud Run
+      - name: Configure native Artifact Registry
         run: |
           set -euo pipefail
-          if ! gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --source . \
-            --region "$GCP_REGION" \
-            --project "$GCP_PROJECT_ID" \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 3000 \
-            --update-env-vars "^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57" \
-            --remove-secrets "SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET" \
-            --quiet; then
-            echo "=== Cloud Run deployment diagnostics ==="
-            gcloud run services describe "$CLOUD_RUN_SERVICE" \
-              --region "$GCP_REGION" \
-              --project "$GCP_PROJECT_ID" \
-              --format='yaml(status.latestCreatedRevisionName,status.latestReadyRevisionName,status.url)' || true
-            REVISION="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestCreatedRevisionName)' || true)"
-            if [ -n "$REVISION" ]; then
-              gcloud run revisions describe "$REVISION" \
-                --region "$GCP_REGION" \
-                --project "$GCP_PROJECT_ID" \
-                --format='yaml(metadata.name,status.conditions,status.containerStatuses,spec.containers)' || true
-            fi
-            exit 1
+          if ! gcloud artifacts repositories describe "$GAR_REPOSITORY" --location "$GCP_REGION" --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+            gcloud artifacts repositories create "$GAR_REPOSITORY" \
+              --repository-format=docker \
+              --location="$GCP_REGION" \
+              --project="$GCP_PROJECT_ID" \
+              --description="RestaurantOS production containers"
           fi
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
 
-      - name: Wait for new Cloud Run revision and verify API
+      - name: Build production image in Google Cloud Build
+        run: |
+          set -euo pipefail
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${GAR_IMAGE_NAME}:${GITHUB_SHA}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          gcloud builds submit . \
+            --project="$GCP_PROJECT_ID" \
+            --tag="$IMAGE" \
+            --machine-type=e2-highcpu-8
+
+      - name: Deploy native Artifact Registry image to Cloud Run
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --image="$IMAGE" \
+            --region="$GCP_REGION" \
+            --project="$GCP_PROJECT_ID" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=3000 \
+            --update-env-vars="^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57" \
+            --quiet
+
+      - name: Verify Cloud Run revision and health
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
             CREATED="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestCreatedRevisionName)')"
             READY="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestReadyRevisionName)')"
             echo "Cloud Run revision status: created=$CREATED ready=$READY (attempt $attempt/30)"
-            if [ "$attempt" = "1" ] || [ "$attempt" = "10" ]; then
-              gcloud run revisions describe "$CREATED" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(status.conditions,status.containerStatuses)' || true
-            fi
             if [ -n "$CREATED" ] && [ "$CREATED" = "$READY" ]; then
               URL="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')"
               test -n "$URL"
@@ -128,9 +126,6 @@ jobs:
             sleep 10
           done
           echo "::error::Cloud Run latest revision did not become ready within 5 minutes."
-          echo "=== Cloud Run revision diagnostics ==="
-          REVISION="$CREATED"
-          gcloud run revisions describe "$REVISION" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(metadata.name,status.conditions,status.containerStatuses,spec.containers)' || true
-          echo "=== Recent Cloud Run logs for the revision ==="
-          gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$CLOUD_RUN_SERVICE AND resource.labels.revision_name=$REVISION" --project "$GCP_PROJECT_ID" --limit=80 --order=desc --format='value(timestamp,severity,textPayload,jsonPayload.message)' || true
+          gcloud run revisions describe "$CREATED" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(metadata.name,status.conditions,status.containerStatuses,spec.containers)' || true
+          gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$CLOUD_RUN_SERVICE AND resource.labels.revision_name=$CREATED" --project "$GCP_PROJECT_ID" --limit=80 --order=desc --format='value(timestamp,severity,textPayload,jsonPayload.message)' || true
           exit 1
