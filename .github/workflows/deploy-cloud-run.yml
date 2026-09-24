@@ -77,7 +77,7 @@ jobs:
           set -euo pipefail
           SOURCE_URL="https://codeload.github.com/scrrana2000-sys/restorent-os/tar.gz/${GITHUB_SHA}"
           STARTUP_SCRIPT='set -e; rm -rf /app/src; mkdir -p /app/src; node -e "fetch(process.env.SOURCE_URL).then(async r=>process.stdout.write(Buffer.from(await r.arrayBuffer()).toString(\"base64\")))" | base64 -d > /tmp/src.tgz; tar -xzf /tmp/src.tgz --strip-components=1 -C /app/src; cd /app/src; npm install --no-audit --no-fund --package-lock=false; npm run build; exec node dist-server/server.cjs'
-          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+          if ! gcloud run deploy "$CLOUD_RUN_SERVICE" \
             --image=node:22-bookworm-slim \
             --command=bash \
             --args="-lc,$STARTUP_SCRIPT" \
@@ -86,8 +86,18 @@ jobs:
             --platform=managed \
             --allow-unauthenticated \
             --port=3000 \
+            --startup-cpu-boost \
+            --timeout=300s \
             --update-env-vars="^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57@SOURCE_URL=$SOURCE_URL" \
-            --quiet
+            --quiet; then
+            echo "=== Cloud Run startup diagnostics ==="
+            REVISION="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.latestCreatedRevisionName)' || true)"
+            if [ -n "$REVISION" ]; then
+              gcloud run revisions describe "$REVISION" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(metadata.name,status.conditions,status.containerStatuses,spec.containers)' || true
+              gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$CLOUD_RUN_SERVICE AND resource.labels.revision_name=$REVISION" --project "$GCP_PROJECT_ID" --limit=100 --order=desc --format='value(timestamp,severity,textPayload,jsonPayload.message)' || true
+            fi
+            exit 1
+          fi
 
       - name: Verify Cloud Run revision and health
         run: |
