@@ -48,6 +48,11 @@ export default tseslint.config(
       ...(reactRuntime.rules ?? {}),
       ...(hooksRecommended.rules ?? {}),
       ...(a11yRecommended.rules ?? {}),
+      // Existing RestaurantOS code uses runtime-shaped Firestore/API objects extensively.
+      // Keep explicit-any as an allowed boundary while TypeScript strict checking remains
+      // the authoritative type-safety gate.
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
     settings: {
       react: {

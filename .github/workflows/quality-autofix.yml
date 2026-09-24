@@ -1,9 +1,6 @@
 name: RestaurantOS Auto Fix
 
 on:
-  push:
-    branches-ignore:
-      - main
   workflow_dispatch:
 
 permissions:
