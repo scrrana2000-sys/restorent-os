@@ -799,6 +799,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         onOpenCart={() => setActiveMobileTab((prev) => (prev === 'cart' ? 'menu' : 'cart'))}
         onOpenMobileMenu={onOpenMobileMenu}
         onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
         onOpenRecentOrders={() => {
           if (activeOrderForBill) {
             setIsBillModalOpen(true);
@@ -847,9 +849,6 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
             categories={categories}
             selectedCategoryId={selectedCategoryId}
             onSelectCategory={setSelectedCategoryId}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            totalItemsCount={filteredItems.length}
           />
 
           <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-[calc(11rem+env(safe-area-inset-bottom,0px))] lg:pb-4">
