@@ -38,10 +38,10 @@ export const KitchenHeader: React.FC<KitchenHeaderProps> = ({
   const { profile, user } = useAuth();
 
   return (
-    <header className="sticky top-0 z-20 bg-slate-900 border-b border-slate-800 text-white px-4 py-3 shadow-md">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <header className="sticky top-0 z-20 w-full max-w-full min-w-0 overflow-x-hidden bg-slate-900 border-b border-slate-800 text-white px-3 sm:px-4 py-3 shadow-md">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 min-w-0">
         {/* Left: Outlet & Kitchen Title */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-500 flex items-center justify-center text-white shadow-md shadow-amber-900/40 shrink-0">
             <CookingPot className="w-5 h-5" />
           </div>
@@ -64,7 +64,7 @@ export const KitchenHeader: React.FC<KitchenHeaderProps> = ({
         </div>
 
         {/* Center: Live Operational Status Filters */}
-        <div className="flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 overflow-x-auto no-scrollbar max-w-full shrink-0">
+        <div className="w-full lg:w-auto min-w-0 flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 overflow-x-auto no-scrollbar max-w-full shrink-0">
           <button
             type="button"
             data-testid="filter-all"
@@ -132,7 +132,7 @@ export const KitchenHeader: React.FC<KitchenHeaderProps> = ({
         {/* Right: View Mode Toggle, Offline Indicator & Refresh */}
         <div className="flex items-center gap-2">
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700">
+          <div className="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700 shrink-0 min-w-max self-end lg:self-auto">
             <button
               type="button"
               data-testid="view-lanes"
