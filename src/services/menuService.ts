@@ -365,16 +365,52 @@ export async function toggleItemOnlineAvailability(
   itemId: string,
   isOnlineAvailable: boolean
 ): Promise<void> {
-  await enforcePermission(restaurantId, 'access_items');
+  const cleanRestaurantId = restaurantId?.trim();
+  const cleanItemId = itemId?.trim();
+  if (!cleanRestaurantId || !cleanItemId) {
+    throw new Error('restaurantId and itemId are required to update online item availability.');
+  }
+
+  const isTestRuntime = typeof import.meta !== 'undefined'
+    && Boolean((import.meta as any).env?.MODE === 'test');
+
+  if (typeof window !== 'undefined' && !isTestRuntime) {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Authentication is required to update online item availability.');
+
+    const idToken = await currentUser.getIdToken();
+    const response = await fetch('/api/menu-items/toggle-online-availability', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        restaurantId: cleanRestaurantId,
+        itemId: cleanItemId,
+        isOnlineAvailable
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.success) {
+      throw new Error(payload?.message || 'Failed to update online item availability.');
+    }
+
+    invalidateMenuCache(cleanRestaurantId);
+    return;
+  }
+
+  await enforcePermission(cleanRestaurantId, 'access_items');
   try {
-    const ref = doc(db, 'restaurants', restaurantId, 'items', itemId);
+    const ref = doc(db, 'restaurants', cleanRestaurantId, 'items', cleanItemId);
     await updateDoc(ref, {
       isOnlineAvailable,
       updatedAt: serverTimestamp()
     });
-    invalidateMenuCache(restaurantId);
+    invalidateMenuCache(cleanRestaurantId);
   } catch (error) {
-    throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${restaurantId}/items/${itemId}`);
+    throw handleFirestoreError(error, OperationType.UPDATE, `restaurants/${cleanRestaurantId}/items/${cleanItemId}`);
   }
 }
 
