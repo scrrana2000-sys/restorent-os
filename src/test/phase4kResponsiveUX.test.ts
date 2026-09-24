@@ -89,4 +89,21 @@ describe('Phase 4K — Responsive Operational UX & Viewport Adaptability', () =>
     expect(overdueKots.length).toBe(1);
     expect(overdueKots[0].id).toBe('kot_1');
   });
+  it('6. Mobile shell prevents horizontal overflow and flex wrapping collisions', async () => {
+    const { readFileSync } = await import('node:fs');
+    const read = (file: string) => readFileSync(file, 'utf8');
+    const root = process.cwd();
+    const adminLayout = read(`${root}/src/components/layout/AdminLayout.tsx`);
+    const posHeader = read(`${root}/src/components/pos/PosHeader.tsx`);
+    const captainHeader = read(`${root}/src/components/captain/CaptainHeader.tsx`);
+    const kitchenHeader = read(`${root}/src/components/kitchen/KitchenHeader.tsx`);
+    const ordersPage = read(`${root}/src/pages/OrdersPage.tsx`);
+
+    expect(adminLayout).toContain('overflow-x-hidden');
+    expect(posHeader).toContain('overflow-x-auto no-scrollbar');
+    expect(captainHeader).toContain('flex-col lg:flex-row');
+    expect(kitchenHeader).toContain('flex-col lg:flex-row');
+    expect(ordersPage).not.toContain('min-w-[240px]');
+  });
+
 });
