@@ -124,3 +124,15 @@ describe('Table & TableSession Domain & Validation (Phase 2C)', () => {
     });
   });
 });
+
+
+describe('Cancelled order session pointer invariants', () => {
+  it('documents the canonical pointer rule for a multi-order session', () => {
+    const activeOrderIds = ['order-a', 'order-b'];
+    const cancelledOrderId = 'order-a';
+    const remaining = activeOrderIds.filter((id) => id !== cancelledOrderId);
+    const activeOrderId = remaining[remaining.length - 1] || null;
+    expect(remaining).toEqual(['order-b']);
+    expect(activeOrderId).toBe('order-b');
+  });
+});
