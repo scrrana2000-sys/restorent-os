@@ -80,7 +80,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
       }`}
     >
       {/* 1. Food Image Header with Veg/Non-Veg Badge and Popular Star */}
-      <div className="relative w-full aspect-[4/3] h-28 bg-slate-100 overflow-hidden shrink-0">
+      <div className="relative w-full h-24 sm:h-28 bg-slate-100 overflow-hidden shrink-0">
         {item.imageUrl && !imgError ? (
           <img
             src={item.imageUrl}
@@ -140,7 +140,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
       </div>
 
       {/* 2. Card Content: Title, Price, and Stepper/Add Button */}
-      <div className="p-2.5 flex-1 flex flex-col justify-between gap-1.5">
+      <div className="p-2 flex-1 flex flex-col justify-between gap-1">
         <div className="min-w-0">
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0">
@@ -183,14 +183,14 @@ const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
         <div className="pt-0.5">
           {quantityInCart > 0 && onUpdateQuantity ? (
             <div
-              className="flex items-center justify-between bg-slate-50 border border-indigo-200 rounded-lg p-0.5 h-8 shadow-2xs"
+              className="flex items-center justify-between bg-slate-50 border border-indigo-200 rounded-lg p-0.5 h-11 shadow-2xs"
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 type="button"
                 aria-label={`Decrease ${item.name} quantity`}
                 onClick={handleDecrement}
-                className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-md flex items-center justify-center bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold active:scale-90 transition-transform"
+                className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-md flex items-center justify-center bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold active:scale-95 transition-transform"
               >
                 <Minus className="w-3 h-3" />
               </button>
@@ -201,7 +201,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
                 type="button"
                 aria-label={`Increase ${item.name} quantity`}
                 onClick={handleIncrement}
-                className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-md flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-bold active:scale-90 transition-transform shadow-2xs"
+                className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-md flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-bold active:scale-95 transition-transform shadow-2xs"
               >
                 <Plus className="w-3 h-3" />
               </button>
@@ -245,7 +245,7 @@ export const MenuGrid: React.FC<MenuGridProps> = React.memo(({
 
   if (loading) {
     return (
-      <div className="w-full min-w-0 p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+      <div className="w-full min-w-0 px-3 py-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
         {Array.from({ length: 10 }).map((_, idx) => (
           <div
             key={idx}
@@ -297,7 +297,7 @@ export const MenuGrid: React.FC<MenuGridProps> = React.memo(({
   }
 
   return (
-    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+    <div className="px-3 py-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3">
       {items.map((item) => (
         <MenuItemCard
           key={item.itemId}
