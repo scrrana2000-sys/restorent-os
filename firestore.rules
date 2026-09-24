@@ -364,6 +364,7 @@ service cloud.firestore {
       // Live operations: item online availability is explicitly writable by owner/manager.
       // Production deployment trigger: OIDC authentication enabled for Firebase rules.
       // Final rules deployment trigger after OIDC workflow correction.
+      // Rules deployment trigger: corrected Firebase project resolution.
 
       match /items/{itemId} {
         allow read: if isServer()
