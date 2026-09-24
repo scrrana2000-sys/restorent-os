@@ -95,9 +95,9 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
                 <Search className="w-4 h-4" />
               </button>
               {isSearchOpen && (
-                <div className="absolute left-0 top-10 z-40 flex items-center gap-1.5 w-[min(250px,calc(100vw-32px))] p-1.5 bg-white border border-slate-200 rounded-lg shadow-lg">
+                <div className="absolute right-0 top-10 z-50 flex items-center gap-1.5 w-[min(280px,calc(100vw-24px))] max-w-[calc(100vw-24px)] p-1.5 bg-white border border-slate-200 rounded-lg shadow-lg">
                   <Search className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
-                  <input autoFocus type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search food..." className="flex-1 min-w-0 h-8 px-1.5 text-xs bg-transparent focus:outline-none text-slate-800 placeholder-slate-400" />
+                  <input autoFocus type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search food..." className="flex-1 min-w-0 w-0 h-8 px-1.5 text-xs bg-transparent focus:outline-none text-slate-800 placeholder-slate-400" />
                   {searchQuery && <button type="button" onClick={() => onSearchChange('')} className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100" aria-label="Clear search"><X className="w-3.5 h-3.5" /></button>}
                 </div>
               )}
