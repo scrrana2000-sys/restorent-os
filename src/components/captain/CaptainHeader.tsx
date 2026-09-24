@@ -47,10 +47,10 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
   const { profile, user } = useAuth();
 
   return (
-    <header className="sticky top-0 z-20 bg-slate-900 border-b border-slate-800 text-white px-4 py-3 shadow-md">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <header className="sticky top-0 z-20 w-full max-w-full min-w-0 overflow-x-hidden bg-slate-900 border-b border-slate-800 text-white px-3 sm:px-4 py-3 shadow-md">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 min-w-0">
         {/* Brand & Floor Staff Info */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-indigo-900/40 shrink-0">
             <Layers className="w-5 h-5" />
           </div>
@@ -73,9 +73,9 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
         </div>
 
         {/* View Mode Navigation Tabs & Filters */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full shrink-0">
+        <div className="w-full lg:w-auto min-w-0 flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full shrink-0">
           {onTabChange && (
-            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0 min-w-max">
               <button
                 type="button"
                 data-testid="tab-floor-tables"
@@ -108,7 +108,7 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
 
           {/* Table Filters (Shown when Floor Map tab is active) */}
           {activeTab === 'tables' && (
-            <div className="flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 overflow-x-auto no-scrollbar shrink-0">
+            <div className="flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 overflow-x-auto no-scrollbar shrink-0 min-w-max">
               <button
                 type="button"
                 data-testid="captain-filter-all"
