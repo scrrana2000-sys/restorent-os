@@ -1956,7 +1956,7 @@ export class OrderService implements IOrderService {
 
       transaction.update(orderRef, sanitizedPayload);
 
-      if (isAllCancelled && tableSessionRef && latestSessionSnap?.exists()) {
+      if (isAllCancelled && tableSessionRef && latestSessionSnap && latestSessionSnap.exists()) {
         const sessionData = latestSessionSnap.data() as any;
         const reconciled = reconcileCancelledOrderInTableSession(sessionData, cleanOrderId);
         transaction.update(tableSessionRef, {
