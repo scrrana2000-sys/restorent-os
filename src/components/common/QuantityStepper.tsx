@@ -53,19 +53,19 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
   // Dimensions & typography based on size
   const sizeStyles = {
     sm: {
-      container: 'h-8 px-1 gap-1',
+      container: 'min-h-[44px] h-auto px-1 gap-1',
       btn: 'w-11 h-11 rounded-md text-xs',
       icon: 'w-3 h-3',
       text: 'w-6 text-xs font-bold'
     },
     md: {
-      container: 'h-9 sm:h-10 px-1 gap-1.5',
+      container: 'min-h-[44px] h-auto px-1 gap-1.5',
       btn: 'w-11 h-11 rounded-lg text-xs',
       icon: 'w-3.5 h-3.5',
       text: 'w-7 sm:w-8 text-xs sm:text-sm font-black'
     },
     lg: {
-      container: 'h-11 sm:h-12 px-1.5 gap-2',
+      container: 'min-h-[44px] h-auto px-1.5 gap-2',
       btn: 'w-11 h-11 rounded-xl text-sm',
       icon: 'w-4 h-4',
       text: 'w-8 sm:w-10 text-sm sm:text-base font-black'
