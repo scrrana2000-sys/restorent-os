@@ -47,7 +47,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = React.memo(({
               key={cat.categoryId}
               type="button"
               onClick={() => onSelectCategory(cat.categoryId)}
-              className={`h-8 px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-150 shrink-0 flex items-center gap-1.5 active:scale-95 ${
+              className={`min-h-[44px] h-10 px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-150 shrink-0 flex items-center gap-1.5 active:scale-95 ${
                 isSelected
                   ? 'bg-indigo-600 text-white shadow-2xs'
                   : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/60'
