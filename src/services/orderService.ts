@@ -31,6 +31,7 @@ import { auditService } from './auditService';
 import { sanitizeFirestoreData } from '../utils/sanitize';
 import { stockConsumptionService } from './stockConsumptionService';
 import { orderFinalizationService } from './orderFinalizationService';
+import { reconcileCancelledOrderInTableSession } from './orderSessionReconciliation';
 import { parseTimestampToMillis } from '../utils/dateUtils';
 import { reconcileOrderFinancials } from '../utils/orderFinancials';
 import { getApiUrl } from '../utils/apiConfig';
@@ -1533,23 +1534,10 @@ export class OrderService implements IOrderService {
             if (!sessionSnap.exists()) return;
 
             const sessionData = sessionSnap.data() as any;
-            const currentActiveIds = Array.isArray(sessionData.activeOrderIds)
-              ? sessionData.activeOrderIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim() !== '')
-              : [];
-
-            const remainingIds = currentActiveIds.filter((id: string) => id !== cleanOrderId);
-            const canonicalId = String(sessionData.activeOrderId || '').trim();
-
-            // If the cancelled order was not canonical, preserve the current bill pointer.
-            // Otherwise promote the most recent surviving order, if any.
-            const nextActiveOrderId =
-              canonicalId && canonicalId !== cleanOrderId
-                ? canonicalId
-                : (remainingIds[remainingIds.length - 1] || null);
+            const reconciled = reconcileCancelledOrderInTableSession(sessionData, cleanOrderId);
 
             const update: Record<string, any> = {
-              activeOrderIds: remainingIds,
-              activeOrderId: nextActiveOrderId,
+              ...reconciled,
               updatedAt: serverTimestamp()
             };
 
