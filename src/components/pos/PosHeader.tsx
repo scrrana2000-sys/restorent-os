@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Utensils, ShoppingBag, Bike, PauseCircle, Receipt, DollarSign, Globe2,
-  Menu, ShoppingCart, ChevronDown, X, Users, Sparkles, LogOut, ShieldCheck, Wifi, Mic } from 'lucide-react';
+  Menu, ShoppingCart, ChevronDown, X, Users, Sparkles, LogOut, ShieldCheck, Wifi, Search, Mic } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { OfflineSyncIndicator } from '../OfflineSyncIndicator';
@@ -33,6 +33,8 @@ interface PosHeaderProps {
   onOpenMobileMenu?: () => void;
   onOpenVoiceModal?: () => void;
   isVoiceListening?: boolean;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 export const PosHeader: React.FC<PosHeaderProps> = ({
@@ -41,11 +43,12 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   heldOrdersCount, onOpenHeldOrders, onOpenRecentOrders, paymentDueCount = 0,
   totalPaymentDueMinor = 0, onOpenPaymentDue, onlineOrderCount = 0, onOpenOnlineOrders,
   onlineOrderingLive = false, onOpenLiveOperations, onOpenPosItemAvailability, cartItemsCount = 0, onOpenCart,
-  onOpenMobileMenu, onOpenVoiceModal, isVoiceListening = false
+  onOpenMobileMenu, onOpenVoiceModal, isVoiceListening = false, searchQuery = '', onSearchChange
 }) => {
   const { restaurant } = useRestaurant();
   const { profile, user, logout } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -79,6 +82,27 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" /><span className="truncate">{branchSubtitle}</span>
             </div>
           </div>
+          {onSearchChange && (
+            <div className="relative shrink-0">
+              <button
+                id="pos-header-search-btn"
+                type="button"
+                onClick={() => setIsSearchOpen((open) => !open)}
+                className={`w-9 h-9 rounded-lg border flex items-center justify-center active:scale-95 transition-all ${isSearchOpen || searchQuery ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-slate-100 border-slate-200 text-slate-600'}`}
+                title="Search menu"
+                aria-label="Search menu"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+              {isSearchOpen && (
+                <div className="absolute left-0 top-10 z-40 flex items-center gap-1.5 w-[min(250px,calc(100vw-32px))] p-1.5 bg-white border border-slate-200 rounded-lg shadow-lg">
+                  <Search className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                  <input autoFocus type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search food..." className="flex-1 min-w-0 h-8 px-1.5 text-xs bg-transparent focus:outline-none text-slate-800 placeholder-slate-400" />
+                  {searchQuery && <button type="button" onClick={() => onSearchChange('')} className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100" aria-label="Clear search"><X className="w-3.5 h-3.5" /></button>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="w-full sm:w-auto min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
