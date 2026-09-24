@@ -366,6 +366,7 @@ service cloud.firestore {
       // Final rules deployment trigger after OIDC workflow correction.
       // Rules deployment trigger: corrected Firebase project resolution.
       // Firestore-only deployment trigger: Storage IAM is independent.
+      // CI Rules Admin permission bootstrap trigger.
 
       match /items/{itemId} {
         allow read: if isServer()
