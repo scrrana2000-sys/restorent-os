@@ -171,7 +171,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const isDarkView = currentView === 'subscription';
 
   return (
-    <div className={`min-h-screen w-full max-w-full min-w-0 overflow-x-hidden ${isDarkView ? 'bg-[#0B0F19] text-slate-100' : 'bg-slate-50'} flex relative`}>
+    <div className={`min-h-[100dvh] w-full max-w-full min-w-0 overflow-x-hidden ${isDarkView ? 'bg-[#0B0F19] text-slate-100' : 'bg-slate-50'} flex relative`}>
       {/* Switching Context Overlay */}
       {isSwitching && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex flex-col items-center justify-center transition-all duration-200">
@@ -268,10 +268,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
         <main className={`flex-1 min-w-0 w-full max-w-full overflow-x-hidden ${
           ['pos', 'kitchen', 'captain'].includes(currentView)
-            ? 'max-w-none w-full !p-0 sm:!p-2 lg:!p-4 pb-16 sm:pb-18 lg:pb-4'
+            ? 'max-w-none w-full !p-0 sm:!p-2 lg:!p-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:pb-4'
             : isDarkView
-            ? 'max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 pb-24 sm:pb-28 lg:pb-12 bg-[#0B0F19]'
-            : 'max-w-7xl w-full mx-auto p-2 sm:p-4 lg:p-6 pb-16 sm:pb-18 lg:pb-6'
+            ? 'max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-12 bg-[#0B0F19]'
+            : 'max-w-7xl w-full mx-auto p-2 sm:p-4 lg:p-6 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:pb-6'
         }`}>
           {restaurantLoading && !restaurant ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
