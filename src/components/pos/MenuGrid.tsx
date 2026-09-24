@@ -201,7 +201,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
                 type="button"
                 aria-label={`Increase ${item.name} quantity`}
                 onClick={handleIncrement}
-                className="w-7 h-7 rounded-md flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-bold active:scale-90 transition-transform shadow-2xs"
+                className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-md flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-bold active:scale-90 transition-transform shadow-2xs"
               >
                 <Plus className="w-3 h-3" />
               </button>
@@ -212,7 +212,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = React.memo(({
               disabled={!item.isAvailable}
               aria-label={`Add ${item.name} to cart`}
               onClick={handleIncrement}
-              className={`w-full h-8 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 ${
+              className={`w-full min-h-[44px] px-2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all active:scale-95 ${
                 item.isAvailable
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
