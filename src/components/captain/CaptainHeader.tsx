@@ -80,7 +80,7 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
                 type="button"
                 data-testid="tab-floor-tables"
                 onClick={() => onTabChange('tables')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+                className={`px-3 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                   activeTab === 'tables'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
@@ -94,7 +94,7 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
                 type="button"
                 data-testid="tab-orders-kots"
                 onClick={() => onTabChange('orders')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+                className={`px-3 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                   activeTab === 'orders'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
@@ -113,7 +113,7 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
                 type="button"
                 data-testid="captain-filter-all"
                 onClick={() => onFilterChange('all')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all shrink-0 ${
                   selectedFilter === 'all'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
@@ -126,7 +126,7 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
                 type="button"
                 data-testid="captain-filter-available"
                 onClick={() => onFilterChange('available')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all shrink-0 ${
                   selectedFilter === 'available'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
@@ -140,7 +140,7 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
                 type="button"
                 data-testid="captain-filter-occupied"
                 onClick={() => onFilterChange('occupied')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all shrink-0 ${
                   selectedFilter === 'occupied'
                     ? 'bg-amber-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
@@ -156,7 +156,7 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
                   data-testid="captain-area-select"
                   value={selectedArea}
                   onChange={(e) => onAreaChange(e.target.value)}
-                  className="bg-slate-900 text-slate-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0"
+                  className="bg-slate-900 text-slate-200 text-xs font-semibold px-2.5 py-2 min-h-[44px] rounded-lg border border-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0"
                 >
                   <option value="all">All Floor Areas</option>
                   {availableAreas.map((area) => (
@@ -198,14 +198,14 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
 
         {/* Right Controls */}
         <div className="flex items-center gap-2">
-          <OfflineSyncIndicator />
+          <div className="hidden sm:block"><OfflineSyncIndicator /></div>
 
           <button
             type="button"
             data-testid="captain-refresh"
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 text-xs font-bold transition-colors disabled:opacity-50 min-h-[36px]"
+            className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 text-xs font-bold transition-colors disabled:opacity-50 min-h-[44px]"
             title="Refresh Captain Floor View"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${isRefreshing ? 'animate-spin' : ''}`} />

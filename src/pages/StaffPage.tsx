@@ -705,8 +705,8 @@ export const StaffPage: React.FC = () => {
 
       {/* MODAL 1: ADD STAFF MEMBER */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-scaleIn">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-4 sm:p-6 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain shadow-2xl animate-scaleIn">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
@@ -719,7 +719,7 @@ export const StaffPage: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
+                type="button" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
               >
                 ✕
               </button>
@@ -778,7 +778,7 @@ export const StaffPage: React.FC = () => {
                 </span>
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2.5">
+              <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5">
                 <Button
                   type="button"
                   variant="outline"
@@ -805,8 +805,8 @@ export const StaffPage: React.FC = () => {
 
       {/* MODAL 2: CHANGE ROLE */}
       {roleModalMember && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-scaleIn">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-4 sm:p-6 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain shadow-2xl animate-scaleIn">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
@@ -821,7 +821,7 @@ export const StaffPage: React.FC = () => {
               </div>
               <button
                 onClick={() => setRoleModalMember(null)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
+                type="button" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
               >
                 ✕
               </button>
@@ -877,8 +877,8 @@ export const StaffPage: React.FC = () => {
 
       {/* MODAL 3: TOGGLE ACTIVE / DEACTIVATE */}
       {statusModalMember && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-scaleIn">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-4 sm:p-6 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain shadow-2xl animate-scaleIn">
             <div className="flex items-center gap-3 mb-4">
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -935,8 +935,8 @@ export const StaffPage: React.FC = () => {
 
       {/* MODAL 4: DELETE / REVOKE STAFF MEMBERSHIP */}
       {deleteModalMember && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-scaleIn">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-4 sm:p-6 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain shadow-2xl animate-scaleIn">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center">
                 <Trash2 className="w-5 h-5" />
@@ -978,8 +978,8 @@ export const StaffPage: React.FC = () => {
 
       {/* MODAL 5: STAFF INVITATION CREATED & QR CODE */}
       {createdCredentialsModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl animate-scaleIn text-center my-auto max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl animate-scaleIn text-center my-auto max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain">
             <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-3">
               <Send className="w-6 h-6" />
             </div>
@@ -1112,8 +1112,8 @@ export const StaffPage: React.FC = () => {
 
       {/* MODAL 6: VIEW STAFF QR CODE MODAL */}
       {viewQrModalMember && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-scaleIn text-center">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-4 sm:p-6 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain shadow-2xl animate-scaleIn text-center">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2 text-left">
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center">
@@ -1130,7 +1130,7 @@ export const StaffPage: React.FC = () => {
               </div>
               <button
                 onClick={() => setViewQrModalMember(null)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
+                type="button" className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
               >
                 ✕
               </button>

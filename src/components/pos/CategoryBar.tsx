@@ -28,7 +28,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = React.memo(({
         <button
           type="button"
           onClick={() => onSelectCategory(null)}
-          className={`h-8 px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-150 shrink-0 flex items-center justify-center active:scale-95 ${
+          className={`min-h-[44px] h-10 px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-150 shrink-0 flex items-center justify-center active:scale-95 ${
             selectedCategoryId === null
               ? 'bg-indigo-600 text-white shadow-2xs'
               : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/60'
@@ -47,7 +47,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = React.memo(({
               key={cat.categoryId}
               type="button"
               onClick={() => onSelectCategory(cat.categoryId)}
-              className={`h-8 px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-150 shrink-0 flex items-center gap-1.5 active:scale-95 ${
+              className={`min-h-[44px] h-10 px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-150 shrink-0 flex items-center gap-1.5 active:scale-95 ${
                 isSelected
                   ? 'bg-indigo-600 text-white shadow-2xs'
                   : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/60'
@@ -76,7 +76,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = React.memo(({
               type="button"
               aria-label="Clear search query"
               onClick={() => onSearchChange('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-md active:scale-90"
+              className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-md active:scale-90"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -85,7 +85,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = React.memo(({
 
         {/* Filter / Count Button */}
         <div
-          className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0 cursor-pointer shadow-2xs active:scale-95"
+          className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0 shadow-2xs active:scale-95"
           title={`${totalItemsCount} items available`}
         >
           <SlidersHorizontal className="w-4 h-4 text-slate-600" />

@@ -27,7 +27,7 @@ export const NewOnlineOrderNotification: React.FC<NewOnlineOrderNotificationProp
   return (
     <div
       id="new-online-orders-notification-container"
-      className="fixed top-4 right-4 z-50 flex flex-col gap-3 max-w-sm sm:max-w-md w-full pointer-events-none px-3 sm:px-0"
+      className="fixed top-3 left-3 right-3 sm:left-auto sm:right-4 z-50 flex flex-col gap-3 max-w-sm sm:max-w-md w-auto sm:w-full max-h-[calc(100dvh-1.5rem)] overflow-y-auto overscroll-contain pointer-events-none"
     >
       {/* Multi-order banner when more than 1 notification is active */}
       {orders.length > 1 && (
@@ -114,7 +114,7 @@ export const NewOnlineOrderNotification: React.FC<NewOnlineOrderNotificationProp
                 id={`btn-dismiss-online-order-${order.id}`}
                 type="button"
                 onClick={() => onDismiss(order.id)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 aria-label="Dismiss notification"
                 title="Dismiss notification"
               >

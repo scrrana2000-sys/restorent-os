@@ -79,7 +79,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           : 'bg-white/95 border-slate-200 text-slate-600'
       }`}
     >
-      <div className="flex items-center justify-around w-full max-w-none min-w-0 h-13 sm:h-14 px-1 mx-0">
+      <div className="flex items-center justify-around w-full max-w-none min-w-0 min-h-[56px] h-auto pt-1 px-1 mx-0">
         {allowedNav.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
@@ -91,7 +91,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               id={`mobile-nav-${item.id}-btn`}
               type="button"
               onClick={() => onNavigate(item.id)}
-              className={`flex-1 flex flex-col items-center justify-center h-full min-h-[44px] relative py-1 px-0.5 rounded-lg transition-all duration-150 active:scale-95 ${
+              className={`flex-1 min-w-0 flex flex-col items-center justify-center min-h-[48px] relative py-1 px-0.5 rounded-lg transition-all duration-150 active:scale-95 ${
                 isActive
                   ? isDark
                     ? 'text-indigo-400 font-bold bg-indigo-500/10'

@@ -478,7 +478,7 @@ export const KitchenPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-slate-950 text-white flex flex-col font-sans">
+    <div className="min-h-[100dvh] w-full max-w-full min-w-0 overflow-x-hidden bg-slate-950 text-white flex flex-col font-sans">
       {/* Header */}
       <KitchenHeader
         totalActiveCount={summaryCounts.totalActive}
@@ -519,7 +519,7 @@ export const KitchenPage: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-full min-w-0 p-2 sm:p-4 overflow-y-auto overflow-x-hidden">
+      <main className="flex-1 w-full max-w-full min-w-0 p-2 sm:p-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-4 overflow-y-auto overflow-x-hidden">
         {error ? (
           /* Connection Error Banner with Retry */
           <div className="p-6 max-w-xl mx-auto bg-rose-500/10 border border-rose-500/20 rounded-2xl text-center text-white my-8">
