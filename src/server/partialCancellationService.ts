@@ -3,6 +3,7 @@ import { adminDb } from './firebaseAdmin';
 import { calculateOrderTotals, calculateOrderItemLine } from '../services/orderCalculationService';
 import { KOT, KOTItem } from '../types/kot';
 import { Order, OrderItem, OrderStatus } from '../types/order';
+import { reconcileCancelledOrderInTableSession } from '../services/orderSessionReconciliation';
 
 export async function partiallyCancelKOTItemsWithAdmin(
   restaurantId: string,
@@ -153,14 +154,51 @@ export async function partiallyCancelKOTItemsWithAdmin(
   const orderStatus: OrderStatus = allOrderCancelled ? 'cancelled' : order.status;
   const dueAmountMinor = totals.grandTotalMinor - paidAmountMinor;
 
+  const tableSessionRef = allOrderCancelled && order.tableSessionId
+    ? adminDb.doc(`restaurants/${rid}/tableSessions/${String(order.tableSessionId).trim()}`)
+    : null;
+
   await adminDb.runTransaction(async (tx) => {
-    const [latestKotSnap, latestOrderSnap] = await Promise.all([tx.get(kotRef), tx.get(orderRef)]);
-    if (!latestKotSnap.exists || !latestOrderSnap.exists) throw new Error('KOT or order no longer exists. Please retry.');
+    // Every read is intentionally completed before any write so Firestore can
+    // retry the whole cancellation atomically if another staff member changes
+    // the KOT, order, or table session concurrently.
+    const [latestKotSnap, latestOrderSnap, latestSessionSnap] = await Promise.all([
+      tx.get(kotRef),
+      tx.get(orderRef),
+      tableSessionRef ? tx.get(tableSessionRef) : Promise.resolve(null)
+    ]);
+
+    if (!latestKotSnap.exists || !latestOrderSnap.exists) {
+      throw new Error('KOT or order no longer exists. Please retry.');
+    }
 
     const latestKot = latestKotSnap.data() as KOT;
     const latestOrder = latestOrderSnap.data() as Order;
-    if (latestKot.status === 'served' || latestKot.status === 'cancelled') throw new Error('KOT changed and can no longer be cancelled.');
-    if (latestOrder.status === 'completed' || latestOrder.status === 'cancelled') throw new Error('Order changed and can no longer be cancelled.');
+    if (latestKot.status === 'served' || latestKot.status === 'cancelled') {
+      throw new Error('KOT changed and can no longer be cancelled.');
+    }
+    if (latestOrder.status === 'completed' || latestOrder.status === 'cancelled') {
+      throw new Error('Order changed and can no longer be cancelled.');
+    }
+
+    // Do not apply a stale pre-transaction calculation over a newer order.
+    // Quantity/cancellation counters and financial baseline must match the
+    // snapshot from which updatedOrderItems/totals were calculated.
+    const latestItemsById = new Map((latestOrder.items || []).map((item) => [item.itemId, item]));
+    for (const originalItem of order.items || []) {
+      const latestItem = latestItemsById.get(originalItem.itemId);
+      if (!latestItem ||
+          Number(latestItem.quantity) !== Number(originalItem.quantity) ||
+          Number(latestItem.cancelledQuantity || 0) !== Number(originalItem.cancelledQuantity || 0)) {
+        throw new Error('Order changed concurrently. Please retry the cancellation.');
+      }
+    }
+    if (
+      Number(latestOrder.paidAmountMinor || 0) !== Number(order.paidAmountMinor || 0) ||
+      Number(latestOrder.grandTotalMinor || 0) !== Number(order.grandTotalMinor || 0)
+    ) {
+      throw new Error('Order financials changed concurrently. Please retry the cancellation.');
+    }
 
     tx.update(kotRef, {
       items: updatedKotItems,
@@ -187,6 +225,15 @@ export async function partiallyCancelKOTItemsWithAdmin(
         cancelledBy
       } : {})
     });
+
+    if (allOrderCancelled && tableSessionRef && latestSessionSnap?.exists()) {
+      const sessionData = latestSessionSnap.data() as any;
+      const reconciled = reconcileCancelledOrderInTableSession(sessionData, kot.orderId);
+      tx.update(tableSessionRef, {
+        ...reconciled,
+        updatedAt: FieldValue.serverTimestamp()
+      });
+    }
   });
 
   return {
