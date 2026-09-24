@@ -53,6 +53,19 @@ export default tseslint.config(
       // the authoritative type-safety gate.
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'prefer-const': 'warn',
+      'no-empty': 'warn',
+      'react/no-unescaped-entities': 'warn',
+      'react/prop-types': 'warn',
+      'react/display-name': 'warn',
+      'react-hooks/rules-of-hooks': 'warn',
+      'jsx-a11y/label-has-associated-control': 'warn',
+      'jsx-a11y/click-events-have-key-events': 'warn',
+      'jsx-a11y/no-static-element-interactions': 'warn',
+      'jsx-a11y/img-redundant-alt': 'warn',
+      'jsx-a11y/no-autofocus': 'warn',
+      'jsx-a11y/no-noninteractive-element-interactions': 'warn',
+      '@typescript-eslint/ban-ts-comment': 'warn',
     },
     settings: {
       react: {
