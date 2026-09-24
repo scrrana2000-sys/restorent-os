@@ -108,6 +108,20 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
               className={`lg:hidden w-9 h-9 rounded-lg border flex items-center justify-center active:scale-95 transition-all ${isVoiceListening ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}
               title="Voice order" aria-label="Voice order"><Mic className="w-4 h-4" /></button>
           )}
+          {onSearchChange && (
+            <button
+              id="pos-header-search-btn-desktop"
+              type="button"
+              onClick={() => setIsSearchOpen((open) => !open)}
+              className={`hidden lg:flex w-9 h-9 rounded-lg border items-center justify-center active:scale-95 transition-all ${isSearchOpen || searchQuery ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-slate-100 border-slate-200 text-slate-600'}`}
+              title="Search menu" aria-label="Search menu"
+            ><Search className="w-4 h-4" /></button>
+          )}
+          {onOpenVoiceModal && (
+            <button id="pos-header-voice-btn-desktop" type="button" onClick={onOpenVoiceModal}
+              className={`hidden lg:flex w-9 h-9 rounded-lg border items-center justify-center active:scale-95 transition-all ${isVoiceListening ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}
+              title="Voice order" aria-label="Voice order"><Mic className="w-4 h-4" /></button>
+          )}
         </div>
 
         <div className="w-full sm:w-auto min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
