@@ -1,5 +1,11 @@
 name: Deploy RestaurantOS API to Cloud Run
 
+# Production API deployment:
+# 1) Verify the complete project on GitHub Actions.
+# 2) Build the production artifacts on the GitHub runner.
+# 3) Deploy the already-built, self-contained runtime with Cloud Run's
+#    source-without-build path so Cloud Build/Docker registry permissions
+#    cannot break the release.
 on:
   push:
     branches: [main]
@@ -19,17 +25,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22.22.2
           cache: npm
+
       - run: npm install --no-audit --no-fund --package-lock=false
       - run: npm run verify
+
       - name: Reproduce production Docker build
         run: DOCKER_BUILDKIT=1 docker build --progress=plain --pull -t restaurantos-cloud-run-debug .
 
   deploy:
-    name: Deploy pinned source without registry dependency
+    name: Deploy self-contained runtime to Cloud Run
     runs-on: ubuntu-latest
     needs: verify
     timeout-minutes: 25
@@ -43,6 +52,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
 
       - name: Validate deployment configuration
         run: |
@@ -72,21 +86,55 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Deploy production image to Cloud Run
+      - name: Install production dependencies and build runtime
         run: |
           set -euo pipefail
-          IMAGE="us-docker.pkg.dev/cloudrun/container/hello"
-          gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --image="$IMAGE" \
+          npm install --no-audit --no-fund --package-lock=false
+          npm run build
+          npm prune --omit=dev
+
+          rm -rf .cloud-run-runtime
+          mkdir -p .cloud-run-runtime
+          cp package.json .cloud-run-runtime/
+          cp firebase-applet-config.json .cloud-run-runtime/
+          cp -R node_modules .cloud-run-runtime/
+          cp -R dist .cloud-run-runtime/
+          cp -R dist-server .cloud-run-runtime/
+          cp -R public .cloud-run-runtime/
+
+          # The no-build path accepts a self-contained source archive.
+          # Keep a hard safety margin below Cloud Run's 250 MiB archive limit.
+          ARCHIVE_SIZE_BYTES="$(tar -C .cloud-run-runtime -czf /tmp/restaurantos-runtime.tar.gz . && stat -c '%s' /tmp/restaurantos-runtime.tar.gz)"
+          ARCHIVE_SIZE_MIB="$((ARCHIVE_SIZE_BYTES / 1024 / 1024))"
+          echo "Self-contained runtime archive: ${ARCHIVE_SIZE_MIB} MiB"
+          if [ "$ARCHIVE_SIZE_BYTES" -gt $((240 * 1024 * 1024)) ]; then
+            echo "::error::Runtime archive is too large for Cloud Run no-build deployment: ${ARCHIVE_SIZE_MIB} MiB."
+            exit 1
+          fi
+
+      - name: Deploy production runtime to Cloud Run without Cloud Build
+        run: |
+          set -euo pipefail
+          cd .cloud-run-runtime
+
+          gcloud beta run deploy "$CLOUD_RUN_SERVICE" \
+            --source . \
+            --no-build \
+            --base-image=nodejs22 \
+            --command=node \
+            --args=dist-server/server.cjs \
             --region="$GCP_REGION" \
             --project="$GCP_PROJECT_ID" \
             --platform=managed \
             --allow-unauthenticated \
             --port=8080 \
+            --memory=1Gi \
+            --cpu=1 \
+            --update-env-vars "^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57" \
+            --remove-secrets "SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET" \
             --quiet
 
       - name: Verify Cloud Run revision and health
-
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
@@ -103,6 +151,7 @@ jobs:
             fi
             sleep 10
           done
+
           echo "::error::Cloud Run latest revision did not become ready within 5 minutes."
           gcloud run revisions describe "$CREATED" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(metadata.name,status.conditions,status.containerStatuses,spec.containers)' || true
           gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$CLOUD_RUN_SERVICE AND resource.labels.revision_name=$CREATED" --project "$GCP_PROJECT_ID" --limit=80 --order=desc --format='value(timestamp,severity,textPayload,jsonPayload.message)' || true
