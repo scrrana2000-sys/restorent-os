@@ -29,7 +29,7 @@ jobs:
         run: DOCKER_BUILDKIT=1 docker build --progress=plain --pull -t restaurantos-cloud-run-debug .
 
   deploy:
-    name: Build and deploy Google Container Registry image
+    name: Deploy pinned source with public runtime builder
     runs-on: ubuntu-latest
     needs: verify
     timeout-minutes: 25
@@ -40,7 +40,6 @@ jobs:
       CLOUD_RUN_SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCR_IMAGE_NAME: restaurantos-api
 
     steps:
       - uses: actions/checkout@v4
@@ -73,25 +72,22 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Configure Google Container Registry
+      - name: Deploy production revision from pinned public base image
         run: |
           set -euo pipefail
-          gcloud auth configure-docker gcr.io --quiet
-
-      - name: Build and publish production API image to GCR
-        run: |
-          set -euo pipefail
-          IMAGE="gcr.io/${GCP_PROJECT_ID}/${GCR_IMAGE_NAME}:${GITHUB_SHA}"
-          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-
-          DOCKER_BUILDKIT=1 docker build             --progress=plain             --pull             --provenance=false             --sbom=false             --platform=linux/amd64             -t "$IMAGE"             .
-
-          docker push "$IMAGE"
-
-      - name: Deploy production image to Cloud Run
-        run: |
-          set -euo pipefail
-          gcloud run deploy "$CLOUD_RUN_SERVICE"             --image="$IMAGE"             --region="$GCP_REGION"             --project="$GCP_PROJECT_ID"             --platform=managed             --allow-unauthenticated             --port=3000             --update-env-vars="^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57"             --remove-secrets="SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET"             --quiet
+          SOURCE_URL="https://codeload.github.com/scrrana2000-sys/restorent-os/tar.gz/${GITHUB_SHA}"
+          STARTUP_SCRIPT='set -e; rm -rf /app/src; mkdir -p /app/src; node -e "fetch(\"'"'"'${SOURCE_URL}'"'"'\").then(r=>r.arrayBuffer()).then(b=>require(\"fs\").writeFileSync(\"/tmp/src.tgz\"\,Buffer.from(b)))"; tar -xzf /tmp/src.tgz --strip-components=1 -C /app/src; cd /app/src; npm install --no-audit --no-fund --package-lock=false; npm run build; exec node dist-server/server.cjs'
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --image=node:22-bookworm-slim \
+            --command=bash \
+            --args=-lc,"$STARTUP_SCRIPT" \
+            --region="$GCP_REGION" \
+            --project="$GCP_PROJECT_ID" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=3000 \
+            --update-env-vars="^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57" \
+            --quiet
 
       - name: Verify Cloud Run revision and health
         run: |
@@ -110,7 +106,6 @@ jobs:
             fi
             sleep 10
           done
-
           echo "::error::Cloud Run latest revision did not become ready within 5 minutes."
           gcloud run revisions describe "$CREATED" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='yaml(metadata.name,status.conditions,status.containerStatuses,spec.containers)' || true
           gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=$CLOUD_RUN_SERVICE AND resource.labels.revision_name=$CREATED" --project "$GCP_PROJECT_ID" --limit=80 --order=desc --format='value(timestamp,severity,textPayload,jsonPayload.message)' || true
