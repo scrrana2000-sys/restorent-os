@@ -117,6 +117,8 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
           </div>
         </div>
 
+        <h2 className="sr-only">Restaurant discovery results</h2>
+
           {/* Collapsible Search and Filters Panel */}
           {showFilters && (
             <div className="p-4 bg-white border border-slate-100 rounded-2xl shadow-md space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
