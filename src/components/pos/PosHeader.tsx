@@ -159,25 +159,19 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
         </div>
       </div>
 
-      <div className={`grid gap-2 min-w-0 w-full ${allowedOrderTypes.length === 1 ? 'grid-cols-1' : allowedOrderTypes.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-        {allowedOrderTypes.includes('dineIn') && (
-          <button id="order-type-dinein-btn" type="button" onClick={() => onOrderTypeChange('dineIn')}
-            className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${orderType === 'dineIn' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'}`}>
-            <Utensils className={`w-4 h-4 shrink-0 ${orderType === 'dineIn' ? 'text-white' : 'text-indigo-600'}`} /><span>Dine-In</span>
-          </button>
-        )}
-        {allowedOrderTypes.includes('takeaway') && (
-          <button id="order-type-takeaway-btn" type="button" onClick={() => onOrderTypeChange('takeaway')}
-            className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${orderType === 'takeaway' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'}`}>
-            <ShoppingBag className={`w-4 h-4 shrink-0 ${orderType === 'takeaway' ? 'text-white' : 'text-slate-700'}`} /><span>Parcel</span>
-          </button>
-        )}
-        {allowedOrderTypes.includes('delivery') && (
-          <button id="order-type-delivery-btn" type="button" onClick={() => onOrderTypeChange('delivery')}
-            className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${orderType === 'delivery' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'}`}>
-            <Bike className={`w-4 h-4 shrink-0 ${orderType === 'delivery' ? 'text-white' : 'text-slate-700'}`} /><span>Delivery</span>
-          </button>
-        )}
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2 min-w-0 w-full">
+        <button id="order-type-dinein-btn" type="button" onClick={() => onOrderTypeChange('dineIn')}
+          className={`h-9 sm:h-10 min-w-0 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all duration-150 active:scale-95 ${orderType === 'dineIn' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'}`}>
+          <Utensils className={`w-3.5 h-3.5 shrink-0 ${orderType === 'dineIn' ? 'text-white' : 'text-indigo-600'}`} /><span className="truncate">Dine-In</span>
+        </button>
+        <button id="order-type-takeaway-btn" type="button" onClick={() => onOrderTypeChange('takeaway')}
+          className={`h-9 sm:h-10 min-w-0 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all duration-150 active:scale-95 ${orderType === 'takeaway' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'}`}>
+          <ShoppingBag className={`w-3.5 h-3.5 shrink-0 ${orderType === 'takeaway' ? 'text-white' : 'text-slate-700'}`} /><span className="truncate">Parcel</span>
+        </button>
+        <button id="order-type-delivery-btn" type="button" onClick={() => onOrderTypeChange('delivery')}
+          className={`h-9 sm:h-10 min-w-0 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all duration-150 active:scale-95 ${orderType === 'delivery' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'}`}>
+          <Bike className={`w-3.5 h-3.5 shrink-0 ${orderType === 'delivery' ? 'text-white' : 'text-slate-700'}`} /><span className="truncate">Delivery</span>
+        </button>
       </div>
 
       {showTableSelector && orderType === 'dineIn' && (
