@@ -83,7 +83,7 @@ export const KitchenHeader: React.FC<KitchenHeaderProps> = ({
             type="button"
             data-testid="filter-waiting"
             onClick={() => onFilterChange('waiting')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg text-xs font-bold transition-all shrink-0 ${
               selectedFilter === 'waiting'
                 ? 'bg-indigo-600 text-white shadow-xs'
                 : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
@@ -150,7 +150,7 @@ export const KitchenHeader: React.FC<KitchenHeaderProps> = ({
               type="button"
               data-testid="view-grid"
               onClick={() => onViewModeChange('grid')}
-              className={`p-1.5 rounded-lg text-xs font-bold transition-colors ${
+              className={`p-1 rounded-lg min-w-[44px] min-h-[44px] text-xs font-bold transition-colors ${
                 viewMode === 'grid'
                   ? 'bg-slate-700 text-amber-400 shadow-xs'
                   : 'text-slate-400 hover:text-white'
@@ -168,7 +168,7 @@ export const KitchenHeader: React.FC<KitchenHeaderProps> = ({
             data-testid="refresh-kitchen"
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 text-xs font-bold transition-colors disabled:opacity-50 min-h-[36px]"
+            className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 text-xs font-bold transition-colors disabled:opacity-50 min-h-[44px]"
             title="Refresh KOT Queue"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${isRefreshing ? 'animate-spin' : ''}`} />
