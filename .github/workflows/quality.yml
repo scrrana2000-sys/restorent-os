@@ -1,0 +1,114 @@
+name: RestaurantOS Quality Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restaurantos-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, format, test and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+
+      - name: ESLint
+        run: npm run lint:eslint
+
+      - name: Prettier
+        run: npm run format:check
+
+      - name: Stylelint
+        run: npm run lint:css
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Web production build
+        run: npm run build:web
+
+      - name: Upload build output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restaurantos-web-build-${{ github.run_id }}
+          path: dist/
+          if-no-files-found: ignore
+
+  accessibility-and-performance:
+    name: Lighthouse + axe accessibility
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --package-lock=false
+
+      - name: Build web app
+        run: npm run build:web
+
+      - name: Start Vite preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/restaurantos-preview.log 2>&1 &
+          echo $! > /tmp/restaurantos-preview.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/restaurantos-preview.log
+          exit 1
+
+      - name: Lighthouse CI
+        run: npm run lighthouse:ci
+
+      - name: axe accessibility scan
+        run: npm run a11y:scan
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-and-a11y-reports-${{ github.run_id }}
+          path: |
+            .lighthouseci/
+            .a11y-results/
+          if-no-files-found: ignore
+
+      - name: Stop preview server
+        if: always()
+        run: |
+          if [ -f /tmp/restaurantos-preview.pid ]; then
+            kill "$(cat /tmp/restaurantos-preview.pid)" 2>/dev/null || true
+          fi

@@ -1,0 +1,33 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "ignoreFiles": [
+    "node_modules/**",
+    "dist/**",
+    "dist-server/**",
+    "coverage/**",
+    ".lighthouseci/**"
+  ],
+  "rules": {
+    "at-rule-no-unknown": [
+      true,
+      {
+        "ignoreAtRules": [
+          "tailwind",
+          "apply",
+          "layer",
+          "theme",
+          "screen",
+          "utility",
+          "variant",
+          "custom-variant",
+          "source",
+          "reference"
+        ]
+      }
+    ],
+    "custom-property-pattern": null,
+    "property-no-vendor-prefix": null,
+    "value-no-vendor-prefix": null,
+    "selector-class-pattern": null
+  }
+}
