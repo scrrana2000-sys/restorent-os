@@ -25,7 +25,7 @@
     "format:fix": "prettier --write .",
     "lint:css": "stylelint \"**/*.{css,scss,less}\"",
     "lint:css:fix": "stylelint \"**/*.{css,scss,less}\" --fix",
-    "a11y:scan": "axe http://127.0.0.1:4173/ --exit --stdout --load-delay=1500",
+    "a11y:scan": "rm -rf .a11y-results && axe http://127.0.0.1:4173/ --exit --save axe-results.json --dir .a11y-results --load-delay=1500",
     "lighthouse:ci": "lhci autorun"
   },
   "dependencies": {
