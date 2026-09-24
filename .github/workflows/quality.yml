@@ -93,8 +93,17 @@ jobs:
       - name: Lighthouse CI
         run: npm run lighthouse:ci
 
+      - name: Install matching ChromeDriver for axe
+        run: |
+          npx browser-driver-manager install chrome
+          test -f "$HOME/.browser-driver-manager/.env"
+          cat "$HOME/.browser-driver-manager/.env"
+
       - name: axe accessibility scan
-        run: npm run a11y:scan
+        run: |
+          set -euo pipefail
+          source "$HOME/.browser-driver-manager/.env"
+          axe http://127.0.0.1:4173/ --exit --save axe-results.json --dir .a11y-results --load-delay=1500 --chromedriver-path="$CHROMEDRIVER_TEST_PATH"
 
       - name: Upload Lighthouse reports
         if: always()
