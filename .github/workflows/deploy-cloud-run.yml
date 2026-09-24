@@ -85,7 +85,7 @@ jobs:
       - name: Ensure deployer can publish the production image
         run: |
           set -euo pipefail
-          DEPLOYER="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | head -n 1)"
+          DEPLOYER="$(gcloud config get-value account 2>/dev/null || true)"
           test -n "$DEPLOYER"
           case "$DEPLOYER" in
             *@*.iam.gserviceaccount.com)
