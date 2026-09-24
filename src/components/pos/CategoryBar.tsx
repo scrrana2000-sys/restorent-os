@@ -85,7 +85,7 @@ export const CategoryBar: React.FC<CategoryBarProps> = React.memo(({
 
         {/* Filter / Count Button */}
         <div
-          className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0 cursor-pointer shadow-2xs active:scale-95"
+          className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0 shadow-2xs active:scale-95"
           title={`${totalItemsCount} items available`}
         >
           <SlidersHorizontal className="w-4 h-4 text-slate-600" />
