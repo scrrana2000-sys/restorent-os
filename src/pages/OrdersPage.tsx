@@ -315,7 +315,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
   };
 
   return (
-    <div data-testid="orders-history-page" className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
+    <div data-testid="orders-history-page" className="w-full max-w-7xl min-w-0 mx-auto p-3 sm:p-4 md:p-8 space-y-6 overflow-x-hidden">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -475,9 +475,9 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
 
       {/* Comprehensive Filter Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
           {/* Search Input */}
-          <div className="relative flex-1 min-w-[240px]">
+          <div className="relative w-full sm:flex-1 min-w-0">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -497,7 +497,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
                 type="button"
                 data-testid={`filter-date-${preset}`}
                 onClick={() => setDateRangePreset(preset)}
-                className={`px-3 py-1.5 rounded-lg capitalize whitespace-nowrap transition-all active:scale-95 ${
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg capitalize transition-all active:scale-95 ${
                   dateRangePreset === preset
                     ? 'bg-white text-indigo-600 shadow-xs'
                     : 'hover:text-slate-900'
@@ -536,7 +536,7 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({
         )}
 
         {/* Multi-Attribute Dropdown Filters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100 min-w-0">
           {/* Order Type */}
           <div>
             <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
