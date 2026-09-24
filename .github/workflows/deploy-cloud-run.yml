@@ -83,9 +83,6 @@ jobs:
             --platform=managed \
             --allow-unauthenticated \
             --port=8080 \
-            --startup-probe="tcpSocket.port=8080,initialDelaySeconds=0,timeoutSeconds=10,failureThreshold=18,periodSeconds=10" \
-            --timeout=300s \
-            --cpu-boost \
             --quiet
 
       - name: Verify Cloud Run revision and health
