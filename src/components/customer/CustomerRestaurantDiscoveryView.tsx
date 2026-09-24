@@ -79,7 +79,7 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
       {/* Restaurants near city header & Icon-only Location & Filter controls */}
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
-          <h2 className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 min-w-0 truncate">
+          <h1 className="text-xs sm:text-sm md:text-base font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 min-w-0 truncate">
             <span className="truncate">
               Restaurants near {location?.city || 'Bengaluru'}
             </span>
@@ -88,7 +88,7 @@ export const CustomerRestaurantDiscoveryView: React.FC<CustomerRestaurantDiscove
                 {totalCount}
               </span>
             )}
-          </h2>
+          </h1>
 
           {/* Controls: Location button (icon only) + Filter button (icon only) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
