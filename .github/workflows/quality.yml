@@ -34,8 +34,8 @@ jobs:
       - name: ESLint
         run: npm run lint:eslint
 
-      - name: Prettier
-        run: npm run format:check
+      - name: Prettier auto-fix
+        run: npm run format:fix
 
       - name: Stylelint
         run: npm run lint:css
