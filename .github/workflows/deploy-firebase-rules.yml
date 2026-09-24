@@ -63,6 +63,18 @@ jobs:
             exit 1
           fi
 
+      - name: Ensure Firebase Rules deployment permission
+        run: |
+          set -euo pipefail
+          FIREBASE_PROJECT_ID="$(node -e "const fs=require('fs'); const f=JSON.parse(fs.readFileSync('.firebaserc','utf8')); process.stdout.write(f.projects.default)")"
+          test -n "$FIREBASE_PROJECT_ID"
+          test -n "$WIF_SERVICE_ACCOUNT"
+          gcloud projects add-iam-policy-binding "$FIREBASE_PROJECT_ID" \
+            --member="serviceAccount:$WIF_SERVICE_ACCOUNT" \
+            --role="roles/firebaserules.admin" \
+            --condition=None \
+            --quiet
+
       - name: Validate Firebase project and rules configuration
         run: |
           test -f firebase.json
