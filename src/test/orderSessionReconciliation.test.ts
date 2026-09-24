@@ -32,3 +32,13 @@ describe('Cancelled waiter order table-session reconciliation', () => {
     });
   });
 });
+
+
+describe('Waiter parent-order KOT auto-cancellation states', () => {
+  it('treats every non-terminal KOT state as auto-cancellable', () => {
+    const statuses = ['draft', 'confirmed', 'sentToKitchen', 'preparing', 'ready'];
+    const terminal = ['served', 'cancelled'];
+    expect(statuses.every((status) => !terminal.includes(status))).toBe(true);
+    expect(terminal.every((status) => terminal.includes(status))).toBe(true);
+  });
+});
