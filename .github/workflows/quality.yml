@@ -101,7 +101,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-and-a11y-reports-${{ github.run_id }}
-          path: .lighthouseci/
+          path: |
+            .lighthouseci/
+            .a11y-results/
           if-no-files-found: ignore
 
       - name: Stop preview server
