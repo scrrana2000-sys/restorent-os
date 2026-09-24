@@ -46,7 +46,7 @@ export const OfflineSyncIndicator: React.FC = () => {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
+        className={`min-h-[44px] flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
           !isOnline
             ? 'bg-amber-500/10 text-amber-700 border-amber-300'
             : conflictCount > 0
@@ -94,7 +94,7 @@ export const OfflineSyncIndicator: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-88 rounded-2xl bg-white shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-2xl bg-white shadow-xl border border-slate-200 p-4 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <span
@@ -117,7 +117,7 @@ export const OfflineSyncIndicator: React.FC = () => {
             {isOnline && pendingCount > 0 && (
               <button
                 onClick={() => offlineSyncService.processQueue()}
-                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                className="min-h-[44px] px-2 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
               >
                 <RefreshCw className="w-3 h-3" /> Sync Now
               </button>
@@ -149,7 +149,7 @@ export const OfflineSyncIndicator: React.FC = () => {
               {stats.completed > 0 && (
                 <button
                   onClick={() => offlineSyncService.clearCompleted()}
-                  className="text-[10px] text-slate-400 hover:text-slate-600"
+                  className="min-h-[44px] px-2 text-[10px] text-slate-400 hover:text-slate-600 flex items-center"
                 >
                   Clear Finished
                 </button>
