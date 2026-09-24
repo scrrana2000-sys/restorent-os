@@ -90,6 +90,7 @@ jobs:
       - name: Build and publish API image to GitHub Container Registry
         run: |
           set -euo pipefail
+          export BUILDX_NO_DEFAULT_ATTESTATIONS=1
           GHCR_TAG="${GHCR_IMAGE}:${GITHUB_SHA}"
           echo "Building and publishing a plain linux/amd64 image: $GHCR_TAG"
           # Cloud Run can reject container imports when BuildKit publishes
