@@ -285,14 +285,14 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
   };
 
   return (
-    <div id="online-orders-queue-container" className="w-full min-w-0 space-y-5 overflow-x-hidden">
+    <div id="online-orders-queue-container" className="w-full min-w-0 space-y-3 sm:space-y-5 overflow-x-hidden">
       {/* Alert Notices */}
       {actionSuccess && (
         <div
           data-testid="online-action-success-banner"
           className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center justify-between animate-in fade-in"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{actionSuccess}</span>
           </div>
@@ -307,7 +307,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
           data-testid="online-action-error-banner"
           className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center justify-between"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
@@ -318,14 +318,14 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
       )}
 
       {/* Header & Tabs Toolbar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 min-w-0">
+      <div className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4 min-w-0">
         {/* Navigation Tabs */}
-        <div className="w-full sm:w-auto min-w-0 flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600 overflow-x-auto no-scrollbar max-w-full">
+        <div className="w-full sm:w-auto min-w-0 grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-lg sm:rounded-xl text-[9px] sm:text-xs font-bold text-slate-600 max-w-full">
           <button
             type="button"
             data-testid="tab-online-pending"
             onClick={() => setActiveTab('pending')}
-            className={`shrink-0 whitespace-nowrap px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
+            className={`min-w-0 px-1.5 py-1.5 sm:px-3.5 sm:py-2 rounded-md sm:rounded-lg flex items-center justify-center gap-1 transition-all text-center leading-tight ${
               activeTab === 'pending'
                 ? 'bg-white text-indigo-600 shadow-xs'
                 : 'hover:text-slate-900'
@@ -343,7 +343,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
             type="button"
             data-testid="tab-online-preparing"
             onClick={() => setActiveTab('preparing')}
-            className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
+            className={`min-w-0 px-1.5 py-1.5 sm:px-3.5 sm:py-2 rounded-md sm:rounded-lg flex items-center justify-center gap-1 transition-all text-center leading-tight ${
               activeTab === 'preparing'
                 ? 'bg-white text-amber-600 shadow-xs'
                 : 'hover:text-slate-900'
@@ -361,7 +361,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
             type="button"
             data-testid="tab-online-ready"
             onClick={() => setActiveTab('ready')}
-            className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
+            className={`min-w-0 px-1.5 py-1.5 sm:px-3.5 sm:py-2 rounded-md sm:rounded-lg flex items-center justify-center gap-1 transition-all text-center leading-tight ${
               activeTab === 'ready'
                 ? 'bg-white text-emerald-600 shadow-xs'
                 : 'hover:text-slate-900'
@@ -379,7 +379,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
             type="button"
             data-testid="tab-online-history"
             onClick={() => setActiveTab('history')}
-            className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all ${
+            className={`min-w-0 px-1.5 py-1.5 sm:px-3.5 sm:py-2 rounded-md sm:rounded-lg flex items-center justify-center gap-1 transition-all text-center leading-tight ${
               activeTab === 'history'
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'hover:text-slate-900'
@@ -391,8 +391,8 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
         </div>
 
         {/* Controls: Sound Toggle & Search */}
-        <div className="w-full sm:w-auto flex items-center gap-3 justify-end min-w-0">
-          <div className="relative w-full sm:w-64 min-w-0">
+        <div className="w-full sm:w-auto flex items-center gap-2 justify-end min-w-0">
+          <div className="relative flex-1 sm:w-64 min-w-0">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -400,7 +400,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search customer, phone, order #..."
-              className="w-full pl-9 pr-3.5 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              className="w-full pl-8 pr-2.5 py-2 sm:py-1.5 text-[11px] sm:text-xs rounded-lg sm:rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             />
           </div>
 
@@ -476,7 +476,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                 key={order.id}
                 id={`online-order-card-${order.id}`}
                 data-testid={`online-order-card-${order.id}`}
-                className={`bg-white rounded-2xl border transition-all duration-200 flex flex-col overflow-hidden shadow-xs hover:shadow-md ${
+                className={`bg-white rounded-xl sm:rounded-2xl border transition-all duration-200 flex flex-col overflow-hidden shadow-xs hover:shadow-md ${
                   isFocused
                     ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-indigo-100'
                     : isPending
@@ -485,15 +485,15 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                 }`}
               >
                 {/* Header */}
-                <div className="p-4 bg-slate-50/80 border-b border-slate-100 flex items-start justify-between gap-3">
+                <div className="p-2.5 sm:p-4 bg-slate-50/80 border-b border-slate-100 flex items-start justify-between gap-2">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-black font-mono text-slate-900">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <span className="text-xs sm:text-sm font-black font-mono text-slate-900">
                         #{order.orderNumber}
                       </span>
                       {/* Order Type Badge */}
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${
+                        className={`inline-flex items-center gap-0.5 px-1.5 sm:px-2.5 py-0.5 rounded-md sm:rounded-lg text-[9px] sm:text-[11px] font-bold border ${
                           isDelivery
                             ? 'bg-purple-50 text-purple-700 border-purple-200'
                             : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -550,7 +550,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
 
                   {/* Payment Pill */}
                   <div className="flex flex-col items-end">
-                    <span className="text-sm font-black text-slate-900">
+                    <span className="text-xs sm:text-sm font-black text-slate-900">
                       {formatMoney(order.grandTotalMinor, symbol)}
                     </span>
                     <span
@@ -576,7 +576,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                 </div>
 
                 {/* Customer Details & Address */}
-                <div className="p-3.5 bg-white border-b border-slate-100 space-y-2 text-xs">
+                <div className="p-2.5 sm:p-3.5 bg-white border-b border-slate-100 space-y-1.5 sm:space-y-2 text-[11px] sm:text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-800 flex items-center gap-1.5">
                       <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
@@ -622,7 +622,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                 </div>
 
                 {/* Ordered Items Breakdown */}
-                <div className="p-3.5 flex-1 space-y-1.5 bg-slate-50/30">
+                <div className="p-2.5 sm:p-3.5 flex-1 space-y-1 bg-slate-50/30">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
                     Order Items
                   </span>
@@ -632,7 +632,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                         key={`${item.itemId}-${idx}`}
                         className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center justify-center shrink-0">
                             {item.quantity}x
                           </span>
@@ -649,14 +649,14 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                 </div>
 
                 {/* Operational Action Footer */}
-                <div className="p-3 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                <div className="p-2 sm:p-3 bg-white border-t border-slate-100 flex items-center gap-1.5 sm:gap-2">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       data-testid={`btn-print-receipt-${order.id}`}
                       onClick={() => handlePrintReceipt(order)}
                       disabled={printingOrderId === order.id}
-                      className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      className="w-9 h-9 sm:w-auto sm:h-auto px-2 py-2 rounded-lg sm:rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
                       title="Print Order Receipt"
                     >
                       <Printer className={`w-3.5 h-3.5 ${printingOrderId === order.id ? 'animate-pulse text-indigo-600' : ''}`} />
@@ -666,7 +666,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                         type="button"
                         data-testid={`btn-view-bill-${order.id}`}
                         onClick={() => onViewBillModal(order)}
-                        className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1 transition-colors"
+                        className="w-9 h-9 sm:w-auto sm:h-auto px-2 py-2 rounded-lg sm:rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
                         title="View Full Bill & Details"
                       >
                         <Eye className="w-3.5 h-3.5" />
@@ -675,14 +675,14 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                   </div>
 
                   {/* Contextual Primary Actions */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {!isPrepaid && onCollectPayment && (
                       <button
                         type="button"
                         data-testid={`btn-collect-due-${order.id}`}
                         onClick={() => onCollectPayment(order)}
                         disabled={isActionSubmitting}
-                        className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
+                        className="flex-1 min-w-0 h-9 sm:h-10 px-1.5 sm:px-3 rounded-lg sm:rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] sm:text-xs font-black shadow-sm flex items-center justify-center gap-1 transition-all disabled:opacity-50"
                         title="Collect outstanding payment before handover"
                       >
                         <Banknote className="w-3.5 h-3.5" />
@@ -696,7 +696,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                           data-testid={`btn-reject-online-${order.id}`}
                           onClick={() => setRejectModalOrder(order)}
                           disabled={isActionSubmitting}
-                          className="px-3 py-2 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold transition-colors disabled:opacity-50"
+                          className="flex-1 min-w-0 h-9 sm:h-10 px-1.5 sm:px-3 rounded-lg sm:rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-[10px] sm:text-xs font-bold transition-colors disabled:opacity-50"
                         >
                           Reject
                         </button>
@@ -705,7 +705,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                           data-testid={`btn-accept-online-${order.id}`}
                           onClick={() => setAcceptModalOrder(order)}
                           disabled={isActionSubmitting}
-                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                          className="flex-1 min-w-0 h-9 sm:h-10 px-1.5 sm:px-4 rounded-lg sm:rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] sm:text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1 transition-all disabled:opacity-50"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Accept Order</span>
@@ -732,7 +732,7 @@ export const OnlineOrdersQueue: React.FC<OnlineOrdersQueueProps> = ({
                         data-testid={`btn-complete-online-${order.id}`}
                         onClick={() => handleCompleteOrder(order)}
                         disabled={isActionSubmitting}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                        className="flex-1 min-w-0 h-9 sm:h-10 px-1.5 sm:px-4 rounded-lg sm:rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] sm:text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1 transition-all disabled:opacity-50"
                       >
                         <Check className="w-3.5 h-3.5" />
                         <span>{isDelivery ? 'Mark Delivered' : 'Mark Picked Up'}</span>
