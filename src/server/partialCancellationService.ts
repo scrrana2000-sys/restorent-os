@@ -226,7 +226,7 @@ export async function partiallyCancelKOTItemsWithAdmin(
       } : {})
     });
 
-    if (allOrderCancelled && tableSessionRef && latestSessionSnap?.exists()) {
+    if (allOrderCancelled && tableSessionRef && latestSessionSnap && latestSessionSnap.exists) {
       const sessionData = latestSessionSnap.data() as any;
       const reconciled = reconcileCancelledOrderInTableSession(sessionData, kot.orderId);
       tx.update(tableSessionRef, {
