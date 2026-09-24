@@ -2,7 +2,8 @@ name: Deploy RestaurantOS API to Cloud Run
 
 # Keep the API deployment synchronized with main so the frontend can never point
 # at a stale Cloud Run revision after server-side changes.
-# Build a plain linux/amd64 production container on GitHub Actions and deploy the public GHCR image to Cloud Run.
+# Use Cloud Run source deployment so Google Cloud performs the production build
+# and image publication with its managed Cloud Build/Artifact Registry path.
 on:
   push:
     branches: [main]
@@ -11,7 +12,6 @@ on:
 permissions:
   contents: read
   id-token: write
-  packages: write
 
 concurrency:
   group: cloud-run-production
@@ -37,7 +37,7 @@ jobs:
         run: DOCKER_BUILDKIT=1 docker build --progress=plain --pull -t restaurantos-cloud-run-debug .
 
   deploy:
-    name: Build image and deploy API
+    name: Deploy API from source to Cloud Run
     runs-on: ubuntu-latest
     needs: verify
     env:
@@ -47,8 +47,6 @@ jobs:
       CLOUD_RUN_SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GAR_REPOSITORY: restaurantos
-      GAR_IMAGE: restaurantos-api-cloudrun
 
     steps:
       - uses: actions/checkout@v4
@@ -81,50 +79,11 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Configure Docker for Artifact Registry
-        run: |
-          set -euo pipefail
-          GAR_HOST="${GCP_REGION}-docker.pkg.dev"
-          gcloud auth configure-docker "$GAR_HOST" --quiet
-
-      - name: Ensure Artifact Registry repository exists
-        run: |
-          set -euo pipefail
-          if ! gcloud artifacts repositories describe "$GAR_REPOSITORY" \
-            --location "$GCP_REGION" \
-            --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
-            gcloud artifacts repositories create "$GAR_REPOSITORY" \
-              --repository-format=docker \
-              --location="$GCP_REGION" \
-              --project="$GCP_PROJECT_ID" \
-              --description="RestaurantOS production container images" \
-              --quiet
-          fi
-
-      - name: Build and publish API image to Artifact Registry
-        run: |
-          set -euo pipefail
-          export BUILDX_NO_DEFAULT_ATTESTATIONS=1
-          GAR_HOST="${GCP_REGION}-docker.pkg.dev"
-          IMAGE_TAG="${GAR_HOST}/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${GAR_IMAGE}:${GITHUB_SHA}"
-          echo "Building and publishing a plain linux/amd64 image: $IMAGE_TAG"
-          docker buildx build \
-            --progress=plain \
-            --pull \
-            --platform linux/amd64 \
-            --provenance=false \
-            --sbom=false \
-            --output "type=registry,push=true,oci-mediatypes=false" \
-            --tag "$IMAGE_TAG" \
-            .
-          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
-          echo "Published Artifact Registry image:"
-          docker buildx imagetools inspect "$IMAGE_TAG"
-      - name: Deploy production image to Cloud Run
+      - name: Deploy production source to Cloud Run
         run: |
           set -euo pipefail
           if ! gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --image "$IMAGE_TAG" \
+            --source . \
             --region "$GCP_REGION" \
             --project "$GCP_PROJECT_ID" \
             --platform managed \
