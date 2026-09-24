@@ -852,7 +852,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
             totalItemsCount={filteredItems.length}
           />
 
-          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-28 lg:pb-4
+          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-28 lg:pb-4">
             <MenuGrid
               items={filteredItems}
               loading={menuLoading || restaurantLoading}
