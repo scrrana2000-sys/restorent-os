@@ -1516,34 +1516,47 @@ export class OrderService implements IOrderService {
 
       await updateDoc(docRef, updatePayload);
 
-      // A cancelled dine-in bill is no longer the canonical bill for the
-      // open table session. Clear the session pointer so a later order starts
-      // a fresh bill instead of inheriting cancelled items.
+      // A cancelled dine-in order must be removed from the session's active-order
+      // list without destroying the canonical pointer when another active order remains.
+      // Use a transaction so two waiter/table actions cannot race and overwrite each
+      // other's session state.
       if (newStatus === 'cancelled' && currentOrder.tableSessionId) {
         try {
           const sessionRef = doc(
             db,
-            'restaurants',
             cleanRestaurantId,
             'tableSessions',
             String(currentOrder.tableSessionId)
           );
-          const sessionSnap = await getDoc(sessionRef);
-          if (sessionSnap.exists()) {
+          await runTransaction(db, async (transaction) => {
+            const sessionSnap = await transaction.get(sessionRef);
+            if (!sessionSnap.exists()) return;
+
             const sessionData = sessionSnap.data() as any;
-            if (sessionData.activeOrderId === cleanOrderId) {
-              const remainingActiveOrderIds = Array.isArray(sessionData.activeOrderIds)
-                ? sessionData.activeOrderIds.filter((id: string) => id !== cleanOrderId)
-                : [];
-              await updateDoc(sessionRef, {
-                activeOrderId: null,
-                activeOrderIds: remainingActiveOrderIds,
-                updatedAt: serverTimestamp()
-              });
-            }
-          }
+            const currentActiveIds = Array.isArray(sessionData.activeOrderIds)
+              ? sessionData.activeOrderIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim() !== '')
+              : [];
+
+            const remainingIds = currentActiveIds.filter((id: string) => id !== cleanOrderId);
+            const canonicalId = String(sessionData.activeOrderId || '').trim();
+
+            // If the cancelled order was not canonical, preserve the current bill pointer.
+            // Otherwise promote the most recent surviving order, if any.
+            const nextActiveOrderId =
+              canonicalId && canonicalId !== cleanOrderId
+                ? canonicalId
+                : (remainingIds[remainingIds.length - 1] || null);
+
+            const update: Record<string, any> = {
+              activeOrderIds: remainingIds,
+              activeOrderId: nextActiveOrderId,
+              updatedAt: serverTimestamp()
+            };
+
+            transaction.update(sessionRef, update);
+          });
         } catch (sessionErr) {
-          console.warn('[RestaurantOS] Could not clear cancelled order from active table session:', sessionErr);
+          console.warn('[RestaurantOS] Failed to reconcile cancelled order with active table session:', sessionErr);
         }
       }
 
