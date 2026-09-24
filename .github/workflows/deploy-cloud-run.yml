@@ -29,7 +29,7 @@ jobs:
         run: DOCKER_BUILDKIT=1 docker build --progress=plain --pull -t restaurantos-cloud-run-debug .
 
   deploy:
-    name: Build on GitHub runner and deploy native Artifact Registry image
+    name: Build and deploy Google Container Registry image
     runs-on: ubuntu-latest
     needs: verify
     timeout-minutes: 25
@@ -40,8 +40,7 @@ jobs:
       CLOUD_RUN_SERVICE: ${{ secrets.CLOUD_RUN_SERVICE }}
       GCP_REGION: ${{ secrets.GCP_REGION }}
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GAR_REPOSITORY: restaurantos
-      GAR_IMAGE_NAME: restaurantos-api
+      GCR_IMAGE_NAME: restaurantos-api
 
     steps:
       - uses: actions/checkout@v4
@@ -74,48 +73,22 @@ jobs:
         with:
           credentials_json: ${{ env.GCP_CREDENTIALS_JSON }}
 
-      - name: Configure native Artifact Registry
+      - name: Configure Google Container Registry
         run: |
           set -euo pipefail
-          if ! gcloud artifacts repositories describe "$GAR_REPOSITORY" --location "$GCP_REGION" --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
-            gcloud artifacts repositories create "$GAR_REPOSITORY"               --repository-format=docker               --location="$GCP_REGION"               --project="$GCP_PROJECT_ID"               --description="RestaurantOS production containers"
-          fi
-          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          gcloud auth configure-docker gcr.io --quiet
 
-      - name: Ensure deployer can publish the production image
+      - name: Build and publish production API image to GCR
         run: |
           set -euo pipefail
-          DEPLOYER="$(gcloud config get-value account 2>/dev/null || true)"
-          test -n "$DEPLOYER"
-          case "$DEPLOYER" in
-            *@*.iam.gserviceaccount.com)
-              ;;
-            *)
-              echo "::error::Active Google Cloud identity is not a service account."
-              exit 1
-              ;;
-          esac
-
-          gcloud artifacts repositories add-iam-policy-binding "$GAR_REPOSITORY"             --location="$GCP_REGION"             --project="$GCP_PROJECT_ID"             --member="serviceAccount:$DEPLOYER"             --role="roles/artifactregistry.writer"             --quiet
-
-      - name: Build and publish production API image
-        run: |
-          set -euo pipefail
-          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${GAR_IMAGE_NAME}:${GITHUB_SHA}"
+          IMAGE="gcr.io/${GCP_PROJECT_ID}/${GCR_IMAGE_NAME}:${GITHUB_SHA}"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
           DOCKER_BUILDKIT=1 docker build             --progress=plain             --pull             --provenance=false             --sbom=false             --platform=linux/amd64             -t "$IMAGE"             .
 
           docker push "$IMAGE"
 
-      - name: Verify Artifact Registry image exists
-        run: |
-          set -euo pipefail
-          DIGEST="$(gcloud artifacts docker images describe "$IMAGE"             --project="$GCP_PROJECT_ID"             --format='value(image_summary.digest)')"
-          test -n "$DIGEST"
-          echo "Artifact Registry image ready: $DIGEST"
-
-      - name: Deploy native Artifact Registry image to Cloud Run
+      - name: Deploy production image to Cloud Run
         run: |
           set -euo pipefail
           gcloud run deploy "$CLOUD_RUN_SERVICE"             --image="$IMAGE"             --region="$GCP_REGION"             --project="$GCP_PROJECT_ID"             --platform=managed             --allow-unauthenticated             --port=3000             --update-env-vars="^@^NODE_ENV=production@PUBLIC_APP_URL=https://restaurantos01.ai.studio@ALLOWED_ORIGINS=https://restaurantos01.ai.studio,https://antos01.ai.studio,https://restaurantos-xqi52dpwga-el.a.run.app,https://scrrana2000-sys.github.io@SYSTEM_SERVER_UID=restaurantos-system-server@FIREBASE_PROJECT_ID=project-0edd3716-fc3b-40b7-b96@FIRESTORE_DATABASE_ID=ai-studio-restaurantos-16bfb108-09a4-44fb-9463-1d58d938bd57"             --remove-secrets="SYSTEM_SERVER_PASSWORD,RAZORPAY_KEY_ID,RAZORPAY_KEY_SECRET,RAZORPAY_WEBHOOK_SECRET"             --quiet
