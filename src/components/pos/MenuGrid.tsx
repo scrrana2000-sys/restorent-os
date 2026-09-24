@@ -245,7 +245,7 @@ export const MenuGrid: React.FC<MenuGridProps> = React.memo(({
 
   if (loading) {
     return (
-      <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+      <div className="w-full min-w-0 p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
         {Array.from({ length: 10 }).map((_, idx) => (
           <div
             key={idx}
