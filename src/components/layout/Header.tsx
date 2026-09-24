@@ -203,7 +203,9 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Right section: System Status & User Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Offline / Sync Queue Status Indicator */}
-        <OfflineSyncIndicator />
+        <div className="hidden sm:block">
+          <OfflineSyncIndicator />
+        </div>
 
         {/* Voice Assistant Header Status / Toggle Button */}
         <button
@@ -212,7 +214,7 @@ export const Header: React.FC<HeaderProps> = ({
             const next = toggleVoiceAssistant();
             setIsAssistantEnabled(next);
           }}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
+          className={`hidden sm:flex min-h-[44px] items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 border ${
             isAssistantEnabled
               ? (isDark ? 'bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 border-indigo-500/40' : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200/80 shadow-2xs')
               : (isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200')
