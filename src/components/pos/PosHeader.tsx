@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Utensils, ShoppingBag, Bike, PauseCircle, Receipt, DollarSign, Globe2,
-  Menu, ShoppingCart, ChevronDown, X, Users, Sparkles, LogOut, ShieldCheck, Wifi, Search, Mic
-} from 'lucide-react';
+  Menu, ShoppingCart, ChevronDown, X, Users, Sparkles, LogOut, ShieldCheck, Wifi, Mic } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { OfflineSyncIndicator } from '../OfflineSyncIndicator';
@@ -34,8 +33,6 @@ interface PosHeaderProps {
   onOpenMobileMenu?: () => void;
   onOpenVoiceModal?: () => void;
   isVoiceListening?: boolean;
-  searchQuery?: string;
-  onSearchChange?: (query: string) => void;
 }
 
 export const PosHeader: React.FC<PosHeaderProps> = ({
@@ -44,12 +41,11 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   heldOrdersCount, onOpenHeldOrders, onOpenRecentOrders, paymentDueCount = 0,
   totalPaymentDueMinor = 0, onOpenPaymentDue, onlineOrderCount = 0, onOpenOnlineOrders,
   onlineOrderingLive = false, onOpenLiveOperations, onOpenPosItemAvailability, cartItemsCount = 0, onOpenCart,
-  onOpenMobileMenu, onOpenVoiceModal, isVoiceListening = false, searchQuery = '', onSearchChange
+  onOpenMobileMenu, onOpenVoiceModal, isVoiceListening = false
 }) => {
   const { restaurant } = useRestaurant();
   const { profile, user, logout } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -126,11 +122,6 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
               <PauseCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" /><span className="px-1 py-0.2 text-[10px] bg-amber-500 text-slate-950 font-black rounded-full">{heldOrdersCount}</span>
             </button>
           )}
-          {onSearchChange && (
-            <button id="pos-header-search-btn" type="button" onClick={() => setIsSearchOpen((open) => !open)}
-              className={`w-9 h-9 rounded-lg border flex items-center justify-center active:scale-95 transition-all ${isSearchOpen || searchQuery ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-slate-100 border-slate-200 text-slate-600'}`}
-              title="Search menu" aria-label="Search menu"><Search className="w-4 h-4" /></button>
-          )}
           {onOpenVoiceModal && (
             <button id="pos-header-voice-btn" type="button" onClick={onOpenVoiceModal}
               className={`w-9 h-9 rounded-lg border flex items-center justify-center active:scale-95 transition-all ${isVoiceListening ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-indigo-50 border-indigo-200 text-indigo-700'}`}
@@ -169,15 +160,6 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
           )}
         </div>
       </div>
-
-      {isSearchOpen && onSearchChange && (
-        <div className="flex items-center gap-2 min-w-0 w-full">
-          <Search className="w-4 h-4 text-slate-400 shrink-0" />
-          <input autoFocus type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search food..." className="w-full h-9 px-2.5 text-xs bg-slate-50 border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 text-slate-800 placeholder-slate-400" />
-          {searchQuery && <button type="button" onClick={() => onSearchChange('')} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100" aria-label="Clear search"><X className="w-4 h-4" /></button>}
-        </div>
-      )}
 
       <div className={`grid gap-2 min-w-0 w-full ${allowedOrderTypes.length === 1 ? 'grid-cols-1' : allowedOrderTypes.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
         {allowedOrderTypes.includes('dineIn') && (
