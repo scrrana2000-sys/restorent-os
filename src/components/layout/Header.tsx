@@ -203,9 +203,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Right section: System Status & User Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Offline / Sync Queue Status Indicator */}
-        <div className="hidden sm:block">
-          <div className="hidden sm:block"><OfflineSyncIndicator /></div>
-        </div>
+        <div className="hidden sm:block"><OfflineSyncIndicator /></div>
 
         {/* Voice Assistant Header Status / Toggle Button */}
         <button
