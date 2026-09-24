@@ -57,8 +57,8 @@ export const Modal: React.FC<ModalProps> = ({
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 sm:px-6 py-4 shrink-0">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-bold text-slate-900 break-words">{title}</h3>
               {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
             </div>
             <button
