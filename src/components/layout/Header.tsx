@@ -77,11 +77,11 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className={`sticky top-0 z-30 h-14 sm:h-16 lg:h-18 backdrop-blur-md border-b px-3 sm:px-6 lg:px-8 flex items-center justify-between transition-colors ${
+    <header className={`sticky top-0 z-30 min-h-14 sm:min-h-16 lg:min-h-18 backdrop-blur-md border-b px-3 sm:px-6 lg:px-8 flex items-center justify-between transition-colors ${
       isDark ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200/80 text-slate-900'
     }`}>
       {/* Left section */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
         <button
           onClick={onOpenMobileMenu}
           aria-label="Open Navigation Menu"
@@ -120,7 +120,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-1">
-                <h1 className={`text-xs sm:text-base font-bold leading-none truncate max-w-[130px] sm:max-w-xs ${
+                <h1 className={`text-xs sm:text-base font-bold leading-none truncate max-w-[120px] sm:max-w-xs ${
                   isDark ? 'text-white' : 'text-slate-900'
                 }`}>
                   {restaurant?.name || 'RestaurantOS'}
@@ -241,7 +241,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className={`flex items-center gap-2.5 p-1.5 pl-2 rounded-xl transition-colors duration-150 focus:outline-none ${
+            className={`min-h-[44px] flex items-center gap-2.5 p-1.5 pl-2 rounded-xl transition-colors duration-150 focus:outline-none ${
               isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
             }`}
           >
