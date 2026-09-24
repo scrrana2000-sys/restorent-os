@@ -60,7 +60,7 @@ export const Button: React.FC<ButtonProps> = ({
       ) : (
         <>
           {leftIcon && <span className="shrink-0 flex items-center">{leftIcon}</span>}
-          <span>{children}</span>
+          <span className="min-w-0 max-w-full break-words text-center">{children}</span>
           {rightIcon && <span className="shrink-0 flex items-center">{rightIcon}</span>}
         </>
       )}
