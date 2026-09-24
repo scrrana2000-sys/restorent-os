@@ -63,8 +63,8 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   const branchSubtitle = restaurant?.address || restaurant?.city || 'Main Branch • Raichur';
 
   return (
-    <div className="sticky top-0 z-20 bg-white border-b border-slate-200 text-slate-800 px-4 py-2.5 sm:py-3 shadow-xs shrink-0 select-none space-y-2.5">
-      <div className="flex items-center justify-between gap-2">
+    <div className="sticky top-0 z-20 w-full max-w-full min-w-0 overflow-x-hidden bg-white border-b border-slate-200 text-slate-800 px-3 sm:px-4 py-2.5 sm:py-3 shadow-xs shrink-0 select-none space-y-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 min-w-0">
         <div className="flex items-center gap-2.5 min-w-0">
           {(onOpenMobileMenu || (window as any).openAdminMobileMenu) && (
             <button type="button" id="pos-mobile-menu-btn" onClick={onOpenMobileMenu || (window as any).openAdminMobileMenu}
@@ -83,7 +83,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="w-full sm:w-auto min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
           <OfflineSyncIndicator />
           {onOpenLiveOperations && (
             <button id="live-operations-header-btn" type="button"
@@ -132,7 +132,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
             <button id="pos-header-user-profile-btn" type="button" onClick={() => setIsProfileOpen(!isProfileOpen)}
               className="flex items-center gap-1 pl-0.5 p-1 rounded-lg hover:bg-slate-100 transition-colors focus:outline-none min-h-[36px]" title="User Account & Settings">
               <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-xs">{userInitial}</div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden xs:inline" />
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
             </button>
             {isProfileOpen && (
               <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150 text-left">
@@ -159,7 +159,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
         </div>
       </div>
 
-      <div className={`grid gap-2 ${allowedOrderTypes.length === 1 ? 'grid-cols-1' : allowedOrderTypes.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+      <div className={`grid gap-2 min-w-0 w-full ${allowedOrderTypes.length === 1 ? 'grid-cols-1' : allowedOrderTypes.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
         {allowedOrderTypes.includes('dineIn') && (
           <button id="order-type-dinein-btn" type="button" onClick={() => onOrderTypeChange('dineIn')}
             className={`h-10 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 ${orderType === 'dineIn' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 text-slate-700'}`}>
@@ -181,7 +181,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
       </div>
 
       {showTableSelector && orderType === 'dineIn' && (
-        <div className="flex items-center gap-2 pt-0.5">
+        <div className="flex items-center gap-2 pt-0.5 min-w-0 w-full">
           <button id="pos-select-table-btn" type="button" onClick={onOpenTableModal}
             className={`flex-1 h-10 px-3 rounded-xl border text-xs sm:text-sm font-bold flex items-center justify-between transition-all active:scale-[0.99] ${selectedTable ? 'bg-white border-slate-200 text-slate-900 shadow-2xs hover:border-indigo-400' : 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 animate-pulse'}`}>
             <div className="flex items-center gap-2"><span className="text-base leading-none">🪑</span><span className="font-bold text-slate-900">{selectedTable ? `Table ${selectedTable.tableNumber}` : 'Select Table'}</span></div>
