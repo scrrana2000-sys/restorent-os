@@ -799,6 +799,8 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         onOpenCart={() => setActiveMobileTab((prev) => (prev === 'cart' ? 'menu' : 'cart'))}
         onOpenMobileMenu={onOpenMobileMenu}
         onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
         onOpenRecentOrders={() => {
           if (activeOrderForBill) {
             setIsBillModalOpen(true);
