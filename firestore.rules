@@ -375,7 +375,7 @@ service cloud.firestore {
           && request.resource.data.itemId == resource.data.itemId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'categoryId', 'name', 'shortName', 'description', 'imageUrl', 'price', 'taxRate',
-            'taxInclusive', 'foodType', 'isAvailable', 'sku', 'sortOrder', 'updatedAt'
+            'taxInclusive', 'foodType', 'isAvailable', 'isOnlineAvailable', 'sku', 'sortOrder', 'updatedAt'
           ]);
 
         allow delete: if isOwnerOfRestaurant(restaurantId) || isMemberWithRole(restaurantId, 'manager');
