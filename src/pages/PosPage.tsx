@@ -765,7 +765,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-[calc(100vh-4.5rem)] w-full max-w-full min-w-0 overflow-x-hidden bg-slate-50 flex flex-col font-sans">
       {/* POS Top Header */}
       <PosHeader
         orderType={orderType}
@@ -840,9 +840,9 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
       )}
 
       {/* Main Terminal Area (Split View: Menu Left 65%, Cart Right 35%) */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0 relative">
+      <div className="flex-1 w-full max-w-full min-w-0 overflow-x-hidden grid grid-cols-1 lg:grid-cols-12 min-h-0 relative">
         {/* LEFT AREA: Categories & Menu Items */}
-        <div className={`lg:col-span-7 xl:col-span-8 flex flex-col min-h-0 bg-slate-50 ${activeMobileTab === 'menu' ? 'flex' : 'hidden lg:flex'}`}>
+        <div className={`lg:col-span-7 xl:col-span-8 w-full min-w-0 flex flex-col min-h-0 bg-slate-50 ${activeMobileTab === 'menu' ? 'flex' : 'hidden lg:flex'}`}>
           <CategoryBar
             categories={categories}
             selectedCategoryId={selectedCategoryId}
@@ -852,7 +852,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
             totalItemsCount={filteredItems.length}
           />
 
-          <div className="flex-1 overflow-y-auto pb-28 lg:pb-4">
+          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-28 lg:pb-4
             <MenuGrid
               items={filteredItems}
               loading={menuLoading || restaurantLoading}
