@@ -1427,11 +1427,11 @@ export class OrderService implements IOrderService {
     // Managers/owners retain their existing cancellation authority.
     if (newStatus === 'cancelled') {
       const currentRole = await getCurrentUserRestaurantRole(cleanRestaurantId);
-      const isTestRuntime =
-        typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test';
-      const captainWindowApplies = currentRole === 'captain' || (!currentRole && !isTestRuntime);
 
-      if (captainWindowApplies) {
+      // Only a confirmed captain/waiter role is subject to the 2-minute
+      // self-cancellation window. An unresolved role must fail closed instead
+      // of being treated as a captain during auth/profile races.
+      if (currentRole === 'captain') {
         const createdAtValue: any = (currentOrder as any).createdAt;
         const createdAt = createdAtValue?.toDate
           ? createdAtValue.toDate()
