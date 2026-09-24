@@ -1906,13 +1906,21 @@ export class OrderService implements IOrderService {
     }
 
     const sanitizedPayload = sanitizeFirestoreData(updatePayload);
+    const tableSessionRef = isAllCancelled && currentOrder.tableSessionId
+      ? doc(db, 'restaurants', cleanRestaurantId, 'tableSessions', String(currentOrder.tableSessionId).trim())
+      : null;
+
     await runTransaction(db, async (transaction) => {
-      const latestSnap = await transaction.get(orderRef);
-      if (!latestSnap.exists()) {
+      // Read every document first. Firestore retries the transaction if an
+      // order/session document changes while this cancellation is in flight.
+      const latestOrderSnap = await transaction.get(orderRef);
+      const latestSessionSnap = tableSessionRef ? await transaction.get(tableSessionRef) : null;
+
+      if (!latestOrderSnap.exists()) {
         throw new Error(`Order "${cleanOrderId}" no longer exists.`);
       }
 
-      const latestOrder = latestSnap.data() as Order;
+      const latestOrder = latestOrderSnap.data() as Order;
       if (latestOrder.restaurantId !== cleanRestaurantId) {
         throw new Error('Cross-tenant order mutation rejected.');
       }
@@ -1920,29 +1928,39 @@ export class OrderService implements IOrderService {
         throw new Error(`Order "${cleanOrderId}" can no longer be partially cancelled from status "${latestOrder.status}".`);
       }
 
-      if (!Array.isArray(latestOrder.items) || latestOrder.items.length !== updatedItems.length) {
+      // Prevent a stale browser/server snapshot from overwriting another
+      // cancellation or payment update with an older total/quantity state.
+      if (
+        Number(latestOrder.paidAmountMinor || 0) !== Number(currentOrder.paidAmountMinor || 0) ||
+        Number(latestOrder.grandTotalMinor || 0) !== Number(currentOrder.grandTotalMinor || 0) ||
+        !Array.isArray(latestOrder.items) ||
+        latestOrder.items.length !== currentOrder.items.length
+      ) {
         throw new Error('Order changed concurrently. Please retry the cancellation.');
       }
 
       const latestById = new Map(latestOrder.items.map((item) => [item.itemId, item]));
-      for (const proposed of updatedItems) {
-        const latest = latestById.get(proposed.itemId);
-        if (!latest) throw new Error('Order changed concurrently. Please retry the cancellation.');
-
-        const proposedQty = Number(proposed.quantity);
-        const latestQty = Number(latest.quantity);
-        const proposedCancelled = Number(proposed.cancelledQuantity || 0);
-        const latestCancelled = Number(latest.cancelledQuantity || 0);
-
-        if (!Number.isInteger(proposedQty) || proposedQty < 0 || proposedQty > latestQty) {
-          throw new Error(`Invalid partial cancellation quantity for "${proposed.nameSnapshot}". Please retry.`);
-        }
-        if (!Number.isInteger(proposedCancelled) || proposedCancelled < latestCancelled) {
-          throw new Error(`Invalid cancelled quantity for "${proposed.nameSnapshot}". Please retry.`);
+      for (const originalItem of currentOrder.items) {
+        const latestItem = latestById.get(originalItem.itemId);
+        if (
+          !latestItem ||
+          Number(latestItem.quantity) !== Number(originalItem.quantity) ||
+          Number(latestItem.cancelledQuantity || 0) !== Number(originalItem.cancelledQuantity || 0)
+        ) {
+          throw new Error('Order changed concurrently. Please retry the cancellation.');
         }
       }
 
       transaction.update(orderRef, sanitizedPayload);
+
+      if (isAllCancelled && tableSessionRef && latestSessionSnap?.exists()) {
+        const sessionData = latestSessionSnap.data() as any;
+        const reconciled = reconcileCancelledOrderInTableSession(sessionData, cleanOrderId);
+        transaction.update(tableSessionRef, {
+          ...reconciled,
+          updatedAt: serverTimestamp()
+        });
+      }
     });
 
     const updatedOrder: Order = {
