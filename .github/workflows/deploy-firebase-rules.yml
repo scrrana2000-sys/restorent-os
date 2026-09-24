@@ -22,6 +22,10 @@ jobs:
   deploy-rules:
     name: Deploy Firestore Rules & Indexes
     runs-on: ubuntu-latest
+    env:
+      WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
