@@ -64,23 +64,23 @@ export const OnlineOrderAcceptModal: React.FC<OnlineOrderAcceptModalProps> = ({
   return (
     <div
       id="online-order-accept-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
     >
       <div
         id="online-order-accept-modal"
-        className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in zoom-in-95 duration-150"
+        className="w-full max-w-lg bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-2 sm:my-8 animate-in zoom-in-95 duration-150"
       >
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="px-4 py-3 sm:px-6 sm:py-4 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white tracking-tight">
+              <h2 className="text-xs sm:text-sm font-bold text-white tracking-tight leading-snug">
                 Accept Online Order #{order.orderNumber}
               </h2>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[10px] sm:text-[11px] text-slate-400 leading-snug">
                 Set estimated preparation time to notify kitchen & customer
               </p>
             </div>
@@ -89,16 +89,16 @@ export const OnlineOrderAcceptModal: React.FC<OnlineOrderAcceptModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-5">
           {/* Order Snapshot Card */}
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+          <div className="p-2.5 sm:p-3.5 bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl space-y-1.5 sm:space-y-2 text-[11px] sm:text-xs">
             <div className="flex items-center justify-between text-slate-600">
               <span className="font-semibold">Customer:</span>
               <span className="font-bold text-slate-900">
@@ -142,7 +142,7 @@ export const OnlineOrderAcceptModal: React.FC<OnlineOrderAcceptModalProps> = ({
               <Clock className="w-4 h-4 text-indigo-600" />
               Estimated Kitchen Prep Time
             </label>
-            <div className="grid grid-cols-5 gap-2 mb-3">
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2 mb-2.5">
               {PRESET_PREP_TIMES.map((mins) => {
                 const isSelected = !isCustom && selectedPrepTime === mins;
                 return (
@@ -150,7 +150,7 @@ export const OnlineOrderAcceptModal: React.FC<OnlineOrderAcceptModalProps> = ({
                     key={mins}
                     type="button"
                     onClick={() => handlePresetClick(mins)}
-                    className={`py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                    className={`h-9 sm:h-10 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all border ${
                       isSelected
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/30 ring-2 ring-indigo-600/20'
                         : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -163,14 +163,14 @@ export const OnlineOrderAcceptModal: React.FC<OnlineOrderAcceptModalProps> = ({
             </div>
 
             {/* Custom Input Option */}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-1.5 pt-0.5">
               <button
                 type="button"
                 onClick={() => {
                   setIsCustom(true);
                   if (!customPrepTime) setCustomPrepTime('25');
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                className={`h-8 px-2.5 rounded-lg text-[10px] sm:text-xs font-semibold border transition-all ${
                   isCustom
                     ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
                     : 'bg-slate-100 text-slate-600 border-transparent hover:bg-slate-200'
@@ -187,29 +187,29 @@ export const OnlineOrderAcceptModal: React.FC<OnlineOrderAcceptModalProps> = ({
                     value={customPrepTime}
                     onChange={handleCustomChange}
                     placeholder="e.g. 25"
-                    className="w-24 px-3 py-1.5 text-xs font-bold rounded-lg border border-indigo-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    className="w-20 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-indigo-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                     autoFocus
                   />
-                  <span className="text-xs text-slate-500 font-medium">minutes</span>
+                  <span className="text-[10px] sm:text-xs text-slate-500 font-medium">minutes</span>
                 </div>
               )}
             </div>
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
+            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-medium flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold transition-colors disabled:opacity-50"
+              className="h-10 w-full px-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 text-[11px] sm:text-xs font-semibold transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
@@ -217,7 +217,7 @@ export const OnlineOrderAcceptModal: React.FC<OnlineOrderAcceptModalProps> = ({
               type="submit"
               disabled={isSubmitting}
               id="confirm-accept-online-order-btn"
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-2 transition-all disabled:opacity-50"
+              className="h-10 w-full px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] sm:text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
