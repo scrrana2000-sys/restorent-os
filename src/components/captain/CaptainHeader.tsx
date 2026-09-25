@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, User, RefreshCw, CheckCircle2, Clock, CookingPot, Utensils, AlertTriangle } from 'lucide-react';
+import { Layers, User, CheckCircle2, Clock, CookingPot, Utensils, AlertTriangle } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { OfflineSyncIndicator } from '../OfflineSyncIndicator';
@@ -21,8 +21,6 @@ interface CaptainHeaderProps {
   availableAreas: string[];
   activeTab?: 'tables' | 'orders';
   onTabChange?: (tab: 'tables' | 'orders') => void;
-  onRefresh: () => void;
-  isRefreshing?: boolean;
 }
 
 export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
@@ -40,8 +38,6 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
   availableAreas,
   activeTab = 'tables',
   onTabChange,
-  onRefresh,
-  isRefreshing = false
 }) => {
   const { restaurant } = useRestaurant();
   const { profile, user } = useAuth();
@@ -196,22 +192,6 @@ export const CaptainHeader: React.FC<CaptainHeaderProps> = ({
           )}
         </div>
 
-        {/* Right Controls */}
-        <div className="flex items-center gap-2">
-          <div className="hidden sm:block"><OfflineSyncIndicator /></div>
-
-          <button
-            type="button"
-            data-testid="captain-refresh"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 text-xs font-bold transition-colors disabled:opacity-50 min-h-[44px]"
-            title="Refresh Captain Floor View"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-        </div>
       </div>
     </header>
   );
