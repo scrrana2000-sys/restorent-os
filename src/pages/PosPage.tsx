@@ -796,6 +796,7 @@ export const PosPage: React.FC<PosPageProps> = ({ onNavigate, onOpenMobileMenu }
         onOpenLiveOperations={() => setIsLiveOperationsOpen(true)}
         onOpenPosItemAvailability={() => setIsPosItemAvailabilityOpen(true)}
         cartItemsCount={cartItemsCount}
+        onOpenStaff={() => onNavigate?.('staff')}
         onOpenCart={() => setActiveMobileTab((prev) => (prev === 'cart' ? 'menu' : 'cart'))}
         onOpenMobileMenu={onOpenMobileMenu}
         onOpenVoiceModal={() => setIsVoiceModalOpen(true)}

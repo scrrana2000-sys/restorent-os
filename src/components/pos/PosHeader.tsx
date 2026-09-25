@@ -30,6 +30,7 @@ interface PosHeaderProps {
   onOpenPosItemAvailability?: () => void;
   cartItemsCount?: number;
   onOpenCart?: () => void;
+  onOpenStaff?: () => void;
   onOpenMobileMenu?: () => void;
   onOpenVoiceModal?: () => void;
   isVoiceListening?: boolean;
@@ -43,7 +44,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
   heldOrdersCount, onOpenHeldOrders, onOpenRecentOrders, paymentDueCount = 0,
   totalPaymentDueMinor = 0, onOpenPaymentDue, onlineOrderCount = 0, onOpenOnlineOrders,
   onlineOrderingLive = false, onOpenLiveOperations, onOpenPosItemAvailability, cartItemsCount = 0, onOpenCart,
-  onOpenMobileMenu, onOpenVoiceModal, isVoiceListening = false, searchQuery = '', onSearchChange
+  onOpenMobileMenu, onOpenStaff, onOpenVoiceModal, isVoiceListening = false, searchQuery = '', onSearchChange
 }) => {
   const { restaurant } = useRestaurant();
   const { profile, user, logout } = useAuth();
@@ -125,7 +126,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
         </div>
 
         <div className="w-full sm:w-auto min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-          <OfflineSyncIndicator />
+          <div className="hidden sm:block"><OfflineSyncIndicator /></div>
           {onOpenLiveOperations && (
             <button id="live-operations-header-btn" type="button"
               onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenLiveOperations(); }}
@@ -170,8 +171,8 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
             <Receipt className="w-4 h-4 text-indigo-600" />
           </button>
           <div className="relative" ref={dropdownRef}>
-            <button id="pos-header-user-profile-btn" type="button" onClick={() => setIsProfileOpen(!isProfileOpen)}
-              className="flex items-center gap-1 pl-0.5 p-1 rounded-lg hover:bg-slate-100 transition-colors focus:outline-none min-h-[36px]" title="User Account & Settings">
+            <button id="pos-header-user-profile-btn" type="button" onClick={() => { if (onOpenStaff && window.matchMedia("(max-width: 639px)").matches) { onOpenStaff(); return; } setIsProfileOpen(!isProfileOpen); }}
+              className="flex items-center gap-1 pl-0.5 p-1 rounded-lg hover:bg-slate-100 transition-colors focus:outline-none min-h-[36px]" title="Staff & Roles">
               <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-xs">{userInitial}</div>
               <span className="sm:hidden text-[9px] font-bold">Staff</span><ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
             </button>
