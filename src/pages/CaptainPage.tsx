@@ -852,7 +852,7 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-4">
               {filteredTables.map((table) => {
                 const activeSession = sessionByTableMap.get(table.id) || null;
                 const activeOrder = orderByTableMap.get(table.id) || null;
