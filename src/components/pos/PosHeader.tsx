@@ -141,14 +141,14 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
               className="flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-black bg-indigo-50 border border-indigo-200 text-indigo-800 hover:bg-indigo-100 active:scale-95 transition-all"
               title="POS Item Availability — turn menu items ON/OFF">
               <span className="w-2 h-2 rounded-full bg-indigo-500" />
-              <span className="sm:hidden">Offline</span><span className="hidden sm:inline">Items</span>
+              <span className="sm:hidden">Items</span><span className="hidden sm:inline">Items</span>
             </button>
           )}
           {onOpenOnlineOrders && (
             <button id="online-orders-header-btn" type="button" onClick={onOpenOnlineOrders}
               className={`flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-bold active:scale-95 transition-all ${onlineOrderCount > 0 ? 'bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 shadow-2xs' : 'bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700'}`} title="Online Orders">
               <Globe2 className={`w-3.5 h-3.5 shrink-0 ${onlineOrderCount > 0 ? 'text-emerald-700' : 'text-slate-500'}`} />
-              <span className="sm:hidden">Veg</span><span className="sm:hidden">Veg</span><span className="hidden sm:inline">Online</span>
+              <span className="sm:hidden">Veg</span><span className="sm:hidden">Online</span><span className="hidden sm:inline">Online</span>
               {onlineOrderCount > 0 && <span className="px-1 py-0.2 min-w-[18px] text-[10px] font-black rounded-full bg-emerald-600 text-white text-center">{onlineOrderCount}</span>}
             </button>
           )}
@@ -157,7 +157,7 @@ export const PosHeader: React.FC<PosHeaderProps> = ({
               className="flex items-center gap-1 h-8 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold active:scale-95 transition-all shadow-2xs" title="Payment Due Collection Center">
               <DollarSign className="w-3.5 h-3.5 text-amber-700 shrink-0" />
               <span className="px-1 py-0.2 min-w-[18px] text-[10px] font-black rounded-full bg-amber-500 text-slate-950 text-center">{paymentDueCount}</span>
-              <span className="sm:hidden text-[9px] font-black">Offers</span><span className="hidden sm:inline text-[10px] font-black font-mono">{totalPaymentDueMinor > 0 ? `₹${(totalPaymentDueMinor / 100).toFixed(0)} due` : 'Due'}</span>
+              <span className="sm:hidden text-[9px] font-black">Due</span><span className="hidden sm:inline text-[10px] font-black font-mono">{totalPaymentDueMinor > 0 ? `₹${(totalPaymentDueMinor / 100).toFixed(0)} due` : 'Due'}</span>
             </button>
           )}
           {heldOrdersCount > 0 && (
