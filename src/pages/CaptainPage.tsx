@@ -746,8 +746,6 @@ export const CaptainPage: React.FC<CaptainPageProps> = ({ onNavigate }) => {
         availableAreas={availableAreas}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onRefresh={() => setLoading(true)}
-        isRefreshing={loading}
       />
 
       {/* Status Banner */}
