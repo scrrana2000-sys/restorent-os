@@ -1,7 +1,7 @@
 // RestaurantOS Production PWA Service Worker
 // Legacy release marker retained for the production release-gate compatibility check:
 // CACHE_NAME = 'restaurantos-v3'
-const CACHE_NAME = 'restaurantos-v4';
+const CACHE_NAME = 'restaurantos-v5';
 const STATIC_ASSETS = [
   './',
   './index.html',
