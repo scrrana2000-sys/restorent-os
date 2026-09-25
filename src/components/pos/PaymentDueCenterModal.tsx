@@ -185,23 +185,23 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
       id="payment-due-modal"
       className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
     >
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-200 animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92vh] max-h-dvh-screen pb-safe">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-200 animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92vh] max-h-dvh-screen pb-safe">
         {/* Header */}
-        <div className="p-3 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <div className="p-2.5 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <DollarSign className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm sm:text-lg font-bold text-white tracking-tight leading-tight">
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                <h2 className="text-xs sm:text-lg font-bold text-white tracking-tight leading-tight">
                   Payment Due Center
                 </h2>
-                <span className="px-1.5 py-0.5 rounded-full text-[9px] sm:text-[11px] font-black bg-amber-500 text-slate-950 whitespace-nowrap">
+                <span className="px-1.5 py-0.5 rounded-full text-[8px] sm:text-[11px] font-black bg-amber-500 text-slate-950 whitespace-nowrap">
                   {orders.length} {orders.length === 1 ? 'Order' : 'Orders'}
                 </span>
               </div>
-              <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 flex items-center gap-1.5 leading-tight">
+              <p className="text-[9px] sm:text-xs text-slate-400 mt-0.5 flex items-center gap-1.5 leading-tight">
                 <span>Total Outstanding:</span>
                 <span className="font-bold text-amber-400 font-mono">
                   {formatMoney(totalDueMinor, symbol)}
@@ -214,9 +214,9 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
             id="close-payment-due-modal-btn"
             type="button"
             onClick={onClose}
-            className="w-8 h-8 sm:w-9 sm:h-9 text-slate-400 hover:text-white rounded-lg sm:rounded-xl hover:bg-slate-800 flex items-center justify-center transition-colors shrink-0"
+            className="w-7 h-7 sm:w-9 sm:h-9 text-slate-400 hover:text-white rounded-lg sm:rounded-xl hover:bg-slate-800 flex items-center justify-center transition-colors shrink-0"
           >
-            <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            <X className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
           </button>
         </div>
 
@@ -229,7 +229,7 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
         )}
 
         {/* Search & Filter Controls */}
-        <div className="p-2.5 sm:p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row gap-2 shrink-0">
+        <div className="p-2 sm:p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row gap-1.5 sm:gap-2 shrink-0">
           {/* Search Input */}
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -238,7 +238,7 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
               placeholder="Search by order #, table, or customer..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-9 sm:h-10 pl-8 pr-8 text-[11px] sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
+              className="w-full h-8 sm:h-10 pl-8 pr-8 text-[10px] sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
             />
             {searchQuery && (
               <button
@@ -252,11 +252,11 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
           </div>
 
           {/* Type Filter Tabs */}
-          <div className="grid grid-cols-4 items-center bg-slate-200/80 p-1 rounded-lg sm:rounded-xl gap-1 shrink-0 w-full sm:w-auto">
+          <div className="grid grid-cols-4 items-center bg-slate-200/80 p-0.5 sm:p-1 rounded-lg sm:rounded-xl gap-0.5 sm:gap-1 shrink-0 w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setSelectedType('all')}
-              className={`h-8 min-w-0 px-1.5 sm:px-3 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold transition-all whitespace-nowrap flex items-center justify-center ${
+              className={`h-7 sm:h-8 min-w-0 px-1 sm:px-3 rounded-md sm:rounded-lg text-[8px] sm:text-xs font-bold transition-all whitespace-nowrap flex items-center justify-center ${
                 selectedType === 'all'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -267,7 +267,7 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType('dineIn')}
-              className={`h-8 min-w-0 flex items-center justify-center gap-1 px-1 sm:px-3 rounded-md sm:rounded-lg text-[9px] sm:text-xs font-bold transition-all whitespace-nowrap ${
+              className={`h-7 sm:h-8 min-w-0 flex items-center justify-center gap-0.5 sm:gap-1 px-1 sm:px-3 rounded-md sm:rounded-lg text-[8px] sm:text-xs font-bold transition-all whitespace-nowrap ${
                 selectedType === 'dineIn'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -279,7 +279,7 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
             <button
               type="button"
               onClick={() => setSelectedType('takeaway')}
-              className={`h-8 flex items-center gap-1.5 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              className={`h-7 sm:h-8 min-w-0 flex items-center justify-center gap-0.5 sm:gap-1.5 px-1 sm:px-3 rounded-lg text-[8px] sm:text-xs font-bold transition-all whitespace-nowrap ${
                 selectedType === 'takeaway'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -304,7 +304,7 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
         </div>
 
         {/* Modal Body / Orders List */}
-        <div className="p-2.5 sm:p-5 overflow-y-auto space-y-2.5 sm:space-y-3 flex-1 bg-slate-100/60">
+        <div className="p-2 sm:p-5 overflow-y-auto space-y-2 sm:space-y-3 flex-1 bg-slate-100/60">
           {/* Error State */}
           {error ? (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center space-y-3 my-4">
@@ -354,22 +354,22 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
               return (
                 <div
                   key={ord.id}
-                  className={`bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3.5 ${
+                  className={`bg-white rounded-lg sm:rounded-2xl p-2 sm:p-4 border transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3.5 ${
                     isServed || isReady
                       ? 'border-amber-400/80 bg-gradient-to-r from-amber-50/40 via-white to-white'
                       : 'border-slate-200'
                   }`}
                 >
                   {/* Left Column: Order details */}
-                  <div className="space-y-1.5 sm:space-y-2 flex-1 min-w-0">
+                  <div className="space-y-1 sm:space-y-2 flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                      <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                      <span className="text-[11px] sm:text-sm font-extrabold text-slate-900">
                         #{ord.orderNumber}
                       </span>
 
                       {/* Order Type Badge */}
                       <span
-                        className={`inline-flex items-center gap-0.5 px-1.5 sm:px-2.5 py-0.5 rounded-md sm:rounded-lg text-[9px] sm:text-[11px] font-bold uppercase tracking-wider whitespace-nowrap ${
+                        className={`inline-flex items-center gap-0.5 px-1 sm:px-2.5 py-0.5 rounded-md sm:rounded-lg text-[8px] sm:text-[11px] font-bold uppercase tracking-wider whitespace-nowrap ${
                           ord.orderType === 'dineIn' || (ord.orderType as any) === 'dine_in'
                             ? 'bg-indigo-100 text-indigo-800'
                             : ord.orderType === 'takeaway'
@@ -397,7 +397,7 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
 
                       {/* Operational Status Pill */}
                       <span
-                        className={`px-1.5 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wide border whitespace-nowrap ${
+                        className={`px-1 sm:px-2.5 py-0.5 rounded-full text-[8px] sm:text-[10px] font-extrabold uppercase tracking-wide border whitespace-nowrap ${
                           isServed
                             ? 'bg-amber-500/15 text-amber-800 border-amber-300 animate-pulse'
                             : isReady
@@ -414,7 +414,7 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
                     </div>
 
                     {/* Additional Metadata: Customer & Items */}
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-slate-500 leading-tight">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-3 text-[10px] sm:text-xs text-slate-500 leading-tight">
                       {ord.customerSnapshot?.name && (
                         <span className="flex items-center gap-1 text-slate-700 font-medium">
                           <User className="w-3.5 h-3.5 text-slate-400" />
@@ -440,21 +440,21 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
 
                     {/* Item list summary */}
                     {ord.items && ord.items.length > 0 && (
-                      <p className="text-xs text-slate-600 line-clamp-1 italic bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
+                      <p className="text-[10px] sm:text-xs text-slate-600 line-clamp-1 italic bg-slate-50 px-2 py-1 rounded-md sm:rounded-lg border border-slate-100">
                         {ord.items.map((i) => `${i.nameSnapshot} x${i.quantity}`).join(', ')}
                       </p>
                     )}
                   </div>
 
                   {/* Right Column: Financial Breakdown & Collect Action */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 shrink-0">
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-100 shrink-0">
                     <div className="text-left sm:text-right space-y-0.5">
-                      <div className="flex items-center sm:justify-end gap-1.5 text-xs text-slate-500 leading-tight">
+                      <div className="flex items-center sm:justify-end gap-1 text-[10px] sm:text-xs text-slate-500 leading-tight">
                         <span className="whitespace-nowrap">Total: {formatMoney(ord.grandTotalMinor, symbol)}</span>
                         <span>•</span>
                         <span className="whitespace-nowrap">Paid: {formatMoney(ord.paidAmountMinor || 0, symbol)}</span>
                       </div>
-                      <div className="text-sm sm:text-base font-black text-amber-600 flex items-center sm:justify-end gap-1 leading-tight">
+                      <div className="text-xs sm:text-base font-black text-amber-600 flex items-center sm:justify-end gap-1 leading-tight">
                         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Due:</span>
                         <span className="font-mono">{formatMoney(dueMinor, symbol)}</span>
                       </div>
@@ -470,7 +470,7 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
                             setCancelReason('');
                             setCancelError(null);
                           }}
-                          className="h-9 sm:h-10 min-h-0 flex-1 sm:flex-none px-2.5 sm:px-3 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shrink-0 whitespace-nowrap active:scale-95"
+                          className="h-8 sm:h-10 min-h-0 flex-1 sm:flex-none min-w-0 px-2 sm:px-3 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 border border-rose-200 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex items-center justify-center gap-0.5 sm:gap-1 shrink-0 whitespace-nowrap active:scale-95"
                           title="Cancel Order"
                         >
                           <Ban className="w-3.5 h-3.5" />
@@ -481,10 +481,10 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
                       <button
                         type="button"
                         onClick={() => onCollectPayment(ord)}
-                        className="h-9 sm:h-10 min-h-0 flex-1 sm:flex-none px-2.5 sm:px-4 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap active:scale-95"
+                        className="h-8 sm:h-10 min-h-0 flex-1 sm:flex-none min-w-0 px-2 sm:px-4 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap active:scale-95"
                       >
-                        <CreditCard className="w-4 h-4" />
-                        <span>Collect Payment</span>
+                        <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        <span className="truncate">Collect Payment</span>
                       </button>
                     </div>
                   </div>
@@ -495,13 +495,13 @@ export const PaymentDueCenterModal: React.FC<PaymentDueCenterModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-[11px] sm:text-xs text-slate-500 shrink-0">
+        <div className="p-2 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-[10px] sm:text-xs text-slate-500 shrink-0">
           <span className="hidden sm:inline">Realtime Payment Due Collection Center</span>
           <span className="sm:hidden text-slate-400 font-medium">Payment Due Center</span>
           <button
             type="button"
             onClick={onClose}
-            className="h-9 sm:h-10 min-h-0 px-4 sm:px-5 bg-slate-200 text-slate-800 font-bold rounded-xl hover:bg-slate-300 transition-colors flex items-center justify-center active:scale-95"
+            className="h-8 sm:h-10 min-h-0 px-3 sm:px-5 bg-slate-200 text-slate-800 font-bold rounded-xl hover:bg-slate-300 transition-colors flex items-center justify-center active:scale-95"
           >
             Close
           </button>
