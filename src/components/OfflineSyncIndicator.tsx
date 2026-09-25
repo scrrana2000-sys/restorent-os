@@ -46,7 +46,7 @@ export const OfflineSyncIndicator: React.FC = () => {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`min-h-[44px] flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
+        className={`sm:min-h-[44px] min-h-8 h-8 sm:h-auto flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-semibold border transition-all duration-150 ${
           !isOnline
             ? 'bg-amber-500/10 text-amber-700 border-amber-300'
             : conflictCount > 0
@@ -62,12 +62,12 @@ export const OfflineSyncIndicator: React.FC = () => {
         {!isOnline ? (
           <>
             <WifiOff className="w-3.5 h-3.5 text-amber-600" />
-            <span className="hidden sm:inline">Offline</span>
+            <span className="sm:hidden">Offline</span><span className="hidden sm:inline">Offline</span>
           </>
         ) : (
           <>
             <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="hidden sm:inline">Online</span>
+            <span className="sm:hidden">Wi-Fi</span><span className="hidden sm:inline">Online</span>
           </>
         )}
 
